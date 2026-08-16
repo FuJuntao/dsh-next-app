@@ -51,16 +51,16 @@ Every round, show the complete issue — title, body, labels — and ask with st
 - **Cancel** — create nothing and write nothing; confirm the cancellation.
 Never create the issue until the user picks Create now.
 
-## 5. Create the GitHub issue — never assume `gh`
-Try the mechanisms in order and use the first that works:
+## 5. Create the GitHub issue
+Use the first mechanism that works, in order:
 1. `gh` CLI, when `gh auth status` succeeds:
    `gh issue create -R <owner>/<repo> --title "<title>" --body-file <tmpfile> --label <label>`
-2. Otherwise the GitHub REST API, when `GITHUB_TOKEN` or `GH_TOKEN` is set:
+2. The GitHub REST API, when `GITHUB_TOKEN` or `GH_TOKEN` is set:
    `curl -sS -X POST -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/<owner>/<repo>/issues -d @<jsonfile>` with `{"title": …, "body": …, "labels": [<label>]}`.
-3. Otherwise the manual fallback: do NOT create the issue. Write the repo record (step 6) with `Issue: not yet created`, then print the full title/body/labels and the exact `gh issue create` command so the user can run it later. Say clearly that the issue was NOT created.
-If a mechanism fails (network, permissions, unauthenticated), fall through to the next one; if every mechanism fails, use the manual fallback. If the user requested a label that does not exist, ask whether to create it (`gh label create …`) or fall back to `enhancement`. Never print secrets.
+3. Manual creation: write the repo record (step 6) with `Issue: not yet created`, then print the full title/body/labels and the exact `gh issue create` command for the user to run; state clearly that the issue was not created.
+If a mechanism fails (network, permissions, unauthenticated), fall through to the next one; if every mechanism fails, use manual creation. If the user requested a label that does not exist, ask whether to create it (`gh label create …`) or fall back to `enhancement`. Never print secrets.
 
-## 6. Write the repo record (always — including the manual fallback)
+## 6. Write the repo record (always — including manual creation)
 - Create `docs/stories/` if it does not exist, then write the record with an ADR-style header:
 
 ```
