@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 You are loaded when the user types `/story`, optionally followed by a rough idea that seeds the interview (e.g. `/story implement dark mode`), or `/story suggest` to jump straight to the capability candidates. Produce exactly ONE user story per invocation, written in English, recorded in the repo under `docs/stories/`. Creating GitHub issues is not this skill's job — the `plan-a-story` skill turns a recorded story into issues. Do not push anything.
 
-## 1. Gather context (always first)
+## 1. Gather context
 Before asking anything, gather suggestion material:
 - This session's conversation history: topics, requests, pain points, or "we should…" ideas that plausibly fit this repo's scope and do not contradict any ADR.
 - The repo: `docs/adr/` decisions, `README.md` scope, existing `docs/stories/` records, open GitHub issues, and any TODO/FIXME markers.
