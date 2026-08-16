@@ -2,20 +2,16 @@
 
 Stories for planning work in this repo, newest first. See [../adr/](../adr/) for architecture decisions.
 
-## Status vocabulary
+## Lifecycle
 
-A story record moves through exactly these statuses, in order:
+Story records carry no status field. The lifecycle is tracked by what exists outside the record:
 
-| Status    | Meaning                                              | Set by                                       |
-|-----------|------------------------------------------------------|----------------------------------------------|
-| Proposed  | Story recorded; not yet planned into tasks           | the `story` skill (`/story`)              |
-| Planned   | Tasks broken down; GitHub issue and sub-issues exist | the `plan-a-story` skill (`/plan-a-story`) |
-| Done      | All task issues closed; the work is complete         | manually, when the story's issues close      |
-
-The `story` and `plan-a-story` skills use only these values.
+1. **Proposed** — the record exists (created by the `story` skill, `/story`).
+2. **Planned** — an open GitHub issue references this record (`**Story record:** docs/stories/<file>`); the `plan-a-story` skill (`/plan-a-story`) creates that issue and its task sub-issues.
+3. **Done** — the merged pull request is linked: add a `- PR: <merged PR URL>` line to the record header and strike the index entry below. This is done manually for now — no skill performs it yet.
 
 ## Stories
 
 (records appear here as they are created)
 
-Entries: `- [<Title>](./<file>) — <Status>` (`— #<parent>` once planned).
+Entries: `- [<Title>](./<file>)`
