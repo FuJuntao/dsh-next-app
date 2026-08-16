@@ -1,36 +1,47 @@
 ---
 name: story
-description: Create one user story for planning work in the current repo — interview the user and keep a repo record under docs/stories/. Invoked by command only.
+description: Create one user story for planning work in the current repo — gather context, interview with suggested answers, and keep a repo record under docs/stories/. Invoked by command only.
 disable-model-invocation: true
 ---
 
 # Create a planning story
 
-You are loaded when the user types `/story`, optionally followed by a rough idea that seeds the interview (e.g. `/story implement dark mode`). Produce exactly ONE user story per invocation, written in English, recorded in the repo under `docs/stories/`. Creating GitHub issues is not this skill's job — the `plan-a-story` skill turns a recorded story into issues. Do not push anything.
+You are loaded when the user types `/story`, optionally followed by a rough idea that seeds the interview (e.g. `/story implement dark mode`), or `/story suggest` to jump straight to the capability candidates. Produce exactly ONE user story per invocation, written in English, recorded in the repo under `docs/stories/`. Creating GitHub issues is not this skill's job — the `plan-a-story` skill turns a recorded story into issues. Do not push anything.
 
-## 1. Interview (one structured round)
-Ask a single round with the `ask_user_question` tool, pre-filling anything the seed already contains:
-1. Actor — "As a …" (who wants this)
-2. Capability — "I want …" (what they want)
-3. Benefit — "so that …" (why it matters)
-4. Acceptance criteria — at least one item; accept several
-5. Technical notes — optional
-6. Priority — optional, free text
-If any answer is vague or contradictory, ask one focused follow-up round. Never invent answers.
+## 1. Gather context (always first)
+Before asking anything, gather suggestion material:
+- This session's conversation history: topics, requests, pain points, or "we should…" ideas that plausibly fit this repo's scope and do not contradict any ADR.
+- The repo: `docs/adr/` decisions, `README.md` scope, existing `docs/stories/` records, open GitHub issues, and any TODO/FIXME markers.
+Use this material to ground every suggestion below. Never invent needs the context does not contain.
 
-## 2. Compose the story
-- Title: a short imperative phrase derived from the capability (e.g. "Add dark mode"), at most 72 characters.
-- Fix the record path now: `docs/stories/<YYYY-MM-DD>-<slug>.md`, slug kebab-cased from the title. If that path already exists, append `-2`, `-3`, … until free.
+## 2. Interview round 1 — capability (skip when the seed names a capability)
+- Offer 3–5 candidates, each: a one-line title, a one-sentence "I want …", and its source label (`from this conversation: "…"` or the ADR/README/issue it derives from).
+- Skip ideas already recorded in `docs/stories/` or already open as GitHub issues; instead list them as "Already covered" with a link.
+- Present as selectable options plus a free-text override. Vague or contradictory answers get one focused follow-up round.
 
-## 3. Preview loop (repeat until Save or Cancel)
-Every round, show the complete story — title and record content — and ask with structured options:
-- **Save record** — proceed to step 4.
-- **Edit** — a free-text field for changes; apply them, re-derive the title/slug if the capability changed, and show the preview again.
-- **Cancel** — write nothing; confirm the cancellation.
-Never write the record until the user picks Save record.
+## 3. Interview round 2 — remaining fields
+Ask one structured round with `ask_user_question`; every field offers suggested options plus a free-text override:
+1. Actor — who wants this (default suggestion: "user")
+2. Benefit — "so that …", derived from the chosen capability's source
+3. Acceptance criteria — at least one; multi-select suggestions derived from the capability/source
+4. Success signal — how we will know it is done; the answer feeds the acceptance criteria
+5. Out of scope — what is explicitly not included; recorded as Non-Goals
+6. Technical notes — optional; suggestions are repo-derived context (e.g. relevant ADRs or constraints)
+7. Urgency — why now / how urgent; map the answer to a priority: `high`, `medium` (default), or `low`
 
-## 4. Write the repo record
-- Create `docs/stories/` if it does not exist, then write the record with an ADR-style header (no Issue line — a story gains one only after `plan-a-story` plans it):
+## 4. Quality pass
+Before composing, check the story: benefit clear? acceptance criteria testable? scope bounded (Non-Goals present when relevant)? If a gap exists, ask ONE targeted follow-up naming the exact gap. Anything the user genuinely cannot answer yet goes into `## Open Questions` in the record — never silently dropped, never invented.
+
+## 5. Compose and preview
+- Title: short imperative phrase derived from the capability (max 72 characters).
+- Record path: `docs/stories/<YYYY-MM-DD>-<slug>.md`, slug kebab-cased from the title; append `-2`, `-3`, … if taken.
+- Preview the complete record and ask with structured options, repeating until the user picks one:
+  - **Save record** — proceed to step 6.
+  - **Edit** — free-text changes; apply, re-derive title/slug if needed, preview again.
+  - **Cancel** — write nothing; confirm the cancellation.
+
+## 6. Write the repo record
+- Create `docs/stories/` if missing and write the record with this header (no Issue line — it appears only after `plan-a-story`):
 
 ```
 # <Title>
@@ -39,12 +50,16 @@ Never write the record until the user picks Save record.
 - Status: Proposed
 ```
 
-followed by the story sentence (`As a <actor>, I want <capability>, so that <benefit>.`), Acceptance Criteria, Technical Notes, and Priority (omit sections with no content).
-- Keep the index `docs/stories/README.md` current: a bullet list, newest first, of `- [<Title>](./<file>) — Proposed`.
+followed by: the story sentence (`As a <actor>, I want <capability>, so that <benefit>.`), `## Acceptance Criteria`, `## Non-Goals` (when given), `## Technical Notes` (when given), `## Priority`, and `## Open Questions` (when any). Omit empty sections.
+- Update the index `docs/stories/README.md` (create it if missing, including its Status vocabulary section): newest first, `- [<Title>](./<file>) — Proposed`.
+- Use only the status values defined in `docs/stories/README.md`.
 
-## 5. Commit the record (never push)
-- If the current branch is not `main` or `master`: `git add` the record (and the index if it changed) and commit with `docs(story): add <title>`, following the session's commit conventions (Conventional Commits, including the Co-authored-by trailer those instructions require).
-- If on `main` or `master`: do not commit; report the uncommitted path and let the user commit.
+## 7. Ask how to commit (never push)
+Ask with structured options; the default is the first:
+- **New branch** — create `docs/story-<slug>` from the current HEAD and commit there (reuse the branch if it already exists).
+- **Current branch** — commit here; warn first if the branch is `main` or `master`.
+- **Leave uncommitted** — report the path and stop.
+Commit message: `docs(story): add <title>`, following the session's commit conventions (Conventional Commits, including the Co-authored-by trailer those instructions require). Never push.
 
-## 6. Report
-Summarize: the story record path, the commit hash if one was made, anything left uncommitted, and a hint that `plan-a-story` is the next step.
+## 8. Report
+Summarize: the story record path, the chosen status and priority, the commit outcome (branch/commit hash or uncommitted), and a hint that `plan-a-story` is the next step.
