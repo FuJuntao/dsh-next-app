@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# Next.js builds
+.next/
+out/
+dist/
+
+# env — the shape belongs in .env.example, values never
+.env
+.env.local
+.env.*.local
+
+# logs & misc
+*.log
+.DS_Store
+coverage/
+playwright-report/
+test-results/
