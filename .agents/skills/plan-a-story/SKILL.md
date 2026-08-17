@@ -1,6 +1,6 @@
 ---
 name: plan-a-story
-description: Plan a recorded story into tasks — gather context, propose a breakdown, agree with the user, then create the story's GitHub issue with each task as a sub-issue. Invoked by command only.
+description: Plan a recorded story into tasks — gather context, propose a breakdown, then interview the user in batched rounds until nothing vague remains before creating the story's GitHub issue with each task as a sub-issue. Invoked by command only.
 disable-model-invocation: true
 ---
 
@@ -20,15 +20,16 @@ Use this material to ground every suggestion below; never invent constraints the
 ## 2. Pick the story
 - Ask which story to plan, offering the unplanned records (no matching GitHub issue), newest first, as suggested options, plus a free-text override for a directly named record (title or slug).
 
-## 3. Propose the breakdown
-- Propose a task breakdown as soon as you have a workable draft, even with gaps. Each task is one coherent unit of work (roughly one pull request), with a title, a description of what concretely changes, and the story acceptance criterion (or criteria) it satisfies, in a sensible execution order.
-- Interview the user only about what is missing or blocking agreement — e.g. ambiguities, constraints, or granularity the context does not answer. Ask one focused question at a time, then revise the proposal.
-- Check before each revision: every acceptance criterion covered by at least one task; no task contradicts the story's Non-Goals; the order is sensible. Anything that genuinely cannot be resolved yet goes into `## Open Questions` in the parent issue — never silently dropped, never invented.
+## 3. Propose and grill the breakdown
+- Propose a complete task breakdown — a draft to grill, not a workable-enough one. Each task is one coherent unit of work (roughly one pull request), with a title, a description of what concretely changes, and the story acceptance criterion (or criteria) it satisfies, in a sensible execution order. The draft is a proposal that seeds the interview — never the final word.
+- Grill it in rounds until nothing vague remains; never rush to agreement after a single round. Each round, ask every question whose prerequisites are already settled — together, numbered, each with a recommended answer — then revise the breakdown with the answers. Hold only questions that depend on answers still outstanding.
+- Probe every round against the vagueness checklist: every task is one coherent unit (roughly one pull request) with a concrete description of what changes; every story acceptance criterion is covered by at least one task and named as that task's checkpoint; no task contradicts the story's Non-Goals; the execution order is sensible with dependencies stated. Probe task concreteness hardest, and use judgment for anything the checklist does not cover.
+- Exit only when the checklist has no unresolved item and the user confirms. The user may end the interview at any time; anything genuinely unanswerable yet goes into `## Open Questions` in the parent issue — never silently dropped, never invented. No fixed round cap.
 
 ## 4. Agreement rounds (repeat until Create or Cancel)
 Every round, show the complete plan — parent issue (title, body, label) and the task list — and ask with structured options:
 - **Create** — proceed to step 5.
-- **Edit** — free-text changes; apply and preview again.
+- **Edit** — free-text changes; apply and preview again. If the edit changes the task list (tasks, checkpoints, order), re-run the step-3 checklist in one targeted round first; cosmetic edits (wording, phrasing) apply directly.
 - **Cancel** — create nothing and change no records; confirm the cancellation.
 
 ## 5. Create the issues
