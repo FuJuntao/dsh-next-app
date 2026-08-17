@@ -17,7 +17,7 @@ You are loaded when the user types `/implement-a-task`, optionally followed by a
 Before planning, read: the task issue and its parent issue (including the AC checkpoint and story-record link), the linked story record under `docs/stories/`, ADRs relevant to the change, TODO/FIXME markers in the area being touched, and whatever contributor conventions (AGENTS.md or equivalent) apply in the environment this runs in. Never invent constraints the context does not contain.
 
 ## 3. Agree on the plan
-Present a concise implementation plan - workspace and branch, what concretely changes, the verification you will run, and the PR outline - and wait for explicit approval. Chat only: persist nothing at this step; the PR body becomes the durable record of what was agreed.
+Present a concise implementation plan - workspace and branch, what concretely changes, the verification you will run, and the PR outline - then stress-test it by interviewing the user: when the environment provides a `grilling` skill, load it and run its rounds over the plan's open decisions; otherwise approximate it - ask focused questions with recommended answers, one round at a time, until nothing is left silently assumed. Implementation begins only when the user approves the resulting shared understanding. Chat only: persist nothing at this step; the PR body becomes the durable record of what was agreed.
 
 ## 4. Implement
 Follow the branch and commit conventions of the environment you run in; they are stated wherever this skill is used and are not restated here. One logical change per commit. All work stays local.
