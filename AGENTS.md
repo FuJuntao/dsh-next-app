@@ -17,7 +17,7 @@ Planning and delivery run through the skill family, one stage per skill:
 1. `story` (`/story`) - record one user story under `docs/stories/`.
 2. `plan-a-story` (`/plan-a-story`) - break a story into a parent issue with `task`-labeled sub-issues.
 3. `implement-a-task` (`/implement-a-task`) - carry one task issue to a reviewable pull request.
-4. `review` (`/review`) - axis-based PR review (spec, system design, UI, security, docs discipline, verification claims, commit hygiene) with a gated merge.
+4. `review` (`/review`) - axis-based PR review (spec, system design, repo standards, UI, security, docs discipline, verification claims, commit hygiene) with a gated merge.
 5. `bookkeeping` (`/bookkeeping`) - the post-merge tail: close completed parents, keep checklists truthful, mark story records done, sweep drift.
 
 GitHub issues are the source of truth for plans; story records change only at their Done step, performed by `bookkeeping`.
