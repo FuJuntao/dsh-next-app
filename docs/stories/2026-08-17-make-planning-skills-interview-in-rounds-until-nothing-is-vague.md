@@ -1,6 +1,8 @@
 # Make planning skills interview in rounds until nothing is vague
 
 - Date: 2026-08-17
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/10
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/11
 
 As a contributor, I want the `story` and `plan-a-story` skills to interview me about their drafts in repeated rounds of targeted questions until no vague part remains, so that recorded stories and their task plans are precise the first time and downstream work proceeds without re-discovering missing decisions.
 

@@ -13,7 +13,7 @@ Story records carry no status field. The lifecycle is tracked by what exists out
 
 ## Stories
 
-- [Make planning skills interview in rounds until nothing is vague](./2026-08-17-make-planning-skills-interview-in-rounds-until-nothing-is-vague.md)
+- ~~[Make planning skills interview in rounds until nothing is vague](./2026-08-17-make-planning-skills-interview-in-rounds-until-nothing-is-vague.md)~~
 - [Add an implement-a-task skill](./2026-08-17-add-an-implement-a-task-skill.md)
 
 Entries: `- [<Title>](./<file>)`
