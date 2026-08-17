@@ -12,6 +12,6 @@ Story records carry no status field. The lifecycle is tracked by what exists out
 
 ## Stories
 
-(records appear here as they are created)
+- [Add an implement-a-task skill](./2026-08-17-add-an-implement-a-task-skill.md)
 
 Entries: `- [<Title>](./<file>)`
