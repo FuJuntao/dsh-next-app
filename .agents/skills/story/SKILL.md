@@ -1,6 +1,6 @@
 ---
 name: story
-description: Create one user story for planning work in the current repo — gather context, propose a draft, fill gaps with the user, and keep a repo record under docs/stories/. Invoked by command only.
+description: Create one user story for planning work in the current repo — gather context, propose a draft, then interview the user in batched rounds until no vague part remains before recording it under docs/stories/. Invoked by command only.
 disable-model-invocation: true
 ---
 
@@ -17,17 +17,21 @@ Use this material to ground every suggestion below. Never invent needs the conte
 ## 2. Propose the story
 - With a seed: propose a complete story draft — title, actor, capability, benefit, acceptance criteria, Non-Goals, technical notes, priority — grounded in the seed and the gathered context.
 - Without a seed: offer 3–5 capability candidates (title + one-sentence "I want …" + source label: `from this conversation: "…"` or the ADR/README/issue it derives from), skipping ideas already recorded in `docs/stories/` or already open as GitHub issues (list those as "Already covered" with a link). Once a capability is chosen, propose the full draft around it.
-- Interview the user only about what is missing or blocking a clear story, one focused question at a time, with suggested answers plus free-text overrides. Then revise the proposal.
+- The draft is a proposal that seeds the interview in step 3 — never the final word.
 
-## 3. Quality pass
-Before the preview, check the story: benefit clear? acceptance criteria testable? scope bounded (Non-Goals present when relevant)? If a gap exists, ask ONE targeted follow-up naming the exact gap. Anything the user genuinely cannot answer yet goes into `## Open Questions` in the record — never silently dropped, never invented.
+## 3. Interview in rounds
+Grill the draft in rounds until nothing vague remains; never rush to the preview after a single round.
+- Each round, ask every question whose prerequisites are already settled — together, numbered, each with a recommended answer — then revise the draft with the answers. Hold only questions that depend on answers still outstanding.
+- Probe every round against the vagueness checklist: story sentence clear on actor, capability, and benefit; every acceptance criterion verifiable pass/fail; Non-Goals bound the scope; technical notes grounded; priority justified. Probe acceptance-criterion testability hardest, and use judgment for anything the checklist does not cover.
+- Exit only when the checklist has no unresolved item and the user confirms. The user may end the interview at any time; anything genuinely unanswerable yet goes into `## Open Questions` in the record — never silently dropped, never invented. No fixed round cap.
+- The loop runs for both invocation flows once a capability is chosen.
 
 ## 4. Preview (repeat until Save or Cancel)
 - Title: short imperative phrase derived from the capability (max 72 characters).
 - Record path: `docs/stories/<YYYY-MM-DD>-<slug>.md`, slug kebab-cased from the title; append `-2`, `-3`, … if taken.
 - Preview the complete record and ask with structured options, repeating until the user picks one:
   - **Save record** — proceed to step 5.
-  - **Edit** — free-text changes; apply, re-derive title/slug if needed, preview again.
+  - **Edit** — free-text changes; apply, re-derive title/slug if needed, preview again. If the edit touches substance (story sentence, acceptance criteria, Non-Goals), re-run the step-3 checklist in one targeted round first; cosmetic edits (title, slug, phrasing) apply directly.
   - **Cancel** — write nothing; confirm the cancellation.
 
 ## 5. Write the repo record
