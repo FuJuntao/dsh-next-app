@@ -25,3 +25,7 @@ As a contributor, I want a skill that carries a planned task from its GitHub iss
 ## Priority
 
 High - exercisable immediately by the repo's actual (docs/workflow) output.
+
+## Open Questions
+
+- Interim plan-status freshness: task issues and the parent checklist update themselves via PR closing syntax, but the story-record Done step is manual until the review skill exists. Should the existing skills opportunistically offer the one-line record fix when they detect a completed-but-unmarked story, or does this wait for the review skill?
