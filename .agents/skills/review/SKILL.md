@@ -23,7 +23,7 @@ Run every axis whose applicability rule matches; the verdict states which axes r
 - **Repo standards** (always): the change meets the repo's stated standards beyond the ADRs - its contributor doc (AGENTS.md or equivalent), the README's user-facing commitments, and any other convention the repo states. Blockers trace to the statement violated.
 - **UI** (only when the diff touches UI code): exercise the built app with the `agent-browser` skill against the PR's changes; if the app cannot be built or run in this environment, say plainly that the UI axis was reviewed statically only.
 - **Security** (always): no secrets or leaked personal data; public-repo hygiene per ADR-0005.
-- **Docs discipline** (always): doc changes ship together with the implying change, ADRs stay frozen, task lists stay truthful (ADR-0005).
+- **Docs discipline** (always): doc changes ship together with the implying change, ADRs stay frozen, task lists stay truthful (ADR-0005); volatile state is referred to its source of truth - a doc that restates what a lock file, directory, or tracker already tracks is a blocker.
 - **Verification claims** (always): the PR body states what was run - re-run it or check its plausibility. A missing claim is a blocker (the `implement-a-task` contract requires one); a claim that does not reproduce is a blocker.
 - **Commit hygiene** (always): the commit conventions stated by the environment this runs in.
 The axes are floors: judgment may raise anything they do not cover.
