@@ -8,7 +8,7 @@ Guidance for contributors - human and AI agents - working in this repo.
 - `docs/stories/` - story records, newest first in `docs/stories/README.md`; the lifecycle (proposed -> planned -> in flight -> done) is documented there.
 - `.agents/skills/` - the skill family the workflow runs on (below). `skills-lock.json` at the repo root locks the externally sourced skills - see that file for the current list.
 - `README.md` - the user-facing install/ops surface.
-- Code layout is decided but not yet implemented: the repo is docs-only today. The pnpm workspace (`apps/web`, `packages/dsh-next-app`, `packages/dsh-api`) is specified in ADR-0007 and lands with the code.
+- The code is a pnpm workspace (ADR-0007): a private root owning the shared scripts and the toolchain catalog, `apps/web` (the Next.js app), `packages/dsh-api` (typed client: dsh version pin + boot invariant), and `packages/dsh-next-app` (the published bundle: manifest, patch placeholders, and `lib/` glue).
 
 ## Workflow
 
@@ -31,4 +31,12 @@ The current skill set lives in `.agents/skills/`. GitHub issues are the source o
 
 ## Verification
 
-None defined yet - the repo is docs-only. Until code lands, PRs state what was checked manually (link/render checks for docs, JSON validity for config). When the workspace lands, verification lives in the pnpm workspace scripts and the `dsh-api` contract tests (ADR-0006, ADR-0007).
+Run at the workspace root - `corepack pnpm` picks up the pinned package manager from `package.json`:
+
+- `pnpm install` - install the workspace (lockfile is committed)
+- `pnpm build` - build every member (`dsh-api` and the bundle with `tsc`, `apps/web` with `next build`)
+- `pnpm test` - run the vitest suites
+- `pnpm lint` - oxlint over all members (shared root config)
+- `pnpm format`, or `oxfmt --check .` for a check-only pass - oxfmt over code files
+
+Version drift protection is the pinned dsh version constant plus the fail-loudly boot invariant in `dsh-api` (ADR-0006, ADR-0008). The contract tests against a live dsh host are future work (ADR-0006).
