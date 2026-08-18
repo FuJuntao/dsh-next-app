@@ -1,6 +1,7 @@
 # Add an implement-a-task skill
 
 - Date: 2026-08-17
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/6
 
 As a contributor, I want a skill that carries a planned task from its GitHub issue to a reviewable pull request - plan agreement, implementation, gated publication, so that planned work of any kind (code, docs, config, CI) moves to review without me re-gathering context or improvising the workflow.
 
