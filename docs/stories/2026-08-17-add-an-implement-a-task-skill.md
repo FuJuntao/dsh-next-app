@@ -29,3 +29,5 @@ High - exercisable immediately by the repo's actual (docs/workflow) output.
 ## Open Questions
 
 - Interim plan-status freshness: task issues and the parent checklist update themselves via PR closing syntax, but the story-record Done step is manual until the review skill exists. Should the existing skills opportunistically offer the one-line record fix when they detect a completed-but-unmarked story, or does this wait for the review skill?
+
+  > Resolved 2026-08-18 by the review-and-bookkeeping story ([2026-08-18 record](./2026-08-18-add-review-and-bookkeeping-skills-plus-a-contributor-doc.md), AC 9): record freshness belongs to the `bookkeeping` skill; the other skills never edit records post-merge.
