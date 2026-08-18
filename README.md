@@ -15,6 +15,17 @@ dsh --profile next-app                                    # boot
 - Update: `dsh plugin --profile next-app update`.
 - Rollback: `dsh plugin --profile next-app remove @<scope>/dsh-next-app`.
 
+## Development
+
+```sh
+corepack pnpm install
+corepack pnpm build
+corepack pnpm test
+corepack pnpm lint
+```
+
+Node and pnpm - exact versions are pinned in `package.json` (`engines`, `packageManager` fields). See [AGENTS.md](./AGENTS.md) for the contributor guide.
+
 ## Auth
 
 v1 enforces HTTP basic auth (single user) before any request reaches the dsh API:
