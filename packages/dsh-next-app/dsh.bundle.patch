@@ -1,0 +1,5 @@
+# dsh.bundle.patch - placeholder
+#
+# This file will carry the UI-layer patch applied to the dsh web surface.
+# Real content lands together with the first UI stories; the packaging
+# drill (ADR-0006) verifies the tarball ships it.

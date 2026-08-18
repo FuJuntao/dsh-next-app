@@ -1,0 +1,28 @@
+{
+  "name": "@scope/dsh-next-app",
+  "version": "0.0.0",
+  "description": "The published dsh-next-app bundle: dsh.bundle.patch, cordis.patch.yml, and the lib/ glue that serves the built Next app inside its own dsh profile (ADR-0007). The scope in the name is a placeholder - the real npm scope is decided before the first publish (parent issue open question).",
+  "files": [
+    "dsh.bundle.patch",
+    "cordis.patch.yml",
+    "lib"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "lint": "oxlint .",
+    "format": "oxfmt ."
+  },
+  "devDependencies": {
+    "@tsconfig/node-ts": "catalog:",
+    "@tsconfig/node24": "24.0.5",
+    "@tsconfig/strictest": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "next": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  }
+}

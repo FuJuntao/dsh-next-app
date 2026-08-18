@@ -14,6 +14,9 @@ dist/
 # build info
 *.tsbuildinfo
 
+# dsh-next-app bundle: emitted glue (built at pack time)
+packages/dsh-next-app/lib/
+
 # logs & misc
 *.log
 .DS_Store
