@@ -1,0 +1,12 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Workspace-wide toolchain pins (AC 5 of the scaffold story): members
+# reference these via `catalog:` so every package builds with the same
+# versions. Latest stable at scaffolding time.
+catalog:
+  next: 16.3.1
+  react: 19.2.8
+  react-dom: 19.2.8
+  typescript: 7.0.2
