@@ -11,6 +11,9 @@ dist/
 .env.local
 .env.*.local
 
+# build info
+*.tsbuildinfo
+
 # logs & misc
 *.log
 .DS_Store
