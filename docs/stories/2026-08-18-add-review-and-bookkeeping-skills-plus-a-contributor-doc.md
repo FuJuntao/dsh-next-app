@@ -1,6 +1,10 @@
 # Add review and bookkeeping skills plus a contributor doc
 
 - Date: 2026-08-18
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/19
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/20
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/21
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/22
 
 As a contributor, I want a review skill that reviews an open pull request along explicit axes and a bookkeeping skill that finishes work after merge - plus a contributor doc holding the standing context - so that work truly finishes when its PR merges, the repo's records stay truthful, and I need no conversation memory to contribute.
 

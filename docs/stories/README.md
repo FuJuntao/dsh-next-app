@@ -13,8 +13,8 @@ Story records carry no status field. The lifecycle is tracked by what exists out
 
 ## Stories
 
-- [Add review and bookkeeping skills plus a contributor doc](./2026-08-18-add-review-and-bookkeeping-skills-plus-a-contributor-doc.md)
+- ~~[Add review and bookkeeping skills plus a contributor doc](./2026-08-18-add-review-and-bookkeeping-skills-plus-a-contributor-doc.md)~~
 - ~~[Make planning skills interview in rounds until nothing is vague](./2026-08-17-make-planning-skills-interview-in-rounds-until-nothing-is-vague.md)~~
-- [Add an implement-a-task skill](./2026-08-17-add-an-implement-a-task-skill.md)
+- ~~[Add an implement-a-task skill](./2026-08-17-add-an-implement-a-task-skill.md)~~
 
 Entries: `- [<Title>](./<file>)`
