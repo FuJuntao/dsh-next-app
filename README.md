@@ -2,7 +2,7 @@
 
 A replacement frontend for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) web surface — server-rendered, mobile-first, with built-in authentication. It ships as a published npm bundle and runs from its own dsh profile, leaving the in-box `web` profile untouched.
 
-- Supported dsh version: **0.1.0-rc.6** — each release supports exactly one tested dsh version, and boot fails loudly on a mismatch (ADR-0006, ADR-0008)
+- Supported dsh version: **0.1.0-rc.7** — each release supports exactly one tested dsh version, and boot fails loudly on a mismatch (ADR-0006, ADR-0008)
 
 ## Install
 

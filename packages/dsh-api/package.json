@@ -1,0 +1,30 @@
+{
+  "name": "dsh-api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Typed dsh API client: version pin and boot-check invariant (ADR-0006, ADR-0008)",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "oxlint .",
+    "format": "oxfmt ."
+  },
+  "devDependencies": {
+    "@tsconfig/node-ts": "23.6.4",
+    "@tsconfig/node24": "24.0.5",
+    "@tsconfig/strictest": "2.0.8",
+    "@types/node": "24.13.3",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
