@@ -1,0 +1,6 @@
+# cordis.patch.yml - placeholder
+#
+# Registers the next-app server row with the dsh profile: the row that
+# boots web-startup (lib/) and serves the built Next app output.
+# Real row definition lands with the runtime glue stories.
+rows: []
