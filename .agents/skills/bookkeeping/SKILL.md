@@ -11,10 +11,11 @@ You are loaded when the user types `/bookkeeping`, optionally followed by a star
 ## 1. Resolve the starting point
 - The argument names a starting point - a PR (number or URL), a commit hash, or a branch name. Resolve it to a git hash: a merged PR's merge commit, an open PR's head, a branch's tip, a commit as given. Check out that state following the environment's checkout conventions, then run the full check there.
 - No argument, or the argument does not resolve: propose running the check on `main` and wait for confirmation - never silently default.
-- The check always covers the whole repo, never only the starting point's chain. When the checked-out state is not current `main`, say so in the preview and mark the repairs that depend on it - they may need a re-run once that state merges.
+- After checkout, compare the state with the repository's latest. If it is stale (behind latest `main`) or conflicting (diverged from it), notify the user and ask how to proceed: **update first** - bring the starting point up to date (pull, merge, or re-run on latest `main`) - or **proceed with latest info** - records are read from latest `main`, and the starting point only anchors where the tail starts.
+- The check always covers the whole repo, never only the starting point's chain. Never mix states silently: the records side of the check comes from exactly one state, chosen explicitly above.
 
 ## 2. Gather state
-Read the GitHub issues (open parents and their checklists, task issues and their PR links) live, and the story records under `docs/stories/` with the index `docs/stories/README.md` at the checked-out state - always across the whole repo, never only the starting point. Build the drift list - every place a record disagrees with a fact:
+Read the GitHub issues (open parents and their checklists, task issues and their PR links) live, and the story records under `docs/stories/` with the index `docs/stories/README.md` at the chosen state - always across the whole repo, never only the starting point. Build the drift list - every place a record disagrees with a fact:
 - A task issue not closed by its PR's closing syntax.
 - A parent checklist line disagreeing with its issue's actual state; a parent whose sub-issues are all complete but which is still open.
 - A complete story whose record lacks its `- PR:` line, or whose index entry is not struck.
