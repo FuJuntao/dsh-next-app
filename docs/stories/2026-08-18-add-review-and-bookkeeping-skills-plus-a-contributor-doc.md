@@ -11,6 +11,7 @@ As a contributor, I want a review skill that reviews an open pull request along 
 3. The review runs per axis, each axis stating its applicability rule, and the verdict lists which axes ran:
    - **Spec** - the diff satisfies the task's AC checkpoint and the linked story record.
    - **System design** - repo-wide constraints: ADR compliance, workspace boundaries, API shape. Spec blockers trace to task ACs and the story; system-design blockers trace to ADRs - a PR that satisfies its task yet violates an ADR fails here.
+   - **Repo standards** - the change meets the repo's stated standards beyond the ADRs: its contributor doc (AGENTS.md or equivalent), the README's user-facing commitments, and any other convention the repo states. Blockers trace to the statement violated.
    - **UI** - only when the diff touches UI code: the built app is exercised with the `agent-browser` skill against the PR's changes.
    - **Security** - no secrets or leaked personal data; public-repo hygiene per ADR-0005.
    - **Docs discipline** - doc changes ship together with the implying change, ADRs stay frozen, task lists stay truthful (ADR-0005).
