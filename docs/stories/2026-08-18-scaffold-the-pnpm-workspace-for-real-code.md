@@ -1,6 +1,11 @@
 # Scaffold the pnpm workspace for real code
 
 - Date: 2026-08-18
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/31
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/32
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/33
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/34
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/35
 
 As a contributor, I want the pnpm workspace scaffolded per ADR-0007 (private
 root, `apps/web`, `packages/dsh-next-app`, `packages/dsh-api`) with runnable
