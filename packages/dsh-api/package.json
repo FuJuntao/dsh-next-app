@@ -2,7 +2,7 @@
   "name": "dsh-api",
   "version": "0.0.0",
   "private": true,
-  "description": "Typed dsh API client: version pin and boot-check invariant (ADR-0006, ADR-0008)",
+  "description": "Typed dsh API client: exact-pinned dsh-host-apiproxy dependency, re-exported gateway domain type tree, version pin and boot-check invariant (ADR-0006, ADR-0008)",
   "files": [
     "dist"
   ],
