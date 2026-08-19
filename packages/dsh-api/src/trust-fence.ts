@@ -6,6 +6,9 @@
  * turn into a login prompt instead of an opaque transport failure.
  * Mid-stream revocation is unreachable here: statuses only arrive at open
  * time; the reconnect loop re-hits the fence on every reopen.
+ * Redirect edge case: fetch follows redirects, so a redirect chain ending
+ * at a 200 login page bypasses the fence (the JSON parse then fails
+ * instead); the dsh gateway answers /api with 401 directly (ADR-0004).
  */
 
 /** 401/403 at the transport edge: credentials missing or refused. */

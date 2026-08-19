@@ -93,6 +93,8 @@ describe("createDshClient dispatch", () => {
   });
 
   it("'{ handler }' rides only the injected fetch", async () => {
+    const globalSpy = vi.fn();
+    vi.stubGlobal("fetch", globalSpy);
     let calls = 0;
     const fetchImpl: FetchFn = async (input, init) => {
       calls += 1;
@@ -102,6 +104,7 @@ describe("createDshClient dispatch", () => {
     const response = await client.host.describe({});
     expect(response.result.ok).toBe(true);
     expect(calls).toBe(1);
+    expect(globalSpy).not.toHaveBeenCalled();
   });
 
   it("refuses an explicit transport that is neither", () => {
