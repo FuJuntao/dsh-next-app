@@ -1,5 +1,8 @@
 export { SUPPORTED_DSH_VERSION } from "./version.js";
 export { assertDshVersion } from "./assert-dsh-version.js";
+export { createDshClient } from "./client.js";
+export type { DshTransport } from "./client.js";
+export { TrustFenceError } from "./trust-fence.js";
 
 /**
  * Typed domain tree of the dsh /api gateway protocol, re-exported from the
