@@ -159,6 +159,25 @@ async function installPinnedClosure(scratch) {
     throw new Error("capture-wire-transcripts: expected dsh " + PIN + ", installed " + bootedCli);
   }
   log("dsh " + bootedCli + " installed");
+
+  // The transcripts encode the emitter/frame semantics of exactly this
+  // package, so its closure version is asserted too: a registry timeout in
+  // the availability check above could otherwise leave it unpinned.
+  const apiproxyManifest = JSON.parse(
+    await readFile(
+      path.join(scratch, "node_modules", "@deepseek-ai", "dsh-host-apiproxy", "package.json"),
+      "utf8",
+    ),
+  );
+  if (apiproxyManifest.version !== PIN) {
+    throw new Error(
+      "capture-wire-transcripts: expected dsh-host-apiproxy " +
+        PIN +
+        ", installed " +
+        String(apiproxyManifest.version),
+    );
+  }
+  log("dsh-host-apiproxy " + String(apiproxyManifest.version) + " matches the pin");
 }
 
 // ---------------------------------------------------------------------------
