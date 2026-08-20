@@ -63,12 +63,12 @@ exactly as the README's install flow promises.
 
 - Reference implementation: `@deepseek-ai/dsh-web-app` (startup flag parsing →
   startup service; glue row injecting `webServer`, mounting the frontend via
-  the fallback seat, announcing the URL line after `loader` settles) and the
-  homecenter `dsh-web-sse` plugin (SSE variants of `/api/events.mux` +
-  `/api/events.host`). At dsh 0.1.0-rc.8 the `dsh-client-connection` host half
-  serves `/api` (HTTP RPC bridge + trust fence) and pumps the two event
-  downlinks as WebSocket upgrades only — SSE bridging is the glue's job
-  (ADR-0003).
+  the fallback seat, announcing the URL line after `loader` settles);
+  deployment-side plugins serving SSE variants of the event paths prove the
+  bridge pattern. At dsh 0.1.0-rc.7 (the pinned version) the
+  `dsh-client-connection` host half serves `/api` (HTTP RPC bridge + trust
+  fence) and pumps the two event downlinks as WebSocket upgrades only — SSE
+  bridging is the glue's job (ADR-0003).
 - The patch declares only the base + transport rows plus the next-app startup
   and glue rows — not the in-box browser roster (client-ui rows, storage,
   directory pickers) the Next app does not consume.
