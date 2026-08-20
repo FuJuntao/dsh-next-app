@@ -26,6 +26,10 @@ corepack pnpm lint
 
 Node and pnpm - exact versions are pinned in `package.json` (`engines`, `packageManager` fields). See [AGENTS.md](./AGENTS.md) for the contributor guide.
 
+## Packages
+
+- [`packages/dsh-api`](packages/dsh-api/README.md) - typed client for the dsh `/api` gateway protocol: exact-pinned, tested against golden wire transcripts, public surface documented.
+
 ## Auth
 
 v1 enforces HTTP basic auth (single user) before any request reaches the dsh API:
