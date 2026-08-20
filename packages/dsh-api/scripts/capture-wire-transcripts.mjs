@@ -218,6 +218,10 @@ function bootHost(scratch) {
     };
     child.stdout.on("data", onData);
     child.stderr.on("data", onData);
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(new Error("dsh web failed to spawn: " + String(error)));
+    });
     child.on("exit", (code) => {
       clearTimeout(timer);
       reject(new Error("dsh web exited early (code " + code + ")\n" + buffer));
