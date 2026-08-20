@@ -13,6 +13,7 @@ Story records carry no status field. The lifecycle is tracked by what exists out
 
 ## Stories
 
+- [Post review findings as anchored PR comments](./2026-08-20-post-review-findings-as-anchored-pr-comments.md)
 - [Add a typed dsh-api client with SSE downlinks](./2026-08-19-add-a-typed-dsh-api-client-with-sse-downlinks.md)
 - ~~[Scaffold the pnpm workspace for real code](./2026-08-18-scaffold-the-pnpm-workspace-for-real-code.md)~~
 - ~~[Add review and bookkeeping skills plus a contributor doc](./2026-08-18-add-review-and-bookkeeping-skills-plus-a-contributor-doc.md)~~
