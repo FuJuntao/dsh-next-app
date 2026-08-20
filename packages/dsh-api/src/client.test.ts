@@ -3,11 +3,11 @@ import { createDshClient, TrustFenceError } from "./index.js";
 
 /**
  * Factory, transports, and trust-fence semantics against scripted fakes:
- * no network, no live host. Wire-format coverage against recorded golden
- * transcripts lands in task 4 (issue #43).
+ * no network, no live host. Wire-format facts against recorded golden
+ * transcripts live in wire-replay.test.ts (fixtures/wire/, AC 6).
  */
 
-type FetchFn = (input: URL, init?: RequestInit) => Promise<Response>;
+type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 /** A host.describe value satisfying the upstream schema (all plain fields). */
 const DESCRIBE_VALUE = {
