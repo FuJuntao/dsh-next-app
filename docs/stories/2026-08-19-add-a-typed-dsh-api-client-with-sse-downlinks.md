@@ -1,6 +1,11 @@
 # Add a typed dsh-api client with SSE downlinks
 
 - Date: 2026-08-19
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/45
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/46
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/47
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/53
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/54
 
 As a developer building the app surfaces, I want a typed client in
 `packages/dsh-api` for the dsh `/api` gateway protocol with SSE event
