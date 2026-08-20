@@ -36,10 +36,11 @@ As each finding is gathered, record its anchor data: the file path and line - or
   - Summary body: the outcome, which axes ran and which were skipped, and every unanchorable finding.
   - One inline review comment per anchorable finding - blockers and non-blocking observations alike - anchored at the file path and line, or start-end line range when the finding spans lines.
   - All findings share one continuous numbering across the summary body and the inline comments; every posted finding keeps its axis tag and traceability to its source. The posted content is the complete verdict.
+  - Every posted finding opens with a marker line of the form `[review] <axis> #<number>` - the format later passes use to recognize this skill's own threads.
   - Post no formal approve/request-changes state - the review is a comment, so it never blocks the merge on its own.
 - Chat carries a minimal summary: the outcome, the finding counts, and a link to the posted review. A finding that fails to post keeps its number and stays in chat in full - findings are never silently lost.
 - When posting is unavailable - no platform tooling or no auth - say so plainly and leave the complete verdict in chat instead.
-- On a re-review, also inspect the open review-comment threads that earlier passes of this skill created, recognized by the posting account and the skill's comment format: mark a thread resolved only when this pass verifies its anchored finding no longer holds. Never touch threads created by humans; never edit or delete earlier reviews - each pass posts a fresh review.
+- On a re-review, also inspect the open review-comment threads that earlier passes of this skill created, recognized by the posting account and the marker format above: mark a thread resolved only when this pass verifies its anchored finding no longer holds. Never touch threads created by humans; never edit or delete earlier reviews - each pass posts a fresh review.
 
 ## 5. Merge gate
 After an approve verdict, wait for an explicit merge go-ahead. On approval, merge the PR via the platform - never push to `main` directly - then point the user to `/bookkeeping` for the post-merge tail. The gate fires per PR.
