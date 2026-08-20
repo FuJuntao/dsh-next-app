@@ -1,6 +1,7 @@
 # Post review findings as anchored PR comments
 
 - Date: 2026-08-20
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/50
 
 As a maintainer, I want the findings the `review` skill produces posted on the pull request as review comments anchored to the exact lines they refer to, so that I can act on them directly on the PR without guessing from a chat transcript which line each one means.
 
