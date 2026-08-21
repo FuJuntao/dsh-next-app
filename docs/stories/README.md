@@ -13,6 +13,7 @@ Story records carry no status field. The lifecycle is tracked by what exists out
 
 ## Stories
 
+- [Keep the review verdict summary focused on findings](./2026-08-21-keep-the-review-verdict-summary-focused-on-findings.md)
 - [Implement the bundle runtime glue](./2026-08-20-implement-the-bundle-runtime-glue.md)
 - ~~[Post review findings as anchored PR comments](./2026-08-20-post-review-findings-as-anchored-pr-comments.md)~~
 - ~~[Add a typed dsh-api client with SSE downlinks](./2026-08-19-add-a-typed-dsh-api-client-with-sse-downlinks.md)~~
