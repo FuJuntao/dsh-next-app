@@ -17,8 +17,8 @@ As a contributor, I want a review skill that reviews an open pull request along 
    - **System design** - repo-wide constraints: ADR compliance, workspace boundaries, API shape. Spec blockers trace to task ACs and the story; system-design blockers trace to ADRs - a PR that satisfies its task yet violates an ADR fails here.
    - **Repo standards** - the change meets the repo's stated standards beyond the ADRs: its contributor doc (AGENTS.md or equivalent), the README's user-facing commitments, and any other convention the repo states. Blockers trace to the statement violated.
    - **UI** - only when the diff touches UI code: the built app is exercised with the `agent-browser` skill against the PR's changes.
-   - **Security** - no secrets or leaked personal data; public-repo hygiene per ADR-0004.
-   - **Docs discipline** - doc changes ship together with the implying change, ADRs stay frozen, task lists stay truthful (ADR-0004).
+   - **Security** - no secrets or leaked personal data; public-repo hygiene per ADR-0005.
+   - **Docs discipline** - doc changes ship together with the implying change, ADRs stay frozen, task lists stay truthful (ADR-0005).
    - **Verification claims** - the PR body states what was run; the reviewer re-runs it or checks its plausibility.
    - **Commit hygiene** - the commit conventions stated by the environment it runs in.
 4. The verdict is structured: approve, or request-changes with numbered, axis-tagged blockers, each traceable to its source (task AC, ADR, convention) - never a rubber stamp.
@@ -34,7 +34,7 @@ As a contributor, I want a review skill that reviews an open pull request along 
 ## Non-Goals
 
 - Creating stories or plans (`story`, `plan-a-story`) and implementing tasks (`implement-a-task`).
-- Creating CI pipelines or tests: dsh-compat enforcement stays mechanical - contract tests, the boot invariant, future CI (ADR-0002, ADR-0002) - not a review axis.
+- Creating CI pipelines or tests: dsh-compat enforcement stays mechanical - contract tests, the boot invariant, future CI (ADR-0006, ADR-0008) - not a review axis.
 - Auto-merging PRs, managing CI, or deploying.
 - Changing the story-record format or the plan-a-story issue structure.
 - Touching the `grilling` skill.
