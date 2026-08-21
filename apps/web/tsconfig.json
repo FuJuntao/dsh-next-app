@@ -1,8 +1,7 @@
 {
   "extends": ["@tsconfig/next/tsconfig.json", "@tsconfig/strictest/tsconfig.json"],
   "compilerOptions": {
-    "jsx": "react-jsx",
-    "allowImportingTsExtensions": true
+    "jsx": "react-jsx"
   },
   "include": [
     "next-env.d.ts",
@@ -11,5 +10,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "**/*.test.ts", "tests/**"]
+  "exclude": ["node_modules"]
 }
