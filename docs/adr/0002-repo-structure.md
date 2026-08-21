@@ -37,7 +37,7 @@ code). A single package would force both worlds into one manifest.
 - Registry installs remain a plain tarball install of a
   self-contained bundle.
 - No test suites exist yet: the test strategy — protocol contract
-  tests, the version pin, and the boot invariant included — is
+  tests, the version pin, and the boot invariant included — will be
   designed from scratch with the bridge story.
 - One build and one lint pass at the root; publishing is a bump of the
   bundle member plus pack/publish.

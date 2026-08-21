@@ -39,4 +39,4 @@ Run at the repo root - `corepack pnpm` picks up the pinned package manager from 
 - `pnpm lint` - oxlint over the repo (shared root config)
 - `pnpm format`, or `oxfmt --check .` for a check-only pass - oxfmt over code files
 
-Version drift protection - the pinned version constant, the fail-loud boot invariant, and the contract tests - is designed from scratch with the bridge story (ADR-0002).
+Version drift protection - the pinned version constant, the fail-loud boot invariant, and the contract tests - is future work; it will be designed with the bridge story (ADR-0002).
