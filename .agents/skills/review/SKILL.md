@@ -30,15 +30,27 @@ The axes are floors: judgment may raise anything they do not cover.
 As each finding is gathered, record its anchor data: the file path and line - or start-end line range - within the PR diff, and the HEAD commit SHA reviewed. A finding that refers to repo state rather than a location in the diff - a process or repo-wide finding - is recorded as unanchorable.
 
 ## 4. Deliver the verdict
-- **Approve**: summarize the findings per axis that ran, then proceed to step 5.
-- **Request changes**: numbered blockers, each tagged with its axis and traceable to its source (task AC, ADR, convention). Separate blocking from non-blocking plainly - no rubber stamp, no style noise. The skill ends here; re-review after fixes is a new invocation.
+- **Approve**: the summary body is the verdict - outcome line, axes ran/skipped, then one compact line per axis that ran. Then proceed to step 5.
+- **Request changes**: numbered findings, each tagged with its axis and traceable to its source (task AC, ADR, convention). Separate blocking from non-blocking plainly - no rubber stamp, no style noise. The skill ends here; re-review after fixes is a new invocation.
 - Post the verdict on the PR via the platform as one plain-comment review anchored at the HEAD commit reviewed:
-  - Summary body: the outcome, which axes ran and which were skipped, and every unanchorable finding.
+  - Summary body, in this order and nothing else: the outcome line, one line of axes ran and one of axes skipped, and every unanchorable finding in full. Anchorable findings are the inline threads - the summary never re-lists them and may at most point at them with one line ("findings #1-#2 are posted inline at their lines").
+    - On **Approve**, one compact line per axis that ran carries the verdict, with any unanchorable findings after them. On **Request changes**, there is no per-axis rollup - an axis without a finding has passed, and silence says so.
+    - Verdict content only: no merge dry runs, no re-run or build logs, and no process notes the PR cannot act on (such as where its branch was created or worktree-convention slips) - those go in chat, not the PR.
   - One inline review comment per anchorable finding - blockers and non-blocking observations alike - anchored at the file path and line, or start-end line range when the finding spans lines.
-  - All findings share one continuous numbering across the summary body and the inline comments; every posted finding keeps its axis tag and traceability to its source. The posted content is the complete verdict.
+  - Findings share one continuous numbering across the posted content; every posted finding keeps its axis tag and traceability to its source. The posted content - summary plus threads - is the complete verdict.
   - Every posted finding opens with a marker line of the form `[review] <axis> #<number>` - the format later passes use to recognize this skill's own threads.
   - Post no formal approve/request-changes state - the review is a comment, so it never blocks the merge on its own.
-- Chat carries a minimal summary: the outcome, the finding counts, and a link to the posted review. A finding that fails to post keeps its number and stays in chat in full - findings are never silently lost.
+  - Request changes body shape, nothing after the unanchorable findings:
+
+    ```
+    **Request changes — 1 blocker, 2 non-blocking — reviewed at `<sha>`**
+    Axes ran: <axes>
+    Axes skipped: <axes> (<reason>)
+    Findings #1-#2 are posted inline at their lines.
+
+    <unanchorable finding #3 in full - the only finding text in the summary>
+    ```
+- Chat carries a minimal summary: the outcome, the finding counts, a link to the posted review, plus whatever the posted verdict must leave out - reviewer-internal verification detail (dry runs, re-runs, build notes) and process notes the PR cannot act on. Chat-only notes never get a finding number. A finding that fails to post keeps its number and stays in chat in full - findings are never silently lost.
 - When posting is unavailable - no platform tooling or no auth - say so plainly and leave the complete verdict in chat instead.
 - On a re-review, also inspect the open review-comment threads that earlier passes of this skill created, recognized by the posting account and the marker format above: mark a thread resolved only when this pass verifies its anchored finding no longer holds. Never touch threads created by humans; never edit or delete earlier reviews - each pass posts a fresh review.
 
