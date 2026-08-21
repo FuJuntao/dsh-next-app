@@ -1,4 +1,4 @@
-# ADR-0005: Open source (MIT) + docs discipline in the repo
+# ADR-0004: Open source (MIT) + docs discipline in the repo
 
 Status: Accepted
 

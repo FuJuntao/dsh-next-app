@@ -8,7 +8,7 @@ Guidance for contributors - human and AI agents - working in this repo.
 - `docs/stories/` - story records, newest first in `docs/stories/README.md`; the lifecycle (proposed -> planned -> in flight -> done) is documented there.
 - `.agents/skills/` - the skill family the workflow runs on (below). `skills-lock.json` at the repo root locks the externally sourced skills - see that file for the current list.
 - `README.md` - the user-facing install/ops surface.
-- The code is a pnpm workspace (ADR-0007): a private root owning the shared scripts and the toolchain catalog, `apps/web` (the Next.js app), `packages/dsh-api` (typed client: dsh version pin + boot invariant), and `packages/dsh-next-app` (the published bundle: manifest, patch placeholders, and `lib/` glue).
+- The code is a pnpm workspace (ADR-0002): `apps/web` (the Next.js app; the envelope protocol layer lands with the bridge story) and `packages/dsh-next-app` (the published bundle: `cordis.patch.yml`, `dsh.bundle.patch`, and the `lib/` server-row glue). The members share no compile-time code; each keeps its own tsconfig.
 
 ## Workflow
 
@@ -24,19 +24,19 @@ The current skill set lives in `.agents/skills/`. GitHub issues are the source o
 
 ## Conventions
 
-- Docs discipline per ADR-0005: doc changes ship together with the change that implies them; task lists stay truthful as work happens.
-- dsh compatibility is enforced mechanically - contract tests, the boot invariant, future CI (ADR-0006, ADR-0008) - not by review opinion.
+- Docs discipline per ADR-0004: doc changes ship together with the change that implies them; task lists stay truthful as work happens.
+- dsh compatibility is enforced mechanically - contract tests, the boot invariant, future CI - not by review opinion; those mechanisms land with the bridge story (ADR-0003).
 - Commit and branch conventions come from the environment the work runs in (its AGENTS.md or equivalent); this repo references them and does not restate them.
 - Refer, don't restate: facts that drift - the locked-skills list, the skill set, current verification state - are pointed at their source of truth, never enumerated here. This doc carries structure and process; status lives in its sources.
 
 ## Verification
 
-Run at the workspace root - `corepack pnpm` picks up the pinned package manager from `package.json`:
+Run at the repo root - `corepack pnpm` picks up the pinned package manager from `package.json`:
 
-- `pnpm install` - install the workspace (lockfile is committed)
-- `pnpm build` - build every member (`dsh-api` and the bundle with `tsc`, `apps/web` with `next build`)
-- `pnpm test` - run the vitest suites
-- `pnpm lint` - oxlint over all members (shared root config)
+- `pnpm install` - install dependencies (lockfile is committed)
+- `pnpm build` - build the app (`next build`) and the bundle glue (`tsc`)
+- `pnpm test` - no test suites yet; the test strategy lands with the bridge story (ADR-0003)
+- `pnpm lint` - oxlint over the repo (shared root config)
 - `pnpm format`, or `oxfmt --check .` for a check-only pass - oxfmt over code files
 
-Version drift protection is the pinned dsh version constant plus the fail-loudly boot invariant in `dsh-api` (ADR-0006, ADR-0008). The contract tests against a live dsh host are future work (ADR-0006).
+Version drift protection - the pinned version constant, the fail-loud boot invariant, and the contract tests - is designed from scratch with the bridge story (ADR-0003).

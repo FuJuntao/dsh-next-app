@@ -16,8 +16,7 @@ Story records carry no status field. The lifecycle is tracked by what exists out
 - [Keep the review verdict summary focused on findings](./2026-08-21-keep-the-review-verdict-summary-focused-on-findings.md)
 - [Implement the bundle runtime glue](./2026-08-20-implement-the-bundle-runtime-glue.md)
 - ~~[Post review findings as anchored PR comments](./2026-08-20-post-review-findings-as-anchored-pr-comments.md)~~
-- ~~[Add a typed dsh-api client with SSE downlinks](./2026-08-19-add-a-typed-dsh-api-client-with-sse-downlinks.md)~~
-- ~~[Scaffold the pnpm workspace for real code](./2026-08-18-scaffold-the-pnpm-workspace-for-real-code.md)~~
+- ~~[Scaffold the pnpm workspace for real code](./2026-08-18-scaffold-the-pnpm-workspace-for-real-code.md)~~ *(superseded: the workspace was rewritten into one package, ADR-0002)*
 - ~~[Add review and bookkeeping skills plus a contributor doc](./2026-08-18-add-review-and-bookkeeping-skills-plus-a-contributor-doc.md)~~
 - ~~[Make planning skills interview in rounds until nothing is vague](./2026-08-17-make-planning-skills-interview-in-rounds-until-nothing-is-vague.md)~~
 - ~~[Add an implement-a-task skill](./2026-08-17-add-an-implement-a-task-skill.md)~~

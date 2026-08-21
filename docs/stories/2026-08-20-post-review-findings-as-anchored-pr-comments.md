@@ -13,7 +13,7 @@ As a maintainer, I want the findings the `review` skill produces posted on the p
 4. Chat output shrinks to a minimal summary: the outcome, finding counts, and a link to the posted review. Any finding that failed to post keeps its number from the same continuous sequence and stays in chat in full — findings are never silently lost. The merge go-ahead conversation stays in chat, and the merge gate itself is unchanged.
 5. A re-review is a new invocation and posts a fresh review for its own pass; it does not edit or delete earlier reviews. It also inspects open review-comment threads created by earlier skill passes: a thread is marked resolved only when this pass verifies the anchored finding no longer holds. Threads created by humans are never touched.
 6. When posting or resolving is unavailable (no platform tooling or no auth), the skill says so plainly and the full verdict remains in chat.
-7. The `review` skill stays platform-agnostic in its normative text — "post via the platform", never a specific CLI — and ships as an edit to `.agents/skills/review/SKILL.md` that drops the "comment on the PR only if the user asks" rule. Repo docs that state the old behavior are updated in the same change (ADR-0005).
+7. The `review` skill stays platform-agnostic in its normative text — "post via the platform", never a specific CLI — and ships as an edit to `.agents/skills/review/SKILL.md` that drops the "comment on the PR only if the user asks" rule. Repo docs that state the old behavior are updated in the same change (ADR-0004).
 
 ## Non-Goals
 
