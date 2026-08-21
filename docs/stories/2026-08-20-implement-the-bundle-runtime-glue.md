@@ -33,7 +33,7 @@ exactly as the README's install flow promises.
    `files` ships it; a packaging drill asserts the packed tarball contains
    `dsh.bundle.patch`, `cordis.patch.yml`, `lib/`, and the app build.
 6. The bundle's `package.json` declares as `peerDependencies` the host
-   packages its rows name (the ADR-0008 cross-cutting set plus
+   packages its rows name (the <!-- ADR-0008 (pre-reset) --> cross-cutting set plus
    `dsh-host-webserver`, `dsh-client-connection`, `dsh-host-apiproxy`); a test
    asserts the built bundle's runtime imports stay within {`next`, `react`,
    `react-dom`, own helpers, declared peerDependencies} and that `dsh-api` is
@@ -49,15 +49,15 @@ exactly as the README's install flow promises.
 - No product surfaces in `apps/web` (chat island, session list, settings stay
   placeholder) — the UI stories' job; `dsh.bundle.patch` UI-layer content stays
   empty.
-- No HTTP basic auth gate and no pre-built auth seam (ADR-0004 story) — see
+- No HTTP basic auth gate and no pre-built auth seam <!-- (ADR-0004 story, pre-reset) --> — see
   Technical Notes and Open Questions.
 - No default-browser handoff (in-box `openBrowser` parity dropped; URL line
   only).
 - No npm scope decision, publishing workflow, or release-per-dsh-bump
   pipeline (the publish story).
-- No live-host contract tests (ADR-0006 story); no WebSocket anywhere
-  (ADR-0003); no `dsh-api` import into the bundle (ADR-0007); the in-box
-  `web` profile is untouched (ADR-0002).
+- No live-host contract tests;<!-- (ADR-0006 story, pre-reset) --> no WebSocket anywhere
+  (ADR-0003); no `dsh-api` import into the bundle;<!-- (ADR-0007, pre-reset) --> the in-box
+  `web` profile is untouched.<!-- (ADR-0002, pre-reset) -->
 
 ## Technical Notes
 
@@ -72,13 +72,13 @@ exactly as the README's install flow promises.
 - The patch declares only the base + transport rows plus the next-app startup
   and glue rows — not the in-box browser roster (client-ui rows, storage,
   directory pickers) the Next app does not consume.
-- Porting in-box code with attribution is the repo's sanctioned pattern
-  (ADR-0002; see the dsh-api story's `ConnectionController` port).
-- ADR-0008: host packages are peerDependencies resolved from
+- Porting in-box code with attribution is the repo's sanctioned pattern.
+  <!-- (ADR-0002, pre-reset; see the dsh-api story's `ConnectionController` port) -->
+- <!-- ADR-0008 (pre-reset) --> host packages are peerDependencies resolved from
   `$DSH_HOME/profiles/node_modules`; the invariant companion fails boot on
   version mismatch; the pin is pack-time generated from `dsh-api`'s constant.
 - Inherited design task for the auth story: `/api` is owned by the
-  `connection` row's trust fence, so the ADR-0004 basic-auth gate needs a
+  `connection` row's trust fence, so the <!-- ADR-0004 (pre-reset) --> basic-auth gate needs a
   standing place in front of it. Deferring the seam design keeps this glue
   minimal; this note records it so the cost is not lost.
 - Readiness: the glue performs its own `host.describe` with upstream
@@ -92,6 +92,6 @@ stories build on it.
 
 ## Open Questions
 
-- Where should the ADR-0004 basic-auth gate stand, given `/api` is owned by
+- Where should the <!-- ADR-0004 (pre-reset) --> basic-auth gate stand, given `/api` is owned by
   the `connection` row? Unresolved in the interview: defer the seam design to
   the auth story (recommended), or pre-build a forwarding seam now.
