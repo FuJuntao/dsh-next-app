@@ -34,11 +34,10 @@ As each finding is gathered, record its anchor data: the file path and line - or
 - **Request changes**: numbered findings, each tagged with its axis and traceable to its source (task AC, ADR, convention). Separate blocking from non-blocking plainly - no rubber stamp, no style noise. The skill ends here; re-review after fixes is a new invocation.
 - Post the verdict on the PR via the platform as one plain-comment review anchored at the HEAD commit reviewed:
   - Summary body, in this order and nothing else: the outcome line, one line of axes ran and one of axes skipped, and every unanchorable finding in full. Anchorable findings are the inline threads - the summary never re-lists them and may at most point at them with one line ("findings #1-#2 are posted inline at their lines").
-    - Unanchorable findings appear in full - the summary is their only home.
-    - On **Approve**, one compact line per axis that ran is the verdict text. On **Request changes**, there is no per-axis rollup - an axis without a finding has passed, and silence says so.
+    - On **Approve**, one compact line per axis that ran carries the verdict, with any unanchorable findings after them. On **Request changes**, there is no per-axis rollup - an axis without a finding has passed, and silence says so.
     - Verdict content only: no merge dry runs, no re-run or build logs, and no process notes the PR cannot act on (such as where its branch was created or worktree-convention slips) - those go in chat, not the PR.
   - One inline review comment per anchorable finding - blockers and non-blocking observations alike - anchored at the file path and line, or start-end line range when the finding spans lines.
-  - Findings share one continuous numbering across the posted threads; every posted finding keeps its axis tag and traceability to its source. The posted content - summary plus threads - is the complete verdict.
+  - Findings share one continuous numbering across the posted content; every posted finding keeps its axis tag and traceability to its source. The posted content - summary plus threads - is the complete verdict.
   - Every posted finding opens with a marker line of the form `[review] <axis> #<number>` - the format later passes use to recognize this skill's own threads.
   - Post no formal approve/request-changes state - the review is a comment, so it never blocks the merge on its own.
   - Request changes body shape, nothing after the unanchorable findings:
