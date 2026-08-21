@@ -2,9 +2,8 @@ packages:
   - apps/*
   - packages/*
 
-# Workspace-wide toolchain pins (AC 5 of the scaffold story): members
-# reference these via `catalog:` so every package builds with the same
-# versions. Latest stable at scaffolding time.
+# Workspace-wide toolchain pins: members reference these via `catalog:`
+# so every package builds with the same versions.
 catalog:
   next: 16.3.1
   react: 19.2.8
@@ -16,4 +15,5 @@ catalog:
   "@types/react-dom": 19.2.4
   "@tsconfig/next": 2.0.6
   "@tsconfig/node-ts": 23.6.4
+  "@tsconfig/node24": 24.0.5
   "@tsconfig/strictest": 2.0.8
