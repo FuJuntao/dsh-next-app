@@ -9,8 +9,8 @@
     "format": "oxfmt ."
   },
   "devDependencies": {
-    "oxfmt": "^0.63.0",
-    "oxlint": "^1.78.0",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:"
   },
   "engines": {

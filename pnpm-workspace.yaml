@@ -17,6 +17,8 @@ catalog:
   typescript: 7.0.2
   tsdown: 0.22.14
   oxlint-tsgolint: 7.0.2001
+  oxfmt: 0.63.0
+  oxlint: 1.78.0
   vitest: 4.1.10
   "@types/node": 24.13.3
   "@types/react": 19.2.18
