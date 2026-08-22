@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Create and plan a story in one step
 
-You are loaded when the user types `/story`, optionally followed by a rough idea that seeds the proposal (e.g. `/story implement dark mode`), or `/story suggest` to jump straight to capability candidates. Produce exactly ONE story per invocation, in English, and end by creating its GitHub issues. Do not push anything and do not edit any repo files - GitHub issues are the single source of truth for stories and plans (ADR-0005); the repo never receives a per-story file.
+You are loaded when the user types `/story`, optionally followed by a rough idea that seeds the proposal (e.g. `/story implement dark mode`), or `/story suggest` to jump straight to capability candidates. Produce exactly ONE story per invocation, in English, and end by creating its GitHub issues. Do not push anything and do not edit any repo files - GitHub issues are the single source of truth for stories and plans (ADR-0005).
 
 ## 1. Gather context
 Before asking anything, gather:

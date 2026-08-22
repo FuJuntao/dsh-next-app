@@ -11,7 +11,7 @@ You are loaded when the user types `/implement-a-task`, optionally followed by a
 ## 1. Pick the task
 - With an argument: resolve it to exactly one open `task`-labeled issue. If it does not resolve, or is not a task issue, say so and stop.
 - Without: list the open `task`-labeled issues with their parent issues and let the user pick.
-Refuse the task and point back to `/story` if it is too big, too vague to implement, or blocked by an unfinished sibling task. Never silently re-scope a task.
+- Refuse the task and point back to `/story` if it is too big, too vague to implement, or blocked by an unfinished sibling task. Never silently re-scope a task.
 
 ## 2. Gather context
 Before planning, read: the task issue and its parent issue (the AC checkpoint; the story's content lives in the parent issue body), ADRs relevant to the change, TODO/FIXME markers in the area being touched, and whatever contributor conventions (AGENTS.md or equivalent) apply in the environment this runs in. Never invent constraints the context does not contain.
