@@ -21,12 +21,22 @@ dsh --profile next-app                                    # boot
 
 ## Auth
 
-v1 enforces HTTP basic auth (single user) in Next middleware, before any route — including `/api` — runs:
+v1 enforces HTTP basic auth (single user) in the Next proxy — before any route, including `/api` and static assets, runs. Configure the credential pair on the `next-app-runtime` row in the profile's patch layer (ADR-0008) — `$DSH_HOME/profiles/next-app/cordis.patch.yml` (default `~/.dsh/…`):
+
+```yaml
+- id: next-app-runtime
+  config:
+    auth:
+      user: <username>
+      passwordHash: <scrypt value>
+```
+
+Generate the value with a plain node one-liner — built-ins only, runnable from any directory (ADR-0007):
 
 ```sh
-DSH_NEXT_APP_USER=<username> \
-DSH_NEXT_APP_PASSWORD_HASH=<bcrypt hash> \
-dsh --profile next-app
+node -e "const {scryptSync, randomBytes}=require('node:crypto'); const s=randomBytes(16); const k=scryptSync(process.argv[1], s, 32, {N:16384, r:8, p:1}); console.log('scrypt$16384,8,1$'+s.toString('base64')+'$'+k.toString('base64'))" '<password>'
 ```
+
+The value is self-describing — `scrypt$<N>,<r>,<p>$<salt>$<key>` — so a deployment can raise the scrypt cost parameters without a code change. The native browser dialog's realm is the optional `auth.realm` (default `dsh-next-app`); a deployment reverse proxy that also runs basic auth can share one dialog per origin with it. The surface fails closed: without the auth config every request is denied and the server logs a loud configuration error, and an incomplete pair (exactly one of user/hash set) refuses to start.
 
 Contributors: see [CONTRIBUTING.md](./CONTRIBUTING.md).
