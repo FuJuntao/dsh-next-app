@@ -17,6 +17,10 @@ export interface E2EState {
   announceLine: string;
   /** The dsh process id; its process group is the teardown target. */
   dshPid: number;
+  /** Teed dsh stdout file under the scratch dir (supervision specs). */
+  dshStdoutPath: string;
+  /** Teed dsh stderr file under the scratch dir (supervision specs). */
+  dshStderrPath: string;
 }
 
 /** State file location - fixed so specs and teardown find it without cross-process plumbing. */

@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -36,11 +44,18 @@ async function phase<T>(label: string, work: () => Promise<T>): Promise<T> {
 interface Booted {
   announceLine: string;
   dshPid: number;
+  stdoutPath: string;
+  stderrPath: string;
   kill: () => void;
 }
 
 /** Boot the profile and resolve once the serving URL is announced on stdout. */
-function bootProfile(dshHome: string, port: number, baseURL: string): Promise<Booted> {
+function bootProfile(
+  dshHome: string,
+  port: number,
+  baseURL: string,
+  logsDir: string,
+): Promise<Booted> {
   return new Promise((resolve, reject) => {
     const child = spawn("dsh", ["--profile", PROFILE, "--port", String(port)], {
       cwd: REPO_ROOT,
@@ -59,6 +74,13 @@ function bootProfile(dshHome: string, port: number, baseURL: string): Promise<Bo
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
     });
+    // Tee the dsh process's streams into the scratch dir: the supervision
+    // specs assert the row's stderr log (the restart line) against these
+    // files, and the announce parse below keeps its own in-memory capture.
+    const stdoutPath = join(logsDir, "dsh.stdout.log");
+    const stderrPath = join(logsDir, "dsh.stderr.log");
+    child.stdout.pipe(createWriteStream(stdoutPath));
+    child.stderr.pipe(createWriteStream(stderrPath));
 
     const kill = (): void => {
       try {
@@ -93,7 +115,7 @@ function bootProfile(dshHome: string, port: number, baseURL: string): Promise<Bo
         reject(new Error(`dsh announced ${announcedURL} but the suite expects ${baseURL}`));
         return;
       }
-      resolve({ announceLine, dshPid: child.pid ?? -1, kill });
+      resolve({ announceLine, dshPid: child.pid ?? -1, stdoutPath, stderrPath, kill });
     }, 200);
     child.on("error", (error) => {
       clearInterval(poll);
@@ -158,7 +180,9 @@ export default async function globalSetup(): Promise<void> {
     // 3. Boot on a free port until the URL is announced.
     const port = await freePort();
     const baseURL = `http://127.0.0.1:${port}`;
-    booted = await phase("booting the scratch profile", () => bootProfile(dshHome, port, baseURL));
+    booted = await phase("booting the scratch profile", () =>
+      bootProfile(dshHome, port, baseURL, scratchDir),
+    );
 
     // 4. Persist state for the specs and teardown.
     const state: E2EState = {
@@ -169,6 +193,8 @@ export default async function globalSetup(): Promise<void> {
       baseURL,
       announceLine: booted.announceLine,
       dshPid: booted.dshPid,
+      dshStdoutPath: booted.stdoutPath,
+      dshStderrPath: booted.stderrPath,
     };
     writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
   } catch (error) {
