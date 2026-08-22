@@ -1,6 +1,9 @@
 # cordis.patch.yml - placeholder
 #
 # Registers the next-app server row with the dsh profile: the row that
-# boots web-startup (lib/) and serves the built Next app output.
+# spawns the packed Next app (web-startup, lib/) as a managed child and
+# hosts the unix-socket bridge to the gateway services (ADR-0001,
+# ADR-0003). The in-box connection row is deliberately absent - Next
+# owns /api and every other public route.
 # Real row definition lands with the runtime glue stories.
 rows: []

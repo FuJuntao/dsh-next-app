@@ -1,7 +1,7 @@
 {
   "name": "dsh-next-app",
   "private": true,
-  "description": "pnpm workspace root for dsh-next-app: private, never published (ADR-0007)",
+  "description": "pnpm workspace root for dsh-next-app: private, never published (ADR-0002)",
   "scripts": {
     "build": "pnpm -r --if-present run build",
     "test": "pnpm -r --if-present run test",
