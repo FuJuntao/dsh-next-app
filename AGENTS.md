@@ -25,7 +25,7 @@ The current skill set lives in `.agents/skills/`. GitHub issues are the source o
 ## Conventions
 
 - Docs discipline per ADR-0004: doc changes ship together with the change that implies them; task lists stay truthful as work happens.
-- dsh compatibility is enforced mechanically - install-time peerDependency ranges and regression coverage (the future test-strategy ADR) - not by review opinion or a boot-time version check.
+- dsh compatibility is enforced mechanically - install-time peerDependency ranges and regression coverage (ADR-0006) - not by review opinion or a boot-time version check.
 - Commit and branch conventions come from the environment the work runs in (its AGENTS.md or equivalent); this repo references them and does not restate them.
 - Refer, don't restate: facts that drift - the locked-skills list, the skill set, current verification state - are pointed at their source of truth, never enumerated here. This doc carries structure and process; status lives in its sources.
 
@@ -35,8 +35,8 @@ Run at the repo root - `corepack pnpm` picks up the pinned package manager from 
 
 - `pnpm install` - install dependencies (lockfile is committed)
 - `pnpm build` - build the app (`next build`) and the bundle glue (`tsdown`)
-- `pnpm test` - no test suites yet; the test strategy lands with the bridge story (ADR-0002)
+- `pnpm test` - no test suites yet; the e2e regression suite defined by ADR-0006 ships with its story
 - `pnpm lint` - oxlint over the repo (shared root config)
 - `pnpm format`, or `oxfmt --check .` for a check-only pass - oxfmt over code files
 
-Version drift protection is install-time peerDependency ranges plus regression coverage (the future test-strategy ADR) - no pinned version constant or boot-time version check.
+Version drift protection is install-time peerDependency ranges plus regression coverage (ADR-0006) - no pinned version constant or boot-time version check.
