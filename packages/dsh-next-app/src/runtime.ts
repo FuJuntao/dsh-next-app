@@ -1,0 +1,197 @@
+/**
+ * next-app-runtime - the next-app profile's boot glue row (ADR-0001).
+ *
+ * Spawns the packed Next app (`next start`) as a managed child of the dsh
+ * host through the base layer's `subprocess` service when the `next-app`
+ * profile starts: detects readiness from the child's stdout, restarts the
+ * child with backoff on unexpected exit, terminates its process tree on
+ * profile stop, and announces the serving URL once the child is ready and
+ * the Loader tree has settled. The dsh `webserver` carrier is deliberately
+ * not in the serving path - Next is the only public HTTP surface.
+ *
+ * Import surface: host packages only, resolved from the user's dsh
+ * installation as peerDependencies (ADR-0002).
+ *
+ * @module @scope/dsh-next-app/runtime
+ */
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { Context } from "@deepseek-ai/cordis";
+import type { SubprocessHandle } from "@deepseek-ai/dsh-subprocess";
+
+/** Stable Cordis plugin name. */
+export const name = "next-app-runtime";
+
+/** Services required before the boot glue can run. */
+export const inject = ["nextAppCli", "subprocess"];
+
+/** The Loader service's settle gate, typed structurally; the host provides it. */
+interface LoaderLike {
+  /** Resolves when the Loader tree settles; undefined when no Loader runs. */
+  await(): Promise<void> | undefined;
+}
+
+/** This bundle's root (`lib/..`): where the packed app build lives. */
+const BUNDLE_ROOT = fileURLToPath(new URL("../", import.meta.url));
+
+/** The packed Next app directory - an assembly fact of this bundle, never user config. */
+const APP_DIR = join(BUNDLE_ROOT, "web");
+
+/** Default bind host: loopback. The v1 surface is unguarded until the auth story lands. */
+const DEFAULT_HOST = "127.0.0.1";
+
+/** Default listen port - the same default the in-box web profile uses. */
+const DEFAULT_PORT = 3080;
+
+/**
+ * The stdout line Next prints once the server accepts connections.
+ *
+ * REGRESSION NOTE: Next's console output is an implementation detail, not a
+ * contract. The catalog pins the exact Next version this marker was verified
+ * against (16.3.1); when the test-strategy ADR's suites land, a regression
+ * test must pin this marker so a catalog bump that changes the output fails
+ * loudly instead of silently never announcing the URL.
+ */
+const READY_MARKER = "✓ Ready";
+
+/** SIGTERM-to-SIGKILL escalation grace for terminating the child tree. */
+const TERMINATE_GRACE_MS = 5000;
+
+/** Initial restart delay after an unexpected exit; doubles per consecutive attempt. */
+const INITIAL_RESTART_DELAY_MS = 1000;
+
+/** Ceiling for the restart backoff delay. */
+const MAX_RESTART_DELAY_MS = 30000;
+
+/** Uptime after which the consecutive-failure counter resets. */
+const STABLE_UPTIME_MS = 30000;
+
+/** Quiet period after which a still-running child with no ready line gets one warning. */
+const READY_WARNING_MS = 60000;
+
+/** The URL a browser can use: an all-interfaces bind is announced as loopback. */
+function servingUrl(host: string, port: number): string {
+  return `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`;
+}
+
+/** Delay before restart attempt `attempts` (1-based), doubling up to the ceiling. */
+function restartDelayMs(attempts: number): number {
+  return Math.min(INITIAL_RESTART_DELAY_MS * 2 ** (attempts - 1), MAX_RESTART_DELAY_MS);
+}
+
+/**
+ * Boot the packed Next app as a managed child and supervise it for the
+ * profile's lifetime (ADR-0001: spawn, readiness, backoff restart, tree
+ * teardown).
+ *
+ * @param ctx - plugin context carrying `nextAppCli` and `subprocess`.
+ */
+export function apply(ctx: Context): void {
+  const host = ctx.nextAppCli?.host ?? DEFAULT_HOST;
+  const port = ctx.nextAppCli?.port ?? DEFAULT_PORT;
+  const url = servingUrl(host, port);
+  const nextCli = fileURLToPath(import.meta.resolve("next/dist/bin/next"));
+  const controller = new AbortController();
+
+  let handle: SubprocessHandle | undefined;
+  let stopping = false;
+  let attempts = 0;
+  let childReady = false;
+  let loaderSettled = false;
+  let announced = false;
+  let restartTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const announce = (): void => {
+    if (announced || stopping) return;
+    announced = true;
+    console.log(`dsh next-app: ${url}`);
+  };
+
+  const readyWarning = setTimeout(() => {
+    if (!announced && !stopping) {
+      console.warn(
+        `next-app-runtime: no ready line from the Next child within ${READY_WARNING_MS / 1000}s; still waiting`,
+      );
+    }
+  }, READY_WARNING_MS);
+
+  const spawnChild = (): void => {
+    if (stopping) return;
+    if (!existsSync(APP_DIR)) {
+      console.error(
+        `next-app-runtime: no app build at ${APP_DIR} - the bundle's pack pipeline stages it there`,
+      );
+    }
+    const startedAt = Date.now();
+    let lineBuffer = "";
+    const child = ctx.subprocess.spawn({
+      argv: [process.execPath, nextCli, "start", "--hostname", host, "--port", String(port)],
+      cwd: APP_DIR,
+      stdio: { stdin: "ignore", stdout: "pipe", stderr: "inherit" },
+      graceMs: TERMINATE_GRACE_MS,
+      signal: controller.signal,
+    });
+    handle = child;
+    child.stdout?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => {
+      lineBuffer += chunk;
+      for (;;) {
+        const newlineIndex = lineBuffer.indexOf("\n");
+        if (newlineIndex === -1) break;
+        const line = lineBuffer.slice(0, newlineIndex);
+        lineBuffer = lineBuffer.slice(newlineIndex + 1);
+        if (!childReady && line.includes(READY_MARKER)) {
+          childReady = true;
+          if (loaderSettled) announce();
+        }
+      }
+    });
+    child.done.then(
+      (outcome) => {
+        if (stopping) return;
+        attempts = Date.now() - startedAt >= STABLE_UPTIME_MS ? 0 : attempts + 1;
+        const delayMs = restartDelayMs(Math.max(attempts, 1));
+        console.error(
+          `next-app-runtime: Next child exited unexpectedly (exitCode ${String(outcome.exitCode)}, signal ${String(outcome.signal)}); restarting in ${delayMs}ms`,
+        );
+        restartTimer = setTimeout(spawnChild, delayMs);
+      },
+      (error: unknown) => {
+        if (stopping) return;
+        attempts += 1;
+        const delayMs = restartDelayMs(attempts);
+        const reason = error instanceof Error ? error.message : String(error);
+        console.error(
+          `next-app-runtime: spawning the Next child failed (${reason}); retrying in ${delayMs}ms`,
+        );
+        restartTimer = setTimeout(spawnChild, delayMs);
+      },
+    );
+  };
+
+  const loader = ctx.get("loader") as LoaderLike | undefined;
+  const settled = loader?.await();
+  if (settled === undefined) {
+    loaderSettled = true;
+  } else {
+    settled.then(
+      () => {
+        loaderSettled = true;
+        if (childReady) announce();
+      },
+      () => {},
+    );
+  }
+
+  ctx.effect(() => {
+    spawnChild();
+    return () => {
+      stopping = true;
+      controller.abort();
+      clearTimeout(readyWarning);
+      if (restartTimer !== undefined) clearTimeout(restartTimer);
+      handle?.terminate();
+    };
+  });
+}

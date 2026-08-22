@@ -5,6 +5,12 @@ packages:
 # Workspace-wide toolchain pins: members reference these via `catalog:`
 # so every package builds with the same versions.
 catalog:
+  # The dsh host surface this bundle targets - the host packages resolve
+  # from the user's dsh installation at runtime, so the pins track the
+  # tested dsh version (0.1.0-rc.8) in one place.
+  "@deepseek-ai/cordis": 4.0.1
+  "@deepseek-ai/dsh-cmdline": 0.1.0-rc.8
+  "@deepseek-ai/dsh-subprocess": 0.1.0-rc.8
   next: 16.3.1
   react: 19.2.8
   react-dom: 19.2.8

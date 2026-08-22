@@ -16,6 +16,8 @@ dist/
 
 # dsh-next-app bundle: emitted glue (built at pack time)
 packages/dsh-next-app/lib/
+# dsh-next-app bundle: staged app build (the pack pipeline copies apps/web's build here)
+packages/dsh-next-app/web/
 
 # logs & misc
 *.log
