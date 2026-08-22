@@ -22,7 +22,8 @@ jobs:
         run: pnpm build
       - name: Test
         run: |
-          npm install -g @deepseek-ai/dsh@0.1.0-rc.8
+          DSH_VERSION="$(sed -n 's/^  "@deepseek-ai\/dsh": //p' pnpm-workspace.yaml)"
+          npm install -g "@deepseek-ai/dsh@${DSH_VERSION}"
           pnpm --filter e2e exec playwright install --with-deps chromium
           pnpm test
       - name: Lint

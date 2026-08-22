@@ -12,6 +12,9 @@ catalog:
   "@deepseek-ai/cordis": 4.0.1
   "@deepseek-ai/dsh-cmdline": 0.1.0-rc.8
   "@deepseek-ai/dsh-subprocess": 0.1.0-rc.8
+  # The tested dsh CLI itself - CI installs it for the e2e suite; the version
+  # is derived from this entry, never hand-synced.
+  "@deepseek-ai/dsh": 0.1.0-rc.8
   "@playwright/test": 1.62.1
   next: 16.3.1
   react: 19.2.8
