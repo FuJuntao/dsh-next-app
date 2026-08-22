@@ -35,7 +35,7 @@ Run at the repo root - `corepack pnpm` picks up the pinned package manager from 
 
 - `pnpm install` - install dependencies (lockfile is committed)
 - `pnpm build` - build the app (`next build`) and the bundle glue (`tsdown`)
-- `pnpm test` - no test suites yet; the e2e regression suite defined by ADR-0006 ships with its story
+- `pnpm test` - runs the e2e regression suite (ADR-0006) against a scratch dsh profile
 - `pnpm lint` - oxlint over the repo (shared root config)
 - `pnpm format`, or `oxfmt --check .` for a check-only pass - oxfmt over code files
 

@@ -1,6 +1,6 @@
 # dsh-next-app
 
-A replacement frontend for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) web surface — server-rendered, mobile-first, with built-in authentication. A pnpm workspace of two members: the Next.js app and the published bundle that installs into its own dsh profile, leaving the in-box `web` profile untouched.
+A replacement frontend for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) web surface — server-rendered, mobile-first, with built-in authentication. A pnpm workspace of three members: the Next.js app, the published bundle that installs into its own dsh profile, and the e2e regression suite (ADR-0006), leaving the in-box `web` profile untouched.
 
 - Targets dsh **0.1.0-rc.8** — the tested host version; drift protection is regression coverage (ADR-0006) plus install-time peerDependency ranges — no boot-time version check
 
