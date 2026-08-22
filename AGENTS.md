@@ -34,7 +34,7 @@ The current skill set lives in `.agents/skills/`. GitHub issues are the source o
 Run at the repo root - `corepack pnpm` picks up the pinned package manager from `package.json`:
 
 - `pnpm install` - install dependencies (lockfile is committed)
-- `pnpm build` - build the app (`next build`) and the bundle glue (`tsc`)
+- `pnpm build` - build the app (`next build`) and the bundle glue (`tsdown`)
 - `pnpm test` - no test suites yet; the test strategy lands with the bridge story (ADR-0002)
 - `pnpm lint` - oxlint over the repo (shared root config)
 - `pnpm format`, or `oxfmt --check .` for a check-only pass - oxfmt over code files
