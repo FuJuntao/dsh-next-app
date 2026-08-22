@@ -25,6 +25,7 @@ The current skill set lives in `.agents/skills/`. GitHub issues are the source o
 ## Conventions
 
 - Docs discipline per ADR-0004: doc changes ship together with the change that implies them; task lists stay truthful as work happens.
+- The README is purely user-facing (install/ops only); dev-related content (build/test/CI instructions, contribution process, repo internals) must not be added to it - its home is CONTRIBUTING.md.
 - dsh compatibility is enforced mechanically - install-time peerDependency ranges and regression coverage (ADR-0006) - not by review opinion or a boot-time version check.
 - Commit and branch conventions come from the environment the work runs in (its AGENTS.md or equivalent); this repo references them and does not restate them.
 - Refer, don't restate: facts that drift - the locked-skills list, the skill set, current verification state - are pointed at their source of truth, never enumerated here. This doc carries structure and process; status lives in its sources.
