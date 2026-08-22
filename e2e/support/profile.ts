@@ -1,4 +1,5 @@
-import { createWriteStream, mkdirSync } from "node:fs";
+import { randomBytes, scryptSync } from "node:crypto";
+import { createWriteStream, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { freePort } from "./port";
@@ -7,6 +8,29 @@ import { pidAlive } from "./process-tree";
 
 const REPO_ROOT = resolve(__dirname, "../..");
 const PROFILE = "next-app";
+
+/** Default scrypt cost parameters; the fence reads them from the value itself (ADR-0007). */
+const SCRYPT_N = 16384;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
+
+/** Build one self-describing scrypt value (`scrypt$N,r,p$salt$key`, ADR-0007). */
+export function scryptValue(password: string): string {
+  const salt = randomBytes(16);
+  const key = scryptSync(password, salt, 32, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P });
+  return (
+    "scrypt$" +
+    SCRYPT_N +
+    "," +
+    SCRYPT_R +
+    "," +
+    SCRYPT_P +
+    "$" +
+    salt.toString("base64") +
+    "$" +
+    key.toString("base64")
+  );
+}
 const ANNOUNCE_RE = /dsh next-app: (http:\/\/\S+)/;
 const ANNOUNCE_TIMEOUT_MS = 120_000;
 const STOP_WAIT_MS = 15_000;
@@ -49,6 +73,38 @@ export async function stopProfile(dshPid: number): Promise<void> {
   } catch {
     // already gone
   }
+}
+
+/** The auth block shape the suite writes into the profile's patch (ADR-0008). */
+export interface ProfileAuthConfig {
+  user?: string;
+  passwordHash?: string;
+  realm?: string;
+}
+
+/**
+ * Write the profile's user patch layer: an id-targeted auth config override
+ * for the next-app-runtime row (ADR-0008). Boot the profile after writing;
+ * a running instance hot-reloads its config, so specs that swap the patch
+ * restore it before they finish.
+ */
+export function writeAuthPatch(profileDir: string, auth?: ProfileAuthConfig): void {
+  const lines: string[] = [
+    "# The e2e suite's auth config for the next-app-runtime row (ADR-0008).",
+    "# Rewritten per spec; boot the profile after writing for changes to apply.",
+    "- id: next-app-runtime",
+    "  config:",
+  ];
+  if (auth === undefined) {
+    lines.push("    {}");
+  } else {
+    lines.push("    auth:");
+    if (auth.user !== undefined) lines.push("      user: " + auth.user);
+    if (auth.passwordHash !== undefined) lines.push("      passwordHash: " + auth.passwordHash);
+    if (auth.realm !== undefined) lines.push("      realm: " + auth.realm);
+  }
+  lines.push("");
+  writeFileSync(join(profileDir, "cordis.patch.yml"), lines.join("\n"));
 }
 
 /**

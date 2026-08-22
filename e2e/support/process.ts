@@ -14,7 +14,9 @@ export interface RunOptions {
 
 /**
  * Run a command to completion, capturing its output. Kills the child and
- * rejects with the captured output when the timeout expires.
+ * rejects with the captured output when the timeout expires; a non-zero
+ * exit rejects with the captured output too - the suite fails loudly
+ * (ADR-0006).
  */
 export function run(argv: string[], options: RunOptions): Promise<RunResult> {
   return new Promise((resolve, reject) => {
@@ -52,6 +54,14 @@ export function run(argv: string[], options: RunOptions): Promise<RunResult> {
     });
     child.on("close", (code: number | null) => {
       clearTimeout(timer);
+      if (code !== 0) {
+        reject(
+          new Error(
+            `"${argv.join(" ")}" exited with code ${String(code)}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+          ),
+        );
+        return;
+      }
       resolve({ code, stdout, stderr });
     });
   });
