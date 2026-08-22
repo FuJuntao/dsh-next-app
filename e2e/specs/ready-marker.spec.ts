@@ -12,6 +12,18 @@ const READY_MARKER_RE = /const READY_MARKER = "([^"]+)"/;
 const READY_LINE_TIMEOUT_MS = 60_000;
 
 /**
+ * Next colorizes its output when FORCE_COLOR is set (GitHub Actions does),
+ * wrapping the ✓ in SGR sequences that sit between the glyph and the word
+ * (\x1b[32m\x1b[1m✓\x1b[22m\x1b[39m Ready ...). The pin targets the ready
+ * line's content, not its presentation, so strip SGR sequences before
+ * comparing.
+ */
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex -- ESC (U+001B) is the ANSI escape introducer; intentional.
+  return text.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+/**
  * Pins the row's ready marker (runtime.ts REGRESSION NOTE): the Next child's
  * stdout must contain the exact marker the row waits for, so a Next catalog
  * bump that changes the output fails loudly instead of silently never
@@ -46,19 +58,24 @@ test("the Next child's ready line matches the row's READY_MARKER", async () => {
 
   try {
     const deadline = Date.now() + READY_LINE_TIMEOUT_MS;
-    while (Date.now() < deadline && child.exitCode === null && !stdout.includes(marker)) {
+    while (
+      Date.now() < deadline &&
+      child.exitCode === null &&
+      !stripAnsi(stdout).includes(marker)
+    ) {
       await sleep(200);
     }
     expect(child.exitCode, "next start exited before the ready line").toBeNull();
     expect(
-      stdout,
+      stripAnsi(stdout),
       "the Next child's ready line must contain the row's READY_MARKER (runtime.ts) so a catalog bump that changes the output fails loudly",
     ).toContain(marker);
   } finally {
     child.kill("SIGTERM");
-    await new Promise((settle) => {
-      child.once("exit", settle);
-      setTimeout(settle, 5_000);
+    const exited = await new Promise<boolean>((settle) => {
+      child.once("exit", () => settle(true));
+      setTimeout(() => settle(false), 5_000);
     });
+    if (!exited) child.kill("SIGKILL");
   }
 });
