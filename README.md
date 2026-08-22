@@ -34,6 +34,15 @@ dsh --profile next-app
 Development instructions - build, pack, and the e2e regression suite - live in
 [CONTRIBUTING.md](./CONTRIBUTING.md).
 
+CI gates every PR and push to main: the fast path (`ci` - install, build,
+lint) plus a separate `e2e` job that installs the catalog-pinned `dsh` host
+from npm and headless Chromium, then runs the regression suite against the
+packed bundle (ADR-0006). The suite fails the build on regression - e.g. a
+Next catalog bump that changes the child's ready line fails loudly instead of
+silently never announcing the URL. Reproduce the `e2e` job locally with
+`pnpm --filter e2e exec playwright install chromium` and `pnpm test`
+(details in CONTRIBUTING.md).
+
 ## Layout
 
 - `apps/web/app/` - the Next.js routes and UI (shell + hydrated chat island)

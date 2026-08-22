@@ -6,6 +6,8 @@ on:
   pull_request:
 
 jobs:
+  # Fast path: install, build, lint. The e2e suite runs in its own job - dsh
+  # boot is slow, so it stays off the fast path (ADR-0006).
   ci:
     name: ci
     runs-on: ubuntu-latest
@@ -20,11 +22,32 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build
         run: pnpm build
-      - name: Test
+      - name: Lint
+        run: pnpm lint
+
+  # The e2e regression suite (ADR-0006): installs the catalog-pinned dsh host
+  # from npm and headless Chromium, then pnpm test packs the bundle, boots it
+  # in a scratch profile, and asserts the served surface in a real browser
+  # (plus the ready-marker pin and the supervision behavior). Gates every PR
+  # and push to main like the fast path.
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Install the catalog-pinned dsh host
         run: |
           DSH_VERSION="$(sed -n 's/^  "@deepseek-ai\/dsh": //p' pnpm-workspace.yaml)"
           npm install -g "@deepseek-ai/dsh@${DSH_VERSION}"
-          pnpm --filter e2e exec playwright install --with-deps chromium
-          pnpm test
-      - name: Lint
-        run: pnpm lint
+      - name: Install the Chromium browser
+        run: pnpm --filter e2e exec playwright install --with-deps chromium
+      - name: Run the e2e regression suite
+        run: pnpm test

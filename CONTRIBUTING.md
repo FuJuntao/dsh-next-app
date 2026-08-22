@@ -41,3 +41,15 @@ pnpm test
 
 The scratch profile lives under the OS temp dir and is removed on teardown; a
 missing `dsh` or browser fails the suite loudly.
+
+### CI
+
+The suite runs as a separate `e2e` job in CI (`.github/workflows/ci.yml`),
+parallel to the fast `ci` job (install, build, lint): dsh boot is slow, so
+the suite stays off the fast path (ADR-0006). The job installs the
+catalog-pinned `dsh` host from npm - the version is read from
+`pnpm-workspace.yaml`, never hand-synced - and the Chromium browser with
+system dependencies (`playwright install --with-deps chromium`), then runs
+`pnpm test`, which packs the bundle itself: nothing runs from the repo tree.
+The job gates every PR and push to main, so a regression - e.g. a Next catalog
+bump that changes the child's ready line - fails the build.
