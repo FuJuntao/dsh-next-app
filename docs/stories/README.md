@@ -13,6 +13,7 @@ Story records carry no status field. The lifecycle is tracked by what exists out
 
 ## Stories
 
+- [Merge story creation and planning into one step](./2026-08-22-merge-story-creation-and-planning-into-one-step.md)
 - ~~[Keep the review verdict summary focused on findings](./2026-08-21-keep-the-review-verdict-summary-focused-on-findings.md)~~
 - ~~[Implement the bundle runtime glue](./2026-08-20-implement-the-bundle-runtime-glue.md)~~ *(superseded: the glue was redesigned around the managed child + unix-socket bridge, ADR-0001/0003)*
 - ~~[Post review findings as anchored PR comments](./2026-08-20-post-review-findings-as-anchored-pr-comments.md)~~
