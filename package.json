@@ -3,14 +3,15 @@
   "private": true,
   "description": "pnpm workspace root for dsh-next-app: private, never published (ADR-0002)",
   "scripts": {
-    "build": "pnpm -r --if-present run build",
+    "build": "pnpm --filter @scope/dsh-next-app run build",
     "test": "pnpm -r --if-present run test",
     "lint": "pnpm -r --if-present run lint",
     "format": "oxfmt ."
   },
   "devDependencies": {
-    "oxfmt": "^0.63.0",
-    "oxlint": "^1.78.0"
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:"
   },
   "engines": {
     "node": ">=24"
