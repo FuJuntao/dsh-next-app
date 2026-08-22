@@ -49,9 +49,9 @@ const DEFAULT_PORT = 3080;
  *
  * REGRESSION NOTE: Next's console output is an implementation detail, not a
  * contract. The catalog pins the exact Next version this marker was verified
- * against (16.3.1); when the test-strategy ADR's suites land, a regression
- * test must pin this marker so a catalog bump that changes the output fails
- * loudly instead of silently never announcing the URL.
+ * against (16.3.1); the e2e suite pins it (e2e/specs/ready-marker.spec.ts), so
+ * a catalog bump that changes the output fails loudly instead of silently
+ * never announcing the URL.
  */
 const READY_MARKER = "✓ Ready";
 
