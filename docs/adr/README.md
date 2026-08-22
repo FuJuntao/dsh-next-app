@@ -20,3 +20,5 @@ records that predate the reset refer to that numbering.
 | [0004](0004-open-source-docs-discipline.md) | Open source (MIT) + docs discipline in the repo | Accepted |
 | [0005](0005-one-step-story-planning.md) | Story planning — one step with GitHub issues as the single source of truth | Accepted |
 | [0006](0006-test-strategy.md) | Test strategy — e2e regression against a real dsh profile as the first suite | Accepted |
+| [0007](0007-basic-auth-scrypt.md) | Basic-auth password verification — built-in scrypt, no dependencies (supersedes ADR-0001's bcrypt clause) | Accepted |
+| [0008](0008-auth-config-cordis.md) | Basic-auth configuration — cordis row config on the runtime row (supersedes the env-channel clauses of ADR-0001/ADR-0007) | Accepted |

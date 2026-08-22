@@ -3,7 +3,10 @@
  *
  * Spawns the packed Next app (`next start`) as a managed child of the dsh
  * host through the base layer's `subprocess` service when the `next-app`
- * profile starts: detects readiness from the child's stdout, restarts the
+ * profile starts (forwarding the row's basic-auth config - ADR-0008 - into
+ * the child's environment through the spawn spec's explicit env layer,
+ * because the host service scrubs `DSH_*` and credential-shaped names from
+ * implicit inheritance): detects readiness from the child's stdout, restarts the
  * child with backoff on unexpected exit, terminates its process tree on
  * profile stop, and announces the serving URL once the child is ready and
  * the Loader tree has settled. The dsh `webserver` carrier is deliberately
@@ -26,6 +29,22 @@ export const name = "next-app-runtime";
 /** Services required before the boot glue can run. */
 export const inject = ["nextAppCli", "subprocess"];
 
+/** This row's config (ADR-0008): an id-targeted override in the profile's user patch layer. */
+export interface NextAppRuntimeConfig {
+  /** Basic-auth config forwarded to the Next child's environment. */
+  auth?: NextAppAuthConfig;
+}
+
+/** The basic-auth block of the row config (ADR-0007 value format). */
+export interface NextAppAuthConfig {
+  /** The single allowed username. */
+  user?: string;
+  /** The scrypt-derived value of the allowed password. */
+  passwordHash?: string;
+  /** The dialog realm; the app defaults when absent. */
+  realm?: string;
+}
+
 /** The Loader service's settle gate, typed structurally; the host provides it. */
 interface LoaderLike {
   /** Resolves when the Loader tree settles; undefined when no Loader runs. */
@@ -38,7 +57,7 @@ const BUNDLE_ROOT = fileURLToPath(new URL("../", import.meta.url));
 /** The packed Next app directory - an assembly fact of this bundle, never user config. */
 const APP_DIR = join(BUNDLE_ROOT, "web");
 
-/** Default bind host: loopback. The v1 surface is unguarded until the auth story lands. */
+/** Default bind host: loopback; an all-interfaces bind is guarded by basic auth when provisioned (ADR-0001). */
 const DEFAULT_HOST = "127.0.0.1";
 
 /** Default listen port - the same default the in-box web profile uses. */
@@ -98,9 +117,22 @@ function restartDelayMs(attempts: number): number {
  *
  * @param ctx - plugin context carrying `nextAppCli` and `subprocess`.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config?: NextAppRuntimeConfig): void {
   const host = ctx.nextAppCli?.host ?? DEFAULT_HOST;
   const port = ctx.nextAppCli?.port ?? DEFAULT_PORT;
+  const auth = config?.auth;
+  if (auth !== undefined) {
+    // An incomplete pair is a misconfiguration: refuse to boot loudly
+    // instead of serving a half-gated surface (ADR-0008). An absent auth
+    // block is legitimate - the fence fails closed.
+    const userUnset = auth.user === undefined || auth.user === "";
+    const hashUnset = auth.passwordHash === undefined || auth.passwordHash === "";
+    if (userUnset !== hashUnset) {
+      throw new Error(
+        "next-app-runtime: auth.user and auth.passwordHash must be set together (basic auth, fail-closed); got exactly one - configure the auth block on this row in the profile's cordis.patch.yml",
+      );
+    }
+  }
   const url = servingUrl(host, port);
   const nextCli = fileURLToPath(import.meta.resolve("next/dist/bin/next"));
   const controller = new AbortController();
@@ -139,6 +171,18 @@ export function apply(ctx: Context): void {
     const child = ctx.subprocess.spawn({
       argv: [process.execPath, nextCli, "start", "--hostname", host, "--port", String(port)],
       cwd: APP_DIR,
+      // Explicit env layer: the host service scrubs DSH_* and
+      // credential-shaped names from implicit inheritance, and this layer
+      // merges after the scrub - the row's auth config travels only when
+      // deliberately forwarded (ADR-0008).
+      env: {
+        ...(auth?.user !== undefined && auth.user !== "" && { DSH_NEXT_APP_USER: auth.user }),
+        ...(auth?.passwordHash !== undefined &&
+          auth.passwordHash !== "" && {
+            DSH_NEXT_APP_PASSWORD_HASH: auth.passwordHash,
+          }),
+        ...(auth?.realm !== undefined && auth.realm !== "" && { DSH_NEXT_APP_REALM: auth.realm }),
+      },
       stdio: { stdin: "ignore", stdout: "pipe", stderr: "inherit" },
       graceMs: TERMINATE_GRACE_MS,
       signal: controller.signal,

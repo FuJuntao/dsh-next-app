@@ -1,12 +1,20 @@
 import { readFileSync } from "node:fs";
 import net from "node:net";
 import { test, expect } from "../support/fixtures";
+import { readState } from "../support/state";
 import {
   pidAlive,
   processGroupId,
   processGroupMembers,
   uniqueChildOf,
 } from "../support/process-tree";
+
+const state = readState();
+
+// The supervision instance serves behind the basic-auth fence too: the
+// browser answers the 401 challenge with the suite's test credential pair
+// (ADR-0001).
+test.use({ httpCredentials: { username: state.auth.user, password: state.auth.password } });
 
 /**
  * Supervision regression (parent issue #76 AC 3): the row restarts a crashed

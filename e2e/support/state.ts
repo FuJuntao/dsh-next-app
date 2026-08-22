@@ -17,6 +17,13 @@ export interface E2EState {
   announceLine: string;
   /** The dsh process id; its process group is the teardown target. */
   dshPid: number;
+  /** Basic-auth test credentials configured on the shared boot (ADR-0008). */
+  auth: {
+    /** The username the fence allows. */
+    user: string;
+    /** The plaintext password; the browser answers the 401 challenge with it. */
+    password: string;
+  };
 }
 
 /** State file location - fixed so specs and teardown find it without cross-process plumbing. */
