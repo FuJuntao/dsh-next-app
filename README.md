@@ -52,6 +52,22 @@ The tarball's contents follow the `files` whitelist plus whatever `prepack` stag
 
 The staged `web/` and the emitted `lib/` are gitignored build artifacts.
 
+### Running the e2e regression suite
+
+`pnpm test` drives the end-to-end regression suite (ADR-0006): it packs the
+bundle, installs it into a throwaway profile under a scratch `DSH_HOME`, boots
+the profile on a free port, and asserts the served page in headless Chromium,
+plus the ready-marker pin. Prerequisites: the catalog-pinned `dsh` on `PATH`
+and the Chromium browser:
+
+```sh
+pnpm --filter e2e exec playwright install chromium
+pnpm test
+```
+
+The scratch profile lives under the OS temp dir and is removed on teardown; a
+missing `dsh` or browser fails the suite loudly.
+
 ## Layout
 
 - `apps/web/app/` - the Next.js routes and UI (shell + hydrated chat island)
