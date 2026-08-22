@@ -55,6 +55,17 @@ const DEFAULT_PORT = 3080;
  */
 const READY_MARKER = "✓ Ready";
 
+/**
+ * Strip ANSI SGR sequences before the ready-line match: Next colorizes its
+ * output when FORCE_COLOR is set (GitHub Actions does), and the ready line's
+ * content, not its presentation, is the contract here - a colored line must
+ * still announce the URL instead of hanging silently.
+ */
+function stripAnsi(line: string): string {
+  // eslint-disable-next-line no-control-regex -- ESC (U+001B) is the ANSI escape introducer; intentional.
+  return line.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
 /** SIGTERM-to-SIGKILL escalation grace for terminating the child tree. */
 const TERMINATE_GRACE_MS = 5000;
 
@@ -141,7 +152,7 @@ export function apply(ctx: Context): void {
         if (newlineIndex === -1) break;
         const line = lineBuffer.slice(0, newlineIndex);
         lineBuffer = lineBuffer.slice(newlineIndex + 1);
-        if (!childReady && line.includes(READY_MARKER)) {
+        if (!childReady && stripAnsi(line).includes(READY_MARKER)) {
           childReady = true;
           if (loaderSettled) announce();
         }
