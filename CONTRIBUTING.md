@@ -29,8 +29,10 @@ The staged `web/` and the emitted `lib/` are gitignored build artifacts.
 `pnpm test` drives the end-to-end regression suite (ADR-0006): it packs the
 bundle, installs it into a throwaway profile under a scratch `DSH_HOME`, boots
 the profile on a free port, and asserts the served page in headless Chromium,
-plus the ready-marker pin. Prerequisites: the catalog-pinned `dsh` on `PATH`
-and the Chromium browser:
+plus the ready-marker pin and the supervision behavior: a crashed Next child
+is restarted with backoff, and stopping the profile terminates the child's
+process tree with the port released. Prerequisites: the catalog-pinned `dsh`
+on `PATH` and the Chromium browser:
 
 ```sh
 pnpm --filter e2e exec playwright install chromium

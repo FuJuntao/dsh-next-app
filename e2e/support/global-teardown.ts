@@ -1,4 +1,6 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { stopProfile } from "./profile";
 import { sleep } from "./process";
 import { STATE_PATH, type E2EState } from "./state";
 
@@ -36,6 +38,21 @@ export default async function globalTeardown(): Promise<void> {
     } catch {
       // process group already gone
     }
+
+    // The supervision specs boot their own dedicated instance; sweep it too
+    // when the spec process died before its afterAll could stop it.
+    const registryPath = join(state.scratchDir, "supervision-profile.json");
+    try {
+      if (existsSync(registryPath)) {
+        const registered = JSON.parse(readFileSync(registryPath, "utf8")) as { dshPid?: number };
+        if (typeof registered.dshPid === "number" && registered.dshPid !== state.dshPid) {
+          await stopProfile(registered.dshPid);
+        }
+      }
+    } catch {
+      // unreadable registry: nothing to sweep
+    }
+
     rmSync(state.scratchDir, { recursive: true, force: true });
   }
   rmSync(STATE_PATH, { force: true });

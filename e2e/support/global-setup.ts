@@ -1,15 +1,12 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawn } from "node:child_process";
-import { freePort } from "./port";
 import { run } from "./process";
+import { bootProfile, type BootedProfile } from "./profile";
 import { STATE_PATH, type E2EState } from "./state";
 
 const REPO_ROOT = resolve(__dirname, "../..");
 const PROFILE = "next-app";
-const ANNOUNCE_RE = /dsh next-app: (http:\/\/\S+)/;
-const ANNOUNCE_TIMEOUT_MS = 120_000;
 const PACK_TIMEOUT_MS = 600_000;
 const INSTALL_TIMEOUT_MS = 300_000;
 
@@ -33,96 +30,15 @@ async function phase<T>(label: string, work: () => Promise<T>): Promise<T> {
   }
 }
 
-interface Booted {
-  announceLine: string;
-  dshPid: number;
-  kill: () => void;
-}
-
-/** Boot the profile and resolve once the serving URL is announced on stdout. */
-function bootProfile(dshHome: string, port: number, baseURL: string): Promise<Booted> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("dsh", ["--profile", PROFILE, "--port", String(port)], {
-      cwd: REPO_ROOT,
-      env: { ...process.env, DSH_HOME: dshHome },
-      stdio: ["ignore", "pipe", "pipe"],
-      // Own process group: teardown kills dsh and the Next child together.
-      detached: true,
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-
-    const kill = (): void => {
-      try {
-        process.kill(-(child.pid ?? 0), "SIGTERM");
-      } catch {
-        // already gone
-      }
-    };
-
-    const timer = setTimeout(() => {
-      kill();
-      reject(
-        new Error(
-          `dsh did not announce the serving URL within ${ANNOUNCE_TIMEOUT_MS}ms\nstdout:\n${stdout}\nstderr:\n${stderr}`,
-        ),
-      );
-    }, ANNOUNCE_TIMEOUT_MS);
-    const poll = setInterval(() => {
-      const match = ANNOUNCE_RE.exec(stdout);
-      if (match === null) return;
-      clearInterval(poll);
-      clearTimeout(timer);
-      const announcedURL = match[1];
-      const announceLine = match[0];
-      if (announcedURL === undefined || announceLine === undefined) {
-        kill();
-        reject(new Error("the announce regex matched without groups"));
-        return;
-      }
-      if (announcedURL !== baseURL) {
-        kill();
-        reject(new Error(`dsh announced ${announcedURL} but the suite expects ${baseURL}`));
-        return;
-      }
-      resolve({ announceLine, dshPid: child.pid ?? -1, kill });
-    }, 200);
-    child.on("error", (error) => {
-      clearInterval(poll);
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.on("exit", (code) => {
-      if (code !== null) {
-        clearInterval(poll);
-        clearTimeout(timer);
-        reject(
-          new Error(
-            `dsh exited (code ${code}) before announcing\nstdout:\n${stdout}\nstderr:\n${stderr}`,
-          ),
-        );
-      }
-    });
-    child.on("close", () => clearInterval(poll));
-  });
-}
-
 /**
- * Pack the bundle, install it into a scratch profile, boot it, and persist the
- * runtime state for the specs. The suite tests the packed tarball - the
- * artifact users install - never the repo tree (ADR-0006).
+ * Pack the bundle, install it into a scratch profile, and boot one shared
+ * instance for the boot/ready-marker specs (ADR-0006). The supervision specs
+ * boot their own dedicated instance on top of the same installed profile, so
+ * their stop test cannot affect any other spec file regardless of run order.
  */
 export default async function globalSetup(): Promise<void> {
   const scratchDir = mkdtempSync(join(tmpdir(), "dsh-next-app-e2e-"));
-  let booted: Booted | undefined;
+  let booted: BootedProfile | undefined;
   try {
     // 1. Pack the bundle (prepack = fresh, dependency-first build).
     const packDir = join(scratchDir, "pack");
@@ -155,24 +71,22 @@ export default async function globalSetup(): Promise<void> {
     );
     const profileDir = join(dshHome, "profiles", PROFILE);
 
-    // 3. Boot on a free port until the URL is announced.
-    const port = await freePort();
-    const baseURL = `http://127.0.0.1:${port}`;
-    booted = await phase("booting the scratch profile", () => bootProfile(dshHome, port, baseURL));
+    // 3. Boot the shared instance on a free port until the URL is announced.
+    booted = await phase("booting the scratch profile", () => bootProfile(dshHome));
 
     // 4. Persist state for the specs and teardown.
     const state: E2EState = {
       scratchDir,
       dshHome,
       profileDir,
-      port,
-      baseURL,
+      port: booted.port,
+      baseURL: booted.baseURL,
       announceLine: booted.announceLine,
       dshPid: booted.dshPid,
     };
     writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
   } catch (error) {
-    booted?.kill();
+    await booted?.stop();
     rmSync(scratchDir, { recursive: true, force: true });
     throw error;
   }
