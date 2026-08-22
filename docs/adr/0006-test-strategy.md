@@ -15,9 +15,9 @@ scoped to the envelope layer, so that prediction is superseded by this record.
 The runtime row already carries a regression note demanding a test that pins
 the Next ready marker, so a Next catalog bump that changes the child's stdout
 fails loudly instead of silently never announcing the URL. End to end here
-means booting the artifact users actually install: dsh 0.1.0-rc.8 (the
-catalog-pinned host), the packed bundle tarball, and the served page in a real
-browser.
+means booting the artifact users actually install: the catalog-pinned dsh
+host version (the README's "Targets" line names the currently tested one),
+the packed bundle tarball, and the served page in a real browser.
 
 ## Decision
 
@@ -38,9 +38,11 @@ browser.
   processes (dsh, pnpm, next) that need real filesystem paths; `/dev/shm` is
   too small (64 MB observed) for a ~100s-of-MB profile install; macOS and
   Windows CI have no tmpfs.
-- **Host target: dsh 0.1.0-rc.8** from the catalog, installed from npm in CI.
-  Drift protection remains install-time peerDependency ranges plus this
-  regression coverage — no boot-time version check.
+- **Host target: the catalog-pinned dsh host version**, installed from npm
+  in CI — the number lives in the workspace catalog and the README's
+  "Targets" line, never in this record. Drift protection remains
+  install-time peerDependency ranges plus this regression coverage — no
+  boot-time version check.
 - **Initial suite scope**: boot/serve regression (a real browser loads `/`
   and asserts title and content; the dsh process announces the serving URL),
   supervision regression (child crash → backoff restart → served again;
