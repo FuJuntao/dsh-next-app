@@ -19,3 +19,4 @@ records that predate the reset refer to that numbering.
 | [0003](0003-nextjs-routes.md) | Next.js routes — app routes and /api over the unix-socket bridge | Accepted |
 | [0004](0004-open-source-docs-discipline.md) | Open source (MIT) + docs discipline in the repo | Accepted |
 | [0005](0005-one-step-story-planning.md) | Story planning — one step with GitHub issues as the single source of truth | Accepted |
+| [0006](0006-test-strategy.md) | Test strategy — e2e regression against a real dsh profile as the first suite | Accepted |
