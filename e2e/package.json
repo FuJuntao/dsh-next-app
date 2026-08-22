@@ -1,0 +1,18 @@
+{
+  "name": "e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "End-to-end regression suite for the dsh-next-app bundle (ADR-0006): packs the bundle, boots it in a scratch dsh profile, and asserts the served surface in a real browser",
+  "scripts": {
+    "test": "playwright test",
+    "lint": "oxlint .",
+    "format": "oxfmt ."
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "@tsconfig/node24": "catalog:",
+    "@tsconfig/strictest": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

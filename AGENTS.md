@@ -7,7 +7,7 @@ Guidance for contributors - human and AI agents - working in this repo.
 - `docs/adr/` - architecture decision records, indexed in `docs/adr/README.md`; one decision per file. Accepted records are frozen: supersede with a new ADR, never edit one.
 - `.agents/skills/` - the skill family the workflow runs on (below). `skills-lock.json` at the repo root locks the externally sourced skills - see that file for the current list.
 - `README.md` - the user-facing install/ops surface.
-- The code is a pnpm workspace (ADR-0002): `apps/web` (the Next.js app; the envelope protocol layer lands with the bridge story) and `packages/dsh-next-app` (the published bundle: `cordis.patch.yml`, `dsh.bundle.patch`, and the `lib/` server-row glue). The members share no compile-time code; each keeps its own tsconfig.
+- The code is a pnpm workspace (ADR-0002): `apps/web` (the Next.js app; the envelope protocol layer lands with the bridge story) and `packages/dsh-next-app` (the published bundle: `cordis.patch.yml`, `dsh.bundle.patch`, and the `lib/` server-row glue), and `e2e/` (the end-to-end regression suite that packs and boots the bundle in a scratch dsh profile, ADR-0006). The members share no compile-time code; each keeps its own tsconfig.
 
 ## Workflow
 
@@ -35,7 +35,7 @@ Run at the repo root - `corepack pnpm` picks up the pinned package manager from 
 
 - `pnpm install` - install dependencies (lockfile is committed)
 - `pnpm build` - build the app (`next build`) and the bundle glue (`tsdown`)
-- `pnpm test` - no test suites yet; the e2e regression suite defined by ADR-0006 ships with its story
+- `pnpm test` - runs the e2e regression suite (ADR-0006) against a scratch dsh profile
 - `pnpm lint` - oxlint over the repo (shared root config)
 - `pnpm format`, or `oxfmt --check .` for a check-only pass - oxfmt over code files
 
