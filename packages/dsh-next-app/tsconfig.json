@@ -5,11 +5,9 @@
     "@tsconfig/strictest/tsconfig.json"
   ],
   "compilerOptions": {
-    "outDir": "lib",
-    "rootDir": "src",
     "declaration": true,
-    "noEmitOnError": true
+    "noEmit": true
   },
-  "include": ["src"],
+  "include": ["src", "tsdown.config.ts"],
   "exclude": ["**/*.test.ts"]
 }

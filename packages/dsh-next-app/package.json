@@ -21,8 +21,9 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsc",
-    "lint": "oxlint .",
+    "build": "pnpm --filter web run build && tsdown",
+    "prepack": "pnpm run build",
+    "lint": "oxlint --type-aware --type-check .",
     "format": "oxfmt ."
   },
   "dependencies": {
@@ -39,6 +40,7 @@
     "@tsconfig/node24": "catalog:",
     "@tsconfig/strictest": "catalog:",
     "@types/node": "catalog:",
+    "tsdown": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {
