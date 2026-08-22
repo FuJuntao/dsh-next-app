@@ -2,7 +2,7 @@
 
 A replacement frontend for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) web surface — server-rendered, mobile-first, with built-in authentication. A pnpm workspace of two members: the Next.js app and the published bundle that installs into its own dsh profile, leaving the in-box `web` profile untouched.
 
-- Targets dsh **0.1.0-rc.7** — the version pin, boot invariant, and contract tests land with the bridge story
+- Targets dsh **0.1.0-rc.8** — the version pin, boot invariant, and contract tests land with the bridge story
 
 ## Architecture
 
