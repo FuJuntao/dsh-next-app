@@ -1,5 +1,5 @@
 /**
- * next-app-startup - the next-app profile's command-line provider.
+ * next-app-cli - the next-app profile's command-line provider.
  *
  * Parses the `dsh --profile next-app` flag family (`--host`, `--port`) and
  * its `--help` text, then provides the immutable values as the
