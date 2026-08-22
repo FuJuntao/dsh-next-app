@@ -14,11 +14,11 @@ You are loaded when the user types `/review`, optionally followed by a PR number
 - Confirm with the user before reviewing a draft or empty PR.
 
 ## 2. Gather context
-Before reviewing, read: the PR (diff, body, commits, status checks), the task issue and parent issue it closes (including the AC checkpoint and story-record link), the linked story record under `docs/stories/`, ADRs relevant to the change, and whatever contributor conventions (AGENTS.md or equivalent) apply in the environment this runs in. Never invent constraints the context does not contain.
+Before reviewing, read: the PR (diff, body, commits, status checks), the task issue and parent issue it closes (including the AC checkpoint; the story's content lives in the parent issue body), ADRs relevant to the change, and whatever contributor conventions (AGENTS.md or equivalent) apply in the environment this runs in. Never invent constraints the context does not contain.
 
 ## 3. Review along the axes
 Run every axis whose applicability rule matches; the verdict states which axes ran and which were skipped as not applicable. When the PR is too complicated to review alone, fan the axes out to additional agents where the environment provides them - one per axis - and assemble their findings into the single verdict of step 4.
-- **Spec** (always): the diff satisfies the task's AC checkpoint and the linked story record. Blockers trace to the AC or the record.
+- **Spec** (always): the diff satisfies the task's AC checkpoint and the story's acceptance criteria as carried in the parent issue. Blockers trace to the AC or the story.
 - **System design** (always): repo-wide constraints - ADR compliance, workspace boundaries, API shape. Blockers trace to the ADR or constraint violated; a PR that satisfies its task yet violates an ADR fails here.
 - **Repo standards** (always): the change meets the repo's stated standards beyond the ADRs - its contributor doc (AGENTS.md or equivalent), the README's user-facing commitments, and any other convention the repo states. Blockers trace to the statement violated.
 - **UI** (only when the diff touches UI code): exercise the built app with the `agent-browser` skill against the PR's changes; if the app cannot be built or run in this environment, say plainly that the UI axis was reviewed statically only.
