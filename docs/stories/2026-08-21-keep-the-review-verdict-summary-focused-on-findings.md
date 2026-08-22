@@ -1,6 +1,7 @@
 # Keep the review verdict summary focused on findings
 
 - Date: 2026-08-21
+- PR: https://github.com/FuJuntao/dsh-next-app/pull/58
 
 As a maintainer, I want the `review` skill to post a verdict whose summary body holds only the outcome, the axes, and findings with no anchor in the diff, so that anchored findings exist once — in their inline threads — and PR comments stay scannable.
 
