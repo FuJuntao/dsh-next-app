@@ -143,7 +143,7 @@ export function AppShell({
       <header className="shell-header">
         <IconButton
           className="shell-header-toggle"
-          aria-label="Open navigation"
+          aria-label="Toggle navigation"
           aria-expanded={navShown}
           aria-controls="shell-sidebar"
           variant="ghost"

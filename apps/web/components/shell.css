@@ -48,16 +48,10 @@ body {
   text-decoration: none;
 }
 
-/* The header hamburger appears only when the nav is folded away (desktop)
-   or on mobile, where the drawer starts closed. */
-.shell-header-toggle {
-  display: none;
-}
-
-.shell[data-folded="true"] .shell-header-toggle {
-  display: inline-flex;
-}
-
+/* The header toggle is always visible; it folds/unfolds the nav on desktop
+   and opens the drawer on mobile. The in-nav toggle only matters inside the
+   mobile drawer (its close button), so it is hidden on desktop (see the
+   desktop media query below). */
 .shell-sidebar {
   grid-column: 1;
   grid-row: 1 / -1;
@@ -122,14 +116,18 @@ body {
   user-select: none;
 }
 
+/* Desktop: the header toggle is the one way to fold/unfold; the in-nav
+   toggle belongs to the mobile drawer only. */
+@media (min-width: 768px) {
+  .shell-sidebar-toggle {
+    display: none;
+  }
+}
+
 /* Mobile: the body grid becomes single-column and the side nav turns into
    an overlay drawer that never pushes the content; the header hamburger is
    always visible. The drawer clamps to 80vw and slides in from the left. */
 @media (max-width: 767.98px) {
-  .shell-header-toggle {
-    display: inline-flex;
-  }
-
   .shell {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -75,11 +75,13 @@ test("side nav becomes an overlay drawer on mobile", async ({ page }) => {
   await page.goto(state.baseURL + "/sessions");
   const nav = page.getByRole("navigation", { name: "Primary" });
   // The drawer starts closed: the nav is off-screen and the header
-  // hamburger is the way in.
+  // hamburger (always visible) is the way in.
   await expect(nav).not.toBeInViewport();
-  await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
-  await page.getByRole("button", { name: "Open navigation" }).click();
+  const toggle = page.getByRole("button", { name: "Toggle navigation" });
+  await expect(toggle).toBeVisible();
+  await toggle.click();
   await expect(nav).toBeInViewport();
+  // The drawer's own close button (inside the nav) closes it again.
   await page.getByRole("button", { name: "Close navigation" }).click();
   await expect(nav).not.toBeInViewport();
 });
@@ -88,16 +90,16 @@ test("side nav folds and unfolds on desktop", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(state.baseURL + "/sessions");
   const nav = page.getByRole("navigation", { name: "Primary" });
-  // The header hamburger only appears once the nav is folded away.
+  // The header toggle is always visible and folds/unfolds the nav.
+  const toggle = page.getByRole("button", { name: "Toggle navigation" });
   await expect(nav).toBeInViewport();
-  await expect(page.getByRole("button", { name: "Open navigation" })).toBeHidden();
-  await page.getByRole("button", { name: "Close navigation" }).click();
+  await expect(toggle).toBeVisible();
+  await toggle.click();
   await expect(nav).not.toBeInViewport();
-  await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
-  await page.getByRole("button", { name: "Open navigation" }).click();
+  await toggle.click();
   await expect(nav).toBeInViewport();
   // The folded state persists across reloads (the shell cookie, server-rendered).
-  await page.getByRole("button", { name: "Close navigation" }).click();
+  await toggle.click();
   await page.reload();
   await expect(nav).not.toBeInViewport();
 });
