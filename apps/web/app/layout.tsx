@@ -1,4 +1,8 @@
 import type { Metadata } from "next";
+import "@radix-ui/themes/styles.css";
+import { Theme } from "@radix-ui/themes";
+import { AppShell } from "../components/AppShell";
+import "../components/shell.css";
 
 export const metadata: Metadata = {
   title: "dsh-next-app",
@@ -13,20 +17,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <header>
-          <a href="/sessions">dsh-next-app</a>
-          <nav aria-label="Primary">
-            <ul>
-              <li>
-                <a href="/sessions">Sessions</a>
-              </li>
-              <li>
-                <a href="/settings">Settings</a>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
+        <Theme appearance="inherit">
+          <AppShell>{children}</AppShell>
+        </Theme>
       </body>
     </html>
   );
