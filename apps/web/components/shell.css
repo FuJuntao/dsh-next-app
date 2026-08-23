@@ -1,11 +1,11 @@
 /**
- * Layout mechanics for the dsh-next-app shell (story #97).
+ * Shell CSS that Radix Themes cannot express (story #97).
  *
- * Deliberately the only custom CSS in the app: chrome components come from
- * Radix Themes' default theme; this file holds the body reset, the shell
- * grid, the resize handle, the fold, and the mobile drawer overlay. All
- * spacing/color values come from Radix theme variables (--space-*, --gray-a5,
- * --color-panel) — no custom design tokens.
+ * Everything structural lives in AppShell as Radix layout primitives
+ * (Grid/Flex/Box with responsive props); this file keeps only the
+ * genuinely mechanical bits: the body reset, the drawer/fold transforms
+ * and transitions, the drag-handle interaction, and the display toggles
+ * Radix has no display prop for.
  */
 
 html,
@@ -17,98 +17,10 @@ body {
   margin: 0;
 }
 
-/* The shell: a three-column-ready grid where the side nav spans the full
-   height and the header sits only over the middle (content) column. The
-   sidebar width is a custom property set inline by AppShell; the center
-   column's minmax(360px, 1fr) IS the center-min constraint — the sidebar
-   can never push the content below 360px. --right-w reserves the future
-   viewer/editor track (out of scope for this story). */
-.shell {
-  --sidebar-w: 0px;
-  --right-w: 0px;
-  display: grid;
-  grid-template-columns: var(--sidebar-w) minmax(360px, 1fr) var(--right-w);
-  grid-template-rows: auto minmax(0, 1fr);
-  height: 100dvh;
-}
-
-.shell-header {
-  grid-column: 2;
-  grid-row: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 0 var(--space-4);
-  border-bottom: 1px solid var(--gray-a5);
-}
-
-.shell-brand {
-  font-weight: 600;
-  color: inherit;
-  text-decoration: none;
-}
-
-/* The header toggle is always visible; it folds/unfolds the nav on desktop
-   and opens the drawer on mobile. The in-nav toggle only matters inside the
-   mobile drawer (its close button), so it is hidden on desktop (see the
-   desktop media query below). */
-.shell-sidebar {
-  grid-column: 1;
-  grid-row: 1 / -1;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  overflow: hidden;
-  border-right: 1px solid var(--gray-a5);
-}
-
-.shell-sidebar-toggle {
-  align-self: flex-start;
-  margin: var(--space-2);
-}
-
-/* The future sessions list occupies the middle; the settings button is
-   pinned to the bottom of the nav. */
-.shell-sidebar-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.shell-sidebar-bottom {
-  display: flex;
-  justify-content: center;
-  padding: var(--space-2);
-  border-top: 1px solid var(--gray-a5);
-}
-
-/* Folded: zero-width column plus slide fully off-screen. A percentage
-   translate would resolve against the nav's own (0px) width, so use a
-   viewport-relative shift: nothing of the nav remains in the viewport. */
-.shell[data-folded="true"] .shell-sidebar {
-  border-right: none;
-  transform: translateX(-100vw);
-}
-
-/* The drag handle sits on the sidebar's right edge (inside it, so the
-   sidebar's overflow:hidden clips it away when folded). */
+/* The drag handle: the interaction bits (positioning comes from Radix). */
 .shell-resize {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  width: 10px;
   cursor: col-resize;
   touch-action: none;
-  z-index: 2;
-}
-
-.shell-main {
-  grid-column: 2;
-  grid-row: 2;
-  min-width: 0;
-  overflow-y: auto;
 }
 
 /* While dragging, suppress text selection so the drag stays clean. */
@@ -116,37 +28,15 @@ body {
   user-select: none;
 }
 
-/* Desktop: the header toggle is the one way to fold/unfold; the in-nav
-   toggle belongs to the mobile drawer only. */
-@media (min-width: 768px) {
-  .shell-sidebar-toggle {
-    display: none;
-  }
-}
-
-/* Mobile: the body grid becomes single-column and the side nav turns into
-   an overlay drawer that never pushes the content; the header hamburger is
-   always visible. The drawer clamps to 80vw and slides in from the left. */
+/* Mobile (< 768px, Radix initial): the side nav is an overlay drawer that
+   slides in from the left; the handle is meaningless there. Transforms and
+   transitions are not Radix props, so they live here. */
 @media (max-width: 767.98px) {
-  .shell {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .shell-header,
-  .shell-main {
-    grid-column: 1;
-  }
-
   .shell-sidebar {
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: min(var(--sidebar-w), 80vw);
     transform: translateX(-100%);
     transition: transform 0.2s ease;
-    z-index: 20;
     background: var(--color-panel);
+    z-index: 20;
   }
 
   .shell[data-drawer-open="true"] .shell-sidebar {
@@ -154,6 +44,19 @@ body {
   }
 
   .shell-resize {
+    display: none;
+  }
+}
+
+/* Desktop (>= 768px): the folded nav slides fully off-screen (a percentage
+   translate would resolve against its own 0px width, hence -100vw), and the
+   in-nav toggle belongs to the mobile drawer only. */
+@media (min-width: 768px) {
+  .shell[data-folded="true"] .shell-sidebar {
+    transform: translateX(-100vw);
+  }
+
+  .shell-sidebar-toggle {
     display: none;
   }
 }
