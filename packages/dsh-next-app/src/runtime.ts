@@ -22,6 +22,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Context } from "@deepseek-ai/cordis";
 import type { SubprocessHandle } from "@deepseek-ai/dsh-subprocess";
+import Schema from "@deepseek-ai/schemastery";
 
 /** Stable Cordis plugin name. */
 export const name = "next-app-runtime";
@@ -29,18 +30,14 @@ export const name = "next-app-runtime";
 /** Services required before the boot glue can run. */
 export const inject = ["nextAppCli", "subprocess"];
 
-/** This row's config (ADR-0008, ADR-0009): an id-targeted override in the profile's user patch layer. */
-export interface NextAppRuntimeConfig {
-  /** Bind host; the `--host` flag overrides it (ADR-0009). */
-  host?: string;
-  /** Listen port; the `--port` flag overrides it (ADR-0009). */
-  port?: number;
-  /** Basic-auth config forwarded to the Next child's environment. */
-  auth?: NextAppAuthConfig;
-}
+/** Default bind host: loopback; an all-interfaces bind is guarded by basic auth when provisioned (ADR-0001). */
+const DEFAULT_HOST = "127.0.0.1";
+
+/** Default listen port - the same default the in-box web profile uses. */
+const DEFAULT_PORT = 3080;
 
 /** The basic-auth block of the row config (ADR-0007 value format). */
-export interface NextAppAuthConfig {
+interface AuthConfig {
   /** The single allowed username. */
   user?: string;
   /** The scrypt-derived value of the allowed password. */
@@ -48,6 +45,52 @@ export interface NextAppAuthConfig {
   /** The dialog realm; the app defaults when absent. */
   realm?: string;
 }
+
+/**
+ * This row's config (ADR-0008, ADR-0009): an id-targeted override in the
+ * profile's user patch layer. Validated at load by the same-named schema
+ * export - Cordis applies it and fails the boot with an actionable error on
+ * invalid configuration (per the harness config docs).
+ */
+export interface Config {
+  /** Bind host; the `--host` flag overrides it (ADR-0009). */
+  host: string;
+  /** Listen port; the `--port` flag overrides it (ADR-0009). */
+  port: number;
+  /** Basic-auth config forwarded to the Next child's environment. */
+  auth?: AuthConfig;
+}
+
+/**
+ * The row config schema: defaults fill the serving parameters, the port must
+ * be a positive integer, and the auth pair must be complete or absent
+ * together (a half-configured pair is a misconfiguration, not a deployment
+ * choice - the profile refuses to boot half-gated).
+ */
+export const Config: Schema<Config> = Schema.object({
+  host: Schema.string().default(DEFAULT_HOST),
+  port: Schema.number().min(1).step(1).default(DEFAULT_PORT),
+  auth: Schema.transform(
+    Schema.object({
+      user: Schema.string(),
+      passwordHash: Schema.string(),
+      realm: Schema.string(),
+    }),
+    (auth): AuthConfig => {
+      const userUnset = auth.user === undefined || auth.user === "";
+      const hashUnset = auth.passwordHash === undefined || auth.passwordHash === "";
+      if (userUnset !== hashUnset) {
+        throw new Schema.ValidationError(
+          "auth.user and auth.passwordHash must be set together (basic auth, fail-closed); got exactly one",
+          { path: ["auth"] },
+        );
+      }
+      // The inferred object output types optionals as string | null; the
+      // validated values are plain strings (or absent), so narrow the type.
+      return auth as AuthConfig;
+    },
+  ),
+});
 
 /** The Loader service's settle gate, typed structurally; the host provides it. */
 interface LoaderLike {
@@ -60,12 +103,6 @@ const BUNDLE_ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 /** The packed Next app directory - an assembly fact of this bundle, never user config. */
 const APP_DIR = join(BUNDLE_ROOT, "web");
-
-/** Default bind host: loopback; an all-interfaces bind is guarded by basic auth when provisioned (ADR-0001). */
-const DEFAULT_HOST = "127.0.0.1";
-
-/** Default listen port - the same default the in-box web profile uses. */
-const DEFAULT_PORT = 3080;
 
 /**
  * The stdout line Next prints once the server accepts connections.
@@ -121,34 +158,16 @@ function restartDelayMs(attempts: number): number {
  *
  * @param ctx - plugin context carrying `nextAppCli` and `subprocess`.
  */
-export function apply(ctx: Context, config?: NextAppRuntimeConfig): void {
-  const auth = config?.auth;
-  if (auth !== undefined) {
-    // An incomplete pair is a misconfiguration: refuse to boot loudly
-    // instead of serving a half-gated surface (ADR-0008). An absent auth
-    // block is legitimate - the fence fails closed.
-    const userUnset = auth.user === undefined || auth.user === "";
-    const hashUnset = auth.passwordHash === undefined || auth.passwordHash === "";
-    if (userUnset !== hashUnset) {
-      throw new Error(
-        "next-app-runtime: auth.user and auth.passwordHash must be set together (basic auth, fail-closed); got exactly one - configure the auth block on this row in the profile's cordis.patch.yml",
-      );
-    }
-  }
+export function apply(ctx: Context, config: Config): void {
+  // The Config schema validated this at load (per the harness config docs):
+  // the port is a positive integer and the auth pair is complete or absent
+  // together, so a misconfigured profile refuses to boot half-gated.
+  const auth = config.auth;
   // Serving parameters (ADR-0009): invocation flags override the row
-  // config, which overrides the defaults. A config port that is not a
-  // positive integer is a misconfiguration like an incomplete auth pair.
-  const configHost = config?.host !== undefined && config.host !== "" ? config.host : undefined;
-  const configPort = config?.port;
-  if (configPort !== undefined && (!Number.isInteger(configPort) || configPort <= 0)) {
-    throw new Error(
-      "next-app-runtime: config port must be a positive integer, got " +
-        JSON.stringify(configPort) +
-        " - configure the host/port block on this row in the profile's cordis.patch.yml",
-    );
-  }
-  const host = ctx.nextAppCli?.host ?? configHost ?? DEFAULT_HOST;
-  const port = ctx.nextAppCli?.port ?? configPort ?? DEFAULT_PORT;
+  // config, whose defaults the schema filled. An empty configured host
+  // counts as unset (the schema keeps it a string; the default applies).
+  const host = ctx.nextAppCli?.host ?? (config.host !== "" ? config.host : DEFAULT_HOST);
+  const port = ctx.nextAppCli?.port ?? config.port;
   const url = servingUrl(host, port);
   const nextCli = fileURLToPath(import.meta.resolve("next/dist/bin/next"));
   const controller = new AbortController();
