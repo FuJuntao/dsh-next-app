@@ -54,8 +54,7 @@ test("the server renders the stored shell state, so first load cannot flash", as
   // change, and the server renders it into the first HTML: a reload paints
   // the stored state directly instead of flashing the defaults. The shadcn
   // Sidebar renders its open state (data-state) and the shell renders the
-  // width cap (--sidebar-width, capped by the --shell-center-min token)
-  // from the same cookie.
+  // width cap (--sidebar-width) from the same cookie.
   const auth =
     "Basic " + Buffer.from(`${state.auth.user}:${state.auth.password}`).toString("base64");
   const prefsCookie = (prefs: unknown): string =>
@@ -71,7 +70,7 @@ test("the server renders the stored shell state, so first load cannot flash", as
   // Folded: the sidebar renders collapsed (off-screen) from the first paint.
   expect(foldedHtml).toContain('data-folded="true"');
   expect(foldedHtml).toContain('data-state="collapsed"');
-  expect(foldedHtml).toContain("--sidebar-width:min(200px, calc(100vw - var(--shell-center-min)))");
+  expect(foldedHtml).toContain("--sidebar-width:min(200px, calc(100vw - 360px))");
   // Unfolded: the stored width renders into the first paint.
   const openRes = await request.get(state.baseURL + "/sessions", {
     headers: {
@@ -82,7 +81,7 @@ test("the server renders the stored shell state, so first load cannot flash", as
   const openHtml = await openRes.text();
   expect(openHtml).not.toContain('data-folded="true"');
   expect(openHtml).toContain('data-state="expanded"');
-  expect(openHtml).toContain("--sidebar-width:min(200px, calc(100vw - var(--shell-center-min)))");
+  expect(openHtml).toContain("--sidebar-width:min(200px, calc(100vw - 360px))");
 });
 
 test("header sits over the content column, not the side nav", async ({ page }) => {

@@ -22,7 +22,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { DEFAULT_LAYOUT_WIDTH, PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
+import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
 
 /**
  * The app shell (story #97): header, resizable and foldable left side nav,
@@ -30,47 +30,23 @@ import { DEFAULT_LAYOUT_WIDTH, PREFERENCES_COOKIE, encodePreferences } from "../
  * preset's lyra theme. The Sidebar component supplies what it ships out of
  * the box: the desktop fold (offcanvas), the mobile overlay drawer (Sheet),
  * the toggle button, and the keyboard shortcut. This component adds only
- * what the component cannot express: the drag-resize handle, the
- * preferences cookie channel, and the SSR markers the first paint renders
- * from (no flash). The clamps and the overflow cap read the shell geometry
- * tokens (--shell-sidebar-min, --shell-center-min) and the breakpoint
- * (--breakpoint-md) from globals.css - the theme is the single source,
- * no magic constants.
+ * what the component cannot express: the drag-resize handle with its
+ * clamps (160px minimum, 360px minimum center column), the preferences
+ * cookie channel, and the SSR markers the first paint renders from (no
+ * flash). The stored width is capped in CSS (min against the center-min)
+ * so a hand-edited cookie can never overflow the shell.
  *
- * - Desktop (>= the md breakpoint): the side nav sits in flow; a drag
- *   handle resizes it; the always-visible header toggle folds it away
- *   (offcanvas).
- * - Below it: the side nav becomes a Sheet overlay drawer opened from the
- *   header toggle; it never pushes the content.
+ * - Desktop (>= 768px, useIsMobile's breakpoint): the side nav sits in
+ *   flow; a drag handle resizes it; the always-visible header toggle folds
+ *   it away (offcanvas).
+ * - Below 768px: the side nav becomes a Sheet overlay drawer opened from
+ *   the header toggle; it never pushes the content.
  */
 
-/** Arrow-key resize step (interaction tuning, not a design token). */
+const DEFAULT_WIDTH = 260;
+const MIN_WIDTH = 160;
+const CENTER_MIN = 360;
 const RESIZE_STEP = 16;
-
-// Fallbacks mirror the globals.css defaults; the CSS custom properties
-// (--shell-sidebar-min, --shell-center-min) are the source of truth.
-const FALLBACK_SIDEBAR_MIN = 160;
-const FALLBACK_CENTER_MIN = 360;
-
-/** Read a shell geometry token as px; rem resolves against the initial
- *  font-size (16px), like media queries do. */
-function shellVar(name: string, fallback: number): number {
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  const value = Number.parseFloat(raw);
-  if (!Number.isFinite(value)) return fallback;
-  return raw.endsWith("rem") ? value * 16 : value;
-}
-
-/** The shell's clamps, read once from the theme (first call is a client
- *  event handler, so SSR never touches the document). */
-let shellGeometry: { min: number; centerMin: number } | undefined;
-function shellGeometryVars(): { min: number; centerMin: number } {
-  shellGeometry ??= {
-    min: shellVar("--shell-sidebar-min", FALLBACK_SIDEBAR_MIN),
-    centerMin: shellVar("--shell-center-min", FALLBACK_CENTER_MIN),
-  };
-  return shellGeometry;
-}
 
 function clamp(value: number, lo: number, hi: number): number {
   return Math.min(Math.max(value, lo), hi);
@@ -116,7 +92,7 @@ export function AppShell({
   const router = useRouter();
   const isMobile = useIsMobile();
   const [width, setWidth] = useState(() =>
-    Math.max(FALLBACK_SIDEBAR_MIN, Math.round(initialWidth ?? DEFAULT_LAYOUT_WIDTH)),
+    Math.max(MIN_WIDTH, Math.round(initialWidth ?? DEFAULT_WIDTH)),
   );
   const [folded, setFolded] = useState(initialFolded ?? false);
   const [dragging, setDragging] = useState(false);
@@ -132,10 +108,9 @@ export function AppShell({
     persistShell(widthRef.current, !open);
   };
 
-  const maxWidth = (): number =>
-    Math.max(shellGeometryVars().min, window.innerWidth - shellGeometryVars().centerMin);
+  const maxWidth = (): number => Math.max(MIN_WIDTH, window.innerWidth - CENTER_MIN);
 
-  const dragStart = useRef({ x: 0, width: DEFAULT_LAYOUT_WIDTH });
+  const dragStart = useRef({ x: 0, width: DEFAULT_WIDTH });
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
     if (isMobile) return;
@@ -149,7 +124,7 @@ export function AppShell({
     if (!dragging) return;
     const next = clamp(
       dragStart.current.width + event.clientX - dragStart.current.x,
-      shellGeometryVars().min,
+      MIN_WIDTH,
       maxWidth(),
     );
     setWidth(next);
@@ -166,20 +141,20 @@ export function AppShell({
     event.preventDefault();
     const delta = event.key === "ArrowLeft" ? -RESIZE_STEP : RESIZE_STEP;
     setWidth((current) => {
-      const next = clamp(current + delta, shellGeometryVars().min, maxWidth());
+      const next = clamp(current + delta, MIN_WIDTH, maxWidth());
       persistShell(next, folded);
       return next;
     });
   };
 
-  // The stored width is capped against the center minimum in CSS (AC-5
-  // no-overflow): the cap reads --shell-center-min from the theme, so the
-  // invariant lives in globals.css, not here. It resolves against the
+  // The stored width is capped against the center minimum in CSS, so a
+  // width from a wider screen (or a hand-edited prefs cookie) can never
+  // overflow the shell (AC-5 no-overflow). The cap resolves against the
   // viewport (100vw), not the sidebar's own flex parent: a percentage
   // there is indefinite (auto-width ancestor) and would collapse the
   // in-flow column track to zero.
   const shellStyle = {
-    "--sidebar-width": `min(${width}px, calc(100vw - var(--shell-center-min)))`,
+    "--sidebar-width": `min(${width}px, calc(100vw - ${CENTER_MIN}px))`,
   } as CSSProperties;
 
   return (
