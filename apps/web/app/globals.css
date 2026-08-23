@@ -29,6 +29,15 @@
 }
 /*---break---
  */
+@theme {
+  /* The shell's mobile/desktop split. Tailwind compiles the md: variants
+     from this value; the mirrored --breakpoint-md custom property on
+     :root is what the JS hook (useIsMobile) reads - the two lines are
+     the same breakpoint, change them together. */
+  --breakpoint-md: 48rem;
+}
+/*---break---
+ */
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: var(--font-sans);
@@ -106,6 +115,15 @@
   --sidebar-accent-foreground: oklch(0.218 0.008 223.9);
   --sidebar-border: oklch(0.925 0.005 214.3);
   --sidebar-ring: oklch(0.723 0.014 214.4);
+  /* The runtime mirror of the @theme breakpoint: media queries cannot
+     read custom properties, so Tailwind compiles md: from the @theme
+     literal while useIsMobile reads this one - same value, change
+     together. */
+  --breakpoint-md: 48rem;
+  /* Shell geometry tokens (AppShell reads these for the drag clamps; the
+     overflow cap uses --shell-center-min in the sidebar width var). */
+  --shell-sidebar-min: 10rem; /* 160px */
+  --shell-center-min: 22.5rem; /* 360px */
 }
 /*---break---
  */
