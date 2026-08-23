@@ -20,7 +20,6 @@ test("serves the app shell and placeholder routes in a real browser", async ({ p
     await expect(page).toHaveTitle("Sessions");
     await expect(page.getByRole("banner")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "dsh-next-app" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sessions");
     await expect(page.getByRole("main")).toBeVisible();

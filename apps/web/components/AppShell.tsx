@@ -141,9 +141,6 @@ export function AppShell({
       data-dragging={dragging || undefined}
     >
       <header className="shell-header">
-        <a className="shell-brand" href="/sessions">
-          dsh-next-app
-        </a>
         <IconButton
           className="shell-header-toggle"
           aria-label="Open navigation"
