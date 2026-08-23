@@ -7,9 +7,9 @@ import type {
   PointerEvent as ReactPointerEvent,
   ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import { Container, IconButton } from "@radix-ui/themes";
-import { HamburgerMenuIcon } from "@radix-ui/react-icons";
-import { SettingsDialog } from "./SettingsDialog";
+import { GearIcon, HamburgerMenuIcon } from "@radix-ui/react-icons";
 import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
 
 /**
@@ -57,6 +57,7 @@ export function AppShell({
   initialWidth?: number;
   initialFolded?: boolean;
 }) {
+  const router = useRouter();
   const [width, setWidth] = useState(() =>
     Math.max(MIN_WIDTH, Math.round(initialWidth ?? DEFAULT_WIDTH)),
   );
@@ -168,7 +169,15 @@ export function AppShell({
         </IconButton>
         <div className="shell-sidebar-list" />
         <div className="shell-sidebar-bottom">
-          <SettingsDialog />
+          <IconButton
+            aria-label="Settings"
+            variant="ghost"
+            color="gray"
+            size="2"
+            onClick={() => router.push("/settings")}
+          >
+            <GearIcon width="16" height="16" />
+          </IconButton>
         </div>
         <div
           className="shell-resize"

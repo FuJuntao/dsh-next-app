@@ -128,10 +128,12 @@ test("drag handle resizes the side nav and the width persists", async ({ page })
   expect(persisted).toBeCloseTo(after!, 0);
 });
 
-test("settings dialog opens from the side nav button and closes on Escape", async ({ page }) => {
+test("the side nav settings button navigates to the settings route", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(state.baseURL + "/sessions");
+  // Settings is its own route: the gear navigates, and the dialog opens there.
   await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page).toHaveURL(/\/settings$/);
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "Settings" })).toBeVisible();

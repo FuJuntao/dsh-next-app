@@ -11,7 +11,7 @@ export default function SettingsPage() {
     <section>
       <h1>Settings</h1>
       <p>Placeholder: settings content lands with the settings story.</p>
-      <SettingsDialog openOnMount />
+      <SettingsDialog />
     </section>
   );
 }
