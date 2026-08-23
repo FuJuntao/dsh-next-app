@@ -27,6 +27,8 @@
     "format": "oxfmt ."
   },
   "dependencies": {
+    "@radix-ui/react-icons": "catalog:",
+    "@radix-ui/themes": "catalog:",
     "commander": "^15.0.0",
     "next": "catalog:",
     "react": "catalog:",
