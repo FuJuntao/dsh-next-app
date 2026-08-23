@@ -32,7 +32,6 @@ import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
 const DEFAULT_WIDTH = 260;
 const MIN_WIDTH = 160;
 const CENTER_MIN = 360;
-const DESKTOP_QUERY = "(min-width: 768px)";
 const RESIZE_STEP = 16;
 
 function clamp(value: number, lo: number, hi: number): number {
@@ -71,16 +70,22 @@ export function AppShell({
   const widthRef = useRef(DEFAULT_WIDTH);
   const dragStart = useRef({ x: 0, width: DEFAULT_WIDTH });
 
-  // Breakpoint tracking; leaving mobile mode closes the drawer.
+  // Breakpoint tracking without a hardcoded pixel value: the side nav's
+  // position is itself a Radix-responsive property (fixed below its sm
+  // breakpoint, relative above), so the computed style IS the breakpoint
+  // state. Leaving mobile mode closes the drawer.
   useEffect(() => {
-    const mq = window.matchMedia(DESKTOP_QUERY);
+    const nav = document.getElementById("shell-sidebar");
+    if (!nav) return;
     const apply = (): void => {
-      setIsMobile(!mq.matches);
-      if (mq.matches) setDrawerOpen(false);
+      const mobile = getComputedStyle(nav).position === "fixed";
+      setIsMobile(mobile);
+      if (!mobile) setDrawerOpen(false);
     };
     apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
+    const observer = new ResizeObserver(apply);
+    observer.observe(document.documentElement);
+    return () => observer.disconnect();
   }, []);
 
   widthRef.current = width;
