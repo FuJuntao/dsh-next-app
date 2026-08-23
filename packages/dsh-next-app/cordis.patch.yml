@@ -20,6 +20,10 @@
     # child through the base layer's subprocess service, detects readiness
     # from the child's stdout, restarts it with backoff on unexpected exit,
     # terminates its process tree on profile stop, and announces the serving
-    # URL after the Loader tree settles.
+    # URL after the Loader tree settles. Its serving config (host, port -
+    # ADR-0009) and auth config (auth.user, auth.passwordHash, auth.realm -
+    # ADR-0008) are per-deployment and arrive as an id-targeted override of
+    # this row in the profile's user patch layer; absent auth means the
+    # fence fails closed, and --host/--port override the config.
     - id: next-app-runtime
       name: "@scope/dsh-next-app/runtime"

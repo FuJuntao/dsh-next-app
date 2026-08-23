@@ -17,6 +17,9 @@ export const test = base.extend<{}, { supervisionProfile: BootedProfile }>({
   supervisionProfile: [
     // eslint-disable-next-line no-empty-pattern -- the fixture needs no other worker fixtures; Playwright requires the destructuring form.
     async ({}, use) => {
+      // The supervision instance serves behind the same fence as the shared
+      // one: it boots the same configured profile (ADR-0008), whose patch
+      // carries the credential pair.
       const profile = await bootProfile(state.dshHome, join(state.scratchDir, "supervision"));
       writeFileSync(
         join(state.scratchDir, "supervision-profile.json"),

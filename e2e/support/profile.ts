@@ -1,4 +1,5 @@
-import { createWriteStream, mkdirSync } from "node:fs";
+import { randomBytes, scryptSync } from "node:crypto";
+import { createWriteStream, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { freePort } from "./port";
@@ -7,6 +8,29 @@ import { pidAlive } from "./process-tree";
 
 const REPO_ROOT = resolve(__dirname, "../..");
 const PROFILE = "next-app";
+
+/** Default scrypt cost parameters; the fence reads them from the value itself (ADR-0007). */
+const SCRYPT_N = 16384;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
+
+/** Build one self-describing scrypt value (`scrypt$N,r,p$salt$key`, ADR-0007). */
+export function scryptValue(password: string): string {
+  const salt = randomBytes(16);
+  const key = scryptSync(password, salt, 32, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P });
+  return (
+    "scrypt$" +
+    SCRYPT_N +
+    "," +
+    SCRYPT_R +
+    "," +
+    SCRYPT_P +
+    "$" +
+    salt.toString("base64") +
+    "$" +
+    key.toString("base64")
+  );
+}
 const ANNOUNCE_RE = /dsh next-app: (http:\/\/\S+)/;
 const ANNOUNCE_TIMEOUT_MS = 120_000;
 const STOP_WAIT_MS = 15_000;
@@ -51,16 +75,77 @@ export async function stopProfile(dshPid: number): Promise<void> {
   }
 }
 
+/** The runtime-row config shape the suite writes into the profile's patch (ADR-0008, ADR-0009). */
+export interface ProfileRuntimeConfig {
+  user?: string;
+  passwordHash?: string;
+  realm?: string;
+  host?: string;
+  port?: number;
+}
+
+/**
+ * Write the profile's user patch layer: an id-targeted config override for
+ * the next-app-runtime row (serving host/port per ADR-0009, auth per
+ * ADR-0008). Boot the profile after writing; a running instance hot-reloads
+ * its config, so specs that swap the patch restore it before they finish.
+ */
+export function writeRuntimePatch(profileDir: string, config?: ProfileRuntimeConfig): void {
+  const lines: string[] = [
+    "# The e2e suite's config for the next-app-runtime row (ADR-0008, ADR-0009).",
+    "# Rewritten per spec; boot the profile after writing for changes to apply.",
+    "- id: next-app-runtime",
+    "  config:",
+  ];
+  if (config === undefined) {
+    lines.push("    {}");
+  } else {
+    if (config.host !== undefined) lines.push("    host: " + config.host);
+    if (config.port !== undefined) lines.push("    port: " + config.port);
+    if (
+      config.user !== undefined ||
+      config.passwordHash !== undefined ||
+      config.realm !== undefined
+    ) {
+      lines.push("    auth:");
+      if (config.user !== undefined) lines.push("      user: " + config.user);
+      if (config.passwordHash !== undefined) {
+        lines.push("      passwordHash: " + config.passwordHash);
+      }
+      if (config.realm !== undefined) lines.push("      realm: " + config.realm);
+    }
+  }
+  lines.push("");
+  writeFileSync(join(profileDir, "cordis.patch.yml"), lines.join("\n"));
+}
+
 /**
  * Boot one profile instance on a free port and resolve once the serving URL
  * is announced on stdout. With a logsDir the instance's stdout/stderr are
  * teed into it for the specs to assert (the supervision specs use the stderr
  * log). Kills the instance on any boot failure.
  */
-export async function bootProfile(dshHome: string, logsDir?: string): Promise<BootedProfile> {
-  const port = await freePort();
+/** Boot options (ADR-0009): the expected port and whether --port is passed. */
+export interface BootOptions {
+  /** The expected serving port (defaults to a free port). */
+  port?: number;
+  /** Pass --port <port> on the command line; false lets the row config port serve. */
+  passPortFlag?: boolean;
+}
+
+export async function bootProfile(
+  dshHome: string,
+  logsDir?: string,
+  options?: BootOptions,
+): Promise<BootedProfile> {
+  const port = options?.port ?? (await freePort());
+  const argv = [
+    "--profile",
+    PROFILE,
+    ...(options?.passPortFlag === false ? [] : ["--port", String(port)]),
+  ];
   return new Promise((resolve, reject) => {
-    const child = spawn("dsh", ["--profile", PROFILE, "--port", String(port)], {
+    const child = spawn("dsh", argv, {
       cwd: REPO_ROOT,
       env: { ...process.env, DSH_HOME: dshHome },
       stdio: ["ignore", "pipe", "pipe"],

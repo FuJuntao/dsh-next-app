@@ -2,9 +2,10 @@
  * next-app-cli - the next-app profile's command-line provider.
  *
  * Parses the `dsh --profile next-app` flag family (`--host`, `--port`) and
- * its `--help` text, then provides the immutable values as the
- * {@link NEXT_APP_CLI_SERVICE} service, which the runtime row injects
- * before reading (ADR-0001). The flag-parsing shape is ported from the
+ * provides the immutable values as the {@link NEXT_APP_CLI_SERVICE} service,
+ * which the runtime row injects before reading (ADR-0001). The auth config
+ * is not flags' business - it arrives as cordis row config on the runtime
+ * row (ADR-0008). The flag-parsing shape is ported from the
  * in-box `@deepseek-ai/dsh-web-app/startup` with attribution - porting
  * in-box code with attribution is this repo's sanctioned pattern.
  *
@@ -53,16 +54,24 @@ function nextAppCommand(): Command {
     .helpOption("-h, --help", "show this help")
     .option(
       "--host <host>",
-      "bind host (default 127.0.0.1; 0.0.0.0 binds all interfaces - the v1 surface is unguarded until the auth story lands)",
+      "bind host (default 127.0.0.1; 0.0.0.0 binds all interfaces - guarded when auth is configured on the runtime row, see Auth below); overrides the runtime row's config host",
     )
-    .option("--port <port>", "listen port; a positive integer (default 3080)")
+    .option(
+      "--port <port>",
+      "listen port; a positive integer (default 3080); overrides the runtime row's config port",
+    )
     .addHelpText(
       "after",
       `
+Auth:
+  Basic auth is configured on the next-app-runtime row in the profile's
+  cordis.patch.yml (auth.user, auth.passwordHash, auth.realm) - see the
+  README Auth section. Without it the surface fails closed.
+
 Examples:
   dsh --profile next-app                          serve on 127.0.0.1:3080
   dsh --profile next-app --port 8080              serve on another port
-  dsh --profile next-app --host 0.0.0.0           bind all interfaces (unguarded v1)
+  dsh --profile next-app --host 0.0.0.0           bind all interfaces (guarded when auth is configured)
 `,
     );
 }

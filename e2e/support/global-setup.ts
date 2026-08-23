@@ -2,13 +2,17 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { run } from "./process";
-import { bootProfile, type BootedProfile } from "./profile";
+import { bootProfile, scryptValue, writeRuntimePatch, type BootedProfile } from "./profile";
 import { STATE_PATH, type E2EState } from "./state";
 
 const REPO_ROOT = resolve(__dirname, "../..");
 const PROFILE = "next-app";
 const PACK_TIMEOUT_MS = 600_000;
 const INSTALL_TIMEOUT_MS = 300_000;
+
+/** The suite's test-only basic-auth credential pair (ADR-0001, ADR-0007). */
+const AUTH_USER = "e2e";
+const AUTH_PASSWORD = "dsh-next-app-e2e-password";
 
 /** The workspace pnpm (CI/pnpm-on-PATH) or the pinned manager via corepack. */
 function pnpmArgs(args: string[]): string[] {
@@ -71,10 +75,17 @@ export default async function globalSetup(): Promise<void> {
     );
     const profileDir = join(dshHome, "profiles", PROFILE);
 
-    // 3. Boot the shared instance on a free port until the URL is announced.
+    // 3. Configure the auth credential pair in the profile's patch layer
+    // (ADR-0008): the runtime row reads it and forwards it to the Next child.
+    writeRuntimePatch(profileDir, {
+      user: AUTH_USER,
+      passwordHash: scryptValue(AUTH_PASSWORD),
+    });
+
+    // 4. Boot the shared instance on a free port until the URL is announced.
     booted = await phase("booting the scratch profile", () => bootProfile(dshHome));
 
-    // 4. Persist state for the specs and teardown.
+    // 5. Persist state for the specs and teardown.
     const state: E2EState = {
       scratchDir,
       dshHome,
@@ -83,6 +94,7 @@ export default async function globalSetup(): Promise<void> {
       baseURL: booted.baseURL,
       announceLine: booted.announceLine,
       dshPid: booted.dshPid,
+      auth: { user: AUTH_USER, password: AUTH_PASSWORD },
     };
     writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
   } catch (error) {
