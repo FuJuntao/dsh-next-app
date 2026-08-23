@@ -156,7 +156,10 @@ export function AppShell({
       data-dragging={dragging || undefined}
       columns={{
         initial: "minmax(0, 1fr)",
-        sm: "var(--sidebar-w) minmax(360px, 1fr) var(--right-w)",
+        // The sidebar column is capped by the center-min so a stored width
+        // from a wider screen (or a hand-edited prefs cookie) can never
+        // overflow the shell (review finding: AC-5 no-overflow).
+        sm: "min(var(--sidebar-w), calc(100% - 360px)) minmax(360px, 1fr) var(--right-w)",
       }}
       rows="auto 1fr"
       height="100dvh"

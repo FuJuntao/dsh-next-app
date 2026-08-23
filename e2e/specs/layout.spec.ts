@@ -14,6 +14,25 @@ const DESKTOP = { width: 1280, height: 800 };
 const MOBILE = { width: 375, height: 667 };
 const NARROW = { width: 320, height: 568 };
 
+test("a wide stored sidebar width cannot overflow a narrow viewport", async ({ page }) => {
+  await page.setViewportSize(DESKTOP);
+  // A cookie written on a wide screen (or hand-edited) must not overflow the
+  // shell on a smaller viewport: the sidebar column is capped by the grid.
+  await page.context().addCookies([
+    {
+      name: "dsh-next-app.prefs",
+      value: encodeURIComponent(JSON.stringify({ layout: { width: 2000, folded: false } })),
+      url: state.baseURL,
+    },
+  ]);
+  await page.goto(state.baseURL + "/sessions");
+  const sizes = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+  }));
+  expect(sizes.scroll).toBeLessThanOrEqual(sizes.client);
+});
+
 test("no horizontal overflow at 320px", async ({ page }) => {
   await page.setViewportSize(NARROW);
   await page.goto(state.baseURL + "/sessions");
