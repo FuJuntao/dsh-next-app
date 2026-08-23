@@ -25,8 +25,7 @@ import { SettingsDialog } from "./SettingsDialog";
  * - Width and folded state persist in localStorage.
  */
 
-const WIDTH_KEY = "dsh-next-app.sidebar.width";
-const FOLDED_KEY = "dsh-next-app.sidebar.folded";
+const SHELL_COOKIE = "dsh-next-app-shell";
 const DEFAULT_WIDTH = 260;
 const MIN_WIDTH = 160;
 const CENTER_MIN = 360;
@@ -37,9 +36,30 @@ function clamp(value: number, lo: number, hi: number): number {
   return Math.min(Math.max(value, lo), hi);
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
-  const [folded, setFolded] = useState(false);
+/** Persist the shell state to the cookie the server renders from (no flash). */
+function persistShell(width: number, folded: boolean): void {
+  try {
+    // `|` separator: `;` terminates cookie pairs and would silently drop
+    // the folded flag; both sides (layout.tsx) must agree on the format.
+    document.cookie = `${SHELL_COOKIE}=${Math.round(width)}|${folded ? 1 : 0};path=/;max-age=31536000;samesite=lax`;
+  } catch {
+    // Storage unavailable: the in-memory state still applies.
+  }
+}
+
+export function AppShell({
+  children,
+  initialWidth,
+  initialFolded,
+}: {
+  children: ReactNode;
+  initialWidth?: number;
+  initialFolded?: boolean;
+}) {
+  const [width, setWidth] = useState(() =>
+    Math.max(MIN_WIDTH, Math.round(initialWidth ?? DEFAULT_WIDTH)),
+  );
+  const [folded, setFolded] = useState(initialFolded ?? false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -58,29 +78,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  // Persisted sidebar preferences (width + folded state).
-  useEffect(() => {
-    try {
-      const storedWidth = Number(window.localStorage.getItem(WIDTH_KEY));
-      if (Number.isFinite(storedWidth) && storedWidth >= MIN_WIDTH) {
-        setWidth(Math.round(storedWidth));
-      }
-      setFolded(window.localStorage.getItem(FOLDED_KEY) === "1");
-    } catch {
-      // Storage unavailable (private mode, file origin): keep defaults.
-    }
-  }, []);
-
   widthRef.current = width;
   const navShown = isMobile ? drawerOpen : !folded;
-
-  const persistWidth = (value: number): void => {
-    try {
-      window.localStorage.setItem(WIDTH_KEY, String(Math.round(value)));
-    } catch {
-      // Storage unavailable: the in-memory width still applies.
-    }
-  };
 
   const toggleNav = (): void => {
     if (isMobile) {
@@ -89,11 +88,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     const next = !folded;
     setFolded(next);
-    try {
-      window.localStorage.setItem(FOLDED_KEY, next ? "1" : "0");
-    } catch {
-      // Storage unavailable: the in-memory state still applies.
-    }
+    persistShell(widthRef.current, next);
   };
 
   const maxWidth = (): number => Math.max(MIN_WIDTH, window.innerWidth - CENTER_MIN);
@@ -119,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const handlePointerEnd = (): void => {
     if (!dragging) return;
     setDragging(false);
-    persistWidth(widthRef.current);
+    persistShell(widthRef.current, folded);
   };
 
   const handleResizeKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
@@ -128,7 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     const delta = event.key === "ArrowLeft" ? -RESIZE_STEP : RESIZE_STEP;
     setWidth((current) => {
       const next = clamp(current + delta, MIN_WIDTH, maxWidth());
-      persistWidth(next);
+      persistShell(next, folded);
       return next;
     });
   };

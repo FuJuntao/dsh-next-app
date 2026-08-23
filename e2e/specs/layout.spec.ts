@@ -24,6 +24,37 @@ test("no horizontal overflow at 320px", async ({ page }) => {
   expect(sizes.scroll).toBeLessThanOrEqual(sizes.client);
 });
 
+test("the server renders the stored shell state, so first load cannot flash", async ({
+  request,
+}) => {
+  // The shell state (width + folded) rides a cookie the browser writes on
+  // every change, and the server renders it into the first HTML: a reload
+  // paints the stored state directly instead of flashing the defaults.
+  const auth =
+    "Basic " + Buffer.from(`${state.auth.user}:${state.auth.password}`).toString("base64");
+  const res = await request.get(state.baseURL + "/sessions", {
+    headers: {
+      authorization: auth,
+      cookie: "dsh-next-app-shell=200|1",
+    },
+  });
+  expect(res.status()).toBe(200);
+  const foldedHtml = await res.text();
+  // Folded: the nav is collapsed (width 0) and hidden from the first paint.
+  expect(foldedHtml).toContain('data-folded="true"');
+  expect(foldedHtml).toContain("--sidebar-w:0px");
+  // Unfolded: the stored width renders into the first paint.
+  const openRes = await request.get(state.baseURL + "/sessions", {
+    headers: {
+      authorization: auth,
+      cookie: "dsh-next-app-shell=200|0",
+    },
+  });
+  const openHtml = await openRes.text();
+  expect(openHtml).not.toContain('data-folded="true"');
+  expect(openHtml).toContain("--sidebar-w:200px");
+});
+
 test("header sits over the content column, not the side nav", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(state.baseURL + "/sessions");
@@ -65,7 +96,7 @@ test("side nav folds and unfolds on desktop", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
   await page.getByRole("button", { name: "Open navigation" }).click();
   await expect(nav).toBeInViewport();
-  // The folded state persists across reloads (localStorage).
+  // The folded state persists across reloads (the shell cookie, server-rendered).
   await page.getByRole("button", { name: "Close navigation" }).click();
   await page.reload();
   await expect(nav).not.toBeInViewport();
@@ -86,7 +117,7 @@ test("drag handle resizes the side nav and the width persists", async ({ page })
   const after = (await nav.boundingBox())?.width;
   expect(after).toBeDefined();
   expect(after!).toBeLessThan(before!);
-  // The width persists across reloads (localStorage).
+  // The width persists across reloads (the shell cookie, server-rendered).
   await page.reload();
   const persisted = (await nav.boundingBox())?.width;
   expect(persisted).toBeCloseTo(after!, 0);
