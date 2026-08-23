@@ -1,9 +1,13 @@
+import { spawn } from "node:child_process";
+import { resolve } from "node:path";
 import { test, expect } from "@playwright/test";
 import { freePort } from "../support/port";
 import { bootProfile, scryptValue, writeRuntimePatch } from "../support/profile";
 import { readState } from "../support/state";
 
 const state = readState();
+const REPO_ROOT = resolve(__dirname, "../..");
+const PROFILE = "next-app";
 
 /** The Authorization header value for one credential pair (RFC 7617). */
 function basicHeader(user: string, password: string): string {
@@ -50,6 +54,48 @@ test.describe("the serving config", () => {
       } finally {
         await profile.stop();
       }
+    } finally {
+      restoreAuthPatch();
+    }
+  });
+
+  test("an invalid config port refuses to start with a loud error", async () => {
+    // ADR-0009: a non-positive-integer config port is a misconfiguration
+    // like an incomplete auth pair - the Config schema rejects it at load,
+    // so dsh exits non-zero with the schema error on stderr (review
+    // finding: the suite previously pinned only the auth-pair refusal).
+    writeRuntimePatch(state.profileDir, {
+      user: state.auth.user,
+      passwordHash: scryptValue(state.auth.password),
+      port: 0,
+    });
+    try {
+      const port = await freePort();
+      const outcome = await new Promise<{ code: number | null; stderr: string }>((settle) => {
+        const child = spawn("dsh", ["--profile", PROFILE, "--port", String(port)], {
+          cwd: REPO_ROOT,
+          env: { ...process.env, DSH_HOME: state.dshHome },
+          stdio: ["ignore", "ignore", "pipe"],
+        });
+        let stderr = "";
+        child.stderr.setEncoding("utf8");
+        child.stderr.on("data", (chunk: string) => {
+          stderr += chunk;
+        });
+        child.on("exit", (code) => settle({ code, stderr }));
+        child.on("error", (error) => settle({ code: -1, stderr: String(error) }));
+        // Safety net: the profile should fail on its own.
+        setTimeout(() => {
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            // already gone
+          }
+        }, 60_000).unref();
+      });
+      expect(outcome.code).not.toBe(0);
+      expect(outcome.stderr).toMatch(/invalid config/);
+      expect(outcome.stderr).toMatch(/port/);
     } finally {
       restoreAuthPatch();
     }
