@@ -7,9 +7,11 @@ const state = readState();
 // browser answers the 401 challenge with the suite's credential pair.
 test.use({ httpCredentials: { username: state.auth.user, password: state.auth.password } });
 
-// The shell's desktop breakpoint (apps/web/components/shell.css): at and
+// The shell's desktop breakpoint (apps/web/hooks/use-mobile.ts): at and
 // above 768px the side nav sits in flow; below it, it becomes an overlay
-// drawer (story #97).
+// Sheet drawer (story #97). The sidebar's column track is the gap element
+// (data-slot="sidebar-gap") and the nav itself the fixed container
+// (data-slot="sidebar-container") of the shadcn Sidebar.
 const DESKTOP = { width: 1280, height: 800 };
 const MOBILE = { width: 375, height: 667 };
 const NARROW = { width: 320, height: 568 };
@@ -17,7 +19,8 @@ const NARROW = { width: 320, height: 568 };
 test("a wide stored sidebar width cannot overflow a narrow viewport", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   // A cookie written on a wide screen (or hand-edited) must not overflow the
-  // shell on a smaller viewport: the sidebar column is capped by the grid.
+  // shell on a smaller viewport: the sidebar width is capped by the CSS
+  // min() the shell renders (center column never below 360px).
   await page.context().addCookies([
     {
       name: "dsh-next-app.prefs",
@@ -49,7 +52,9 @@ test("the server renders the stored shell state, so first load cannot flash", as
   // The shell state (width + folded) rides the namespaced preferences
   // cookie (dsh-next-app.prefs, URL-encoded JSON) the browser writes on every
   // change, and the server renders it into the first HTML: a reload paints
-  // the stored state directly instead of flashing the defaults.
+  // the stored state directly instead of flashing the defaults. The shadcn
+  // Sidebar renders its open state (data-state) and the shell renders the
+  // width cap (--sidebar-width) from the same cookie.
   const auth =
     "Basic " + Buffer.from(`${state.auth.user}:${state.auth.password}`).toString("base64");
   const prefsCookie = (prefs: unknown): string =>
@@ -62,9 +67,10 @@ test("the server renders the stored shell state, so first load cannot flash", as
   });
   expect(res.status()).toBe(200);
   const foldedHtml = await res.text();
-  // Folded: the nav is collapsed (width 0) and hidden from the first paint.
+  // Folded: the sidebar renders collapsed (off-screen) from the first paint.
   expect(foldedHtml).toContain('data-folded="true"');
-  expect(foldedHtml).toContain("--sidebar-w:0px");
+  expect(foldedHtml).toContain('data-state="collapsed"');
+  expect(foldedHtml).toContain("--sidebar-width:min(200px, calc(100vw - 360px))");
   // Unfolded: the stored width renders into the first paint.
   const openRes = await request.get(state.baseURL + "/sessions", {
     headers: {
@@ -74,7 +80,8 @@ test("the server renders the stored shell state, so first load cannot flash", as
   });
   const openHtml = await openRes.text();
   expect(openHtml).not.toContain('data-folded="true"');
-  expect(openHtml).toContain("--sidebar-w:200px");
+  expect(openHtml).toContain('data-state="expanded"');
+  expect(openHtml).toContain("--sidebar-width:min(200px, calc(100vw - 360px))");
 });
 
 test("header sits over the content column, not the side nav", async ({ page }) => {
@@ -96,7 +103,7 @@ test("side nav becomes an overlay drawer on mobile", async ({ page }) => {
   await page.setViewportSize(MOBILE);
   await page.goto(state.baseURL + "/sessions");
   const nav = page.getByRole("navigation", { name: "Primary" });
-  // The drawer starts closed: the nav is off-screen and the header
+  // The drawer starts closed: the nav is not rendered and the header
   // hamburger (always visible) is the way in.
   await expect(nav).not.toBeInViewport();
   const toggle = page.getByRole("button", { name: "Toggle navigation" });
@@ -116,14 +123,19 @@ test("side nav folds and unfolds on desktop", async ({ page }) => {
   const toggle = page.getByRole("button", { name: "Toggle navigation" });
   await expect(nav).toBeInViewport();
   await expect(toggle).toBeVisible();
-  // The toggle is animated: the nav's translate and the shell's column
-  // tracks both carry transitions (motion-reduce disables them).
-  expect(await nav.evaluate((el) => getComputedStyle(el).transitionProperty)).toContain(
-    "translate",
-  );
+  // The toggle is animated: the nav container slides (left) and the shell's
+  // column track (the sidebar gap) resizes (width); both carry transitions
+  // (disabled while dragging and under prefers-reduced-motion).
   expect(
-    await page.locator(".group").evaluate((el) => getComputedStyle(el).transitionProperty),
-  ).toContain("grid-template-columns");
+    await page
+      .locator('[data-slot="sidebar-container"]')
+      .evaluate((el) => getComputedStyle(el).transitionProperty),
+  ).toContain("left");
+  expect(
+    await page
+      .locator('[data-slot="sidebar-gap"]')
+      .evaluate((el) => getComputedStyle(el).transitionProperty),
+  ).toContain("width");
   await toggle.click();
   await expect(nav).not.toBeInViewport();
   await toggle.click();

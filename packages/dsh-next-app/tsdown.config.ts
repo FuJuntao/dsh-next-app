@@ -7,7 +7,8 @@
  * without its rebuild cache, package.json, next.config.ts) into web/,
  * the bundle-internal location the runtime row spawns next start from.
  * App dependencies resolve at profile runtime from the bundle's own
- * manifest (next, react, react-dom, the radix packages) - the profile
+ * manifest (next, react, react-dom, and the shadcn stack: @base-ui/react,
+ * @remixicon/react, class-variance-authority, clsx, tailwind-merge) - the profile
  * install provides them like any npm package, so the tarball carries no
  * node_modules. The build guards this: every apps/web runtime dependency
  * must be mirrored in the bundle manifest, or the pack fails loud.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -8,25 +8,37 @@ import type {
   ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { Box, Container, Flex, Grid, IconButton } from "@radix-ui/themes";
-import { GearIcon, HamburgerMenuIcon } from "@radix-ui/react-icons";
+import { RiCloseLine, RiSettings3Line } from "@remixicon/react";
+import { Button } from "@/components/ui/button";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/sidebar";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
 
 /**
- * The app shell (story #97): a three-column-ready chrome — header, resizable
- * and foldable left side nav, center content column — built on Radix Themes'
- * default theme. Structure and responsive behavior come from Radix layout
- * primitives (Grid/Flex/Box) and their responsive props; shell.css holds
- * only what Radix cannot express (transforms, the drag handle interaction,
- * display toggles, the body reset). The state here (width, folded, drawer)
- * is the only client-side shell state; prefs ride the preferences cookie
- * so the server renders them into the first HTML.
+ * The app shell (story #97): header, resizable and foldable left side nav,
+ * center content column — built on the shadcn Sidebar (Base UI) over the
+ * preset's lyra theme. The Sidebar component supplies what it ships out of
+ * the box: the desktop fold (offcanvas), the mobile overlay drawer (Sheet),
+ * the toggle button, and the keyboard shortcut. This component adds only
+ * what the component cannot express: the drag-resize handle with its
+ * clamps (160px minimum, 360px minimum center column), the preferences
+ * cookie channel, and the SSR markers the first paint renders from (no
+ * flash). The stored width is capped in CSS (min against the center-min)
+ * so a hand-edited cookie can never overflow the shell.
  *
- * - Desktop (>= 768px, Radix sm): the side nav sits in flow; a drag handle
- *   resizes it, bounded by a 360px minimum center column; the always-visible
- *   header toggle folds it away.
- * - Below 768px: the side nav becomes an overlay drawer opened from the
- *   header toggle; it never pushes the content.
+ * - Desktop (>= 768px, useIsMobile's breakpoint): the side nav sits in
+ *   flow; a drag handle resizes it; the always-visible header toggle folds
+ *   it away (offcanvas).
+ * - Below 768px: the side nav becomes a Sheet overlay drawer opened from
+ *   the header toggle; it never pushes the content.
  */
 
 const DEFAULT_WIDTH = 260;
@@ -50,6 +62,22 @@ function persistShell(width: number, folded: boolean): void {
   }
 }
 
+/** The mobile drawer's own close button (the Sheet hides its built-in one). */
+function SidebarCloseButton() {
+  const { toggleSidebar } = useSidebar();
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Close navigation"
+      className="self-start md:hidden"
+      onClick={toggleSidebar}
+    >
+      <RiCloseLine />
+    </Button>
+  );
+}
+
 export function AppShell({
   children,
   initialWidth,
@@ -60,48 +88,27 @@ export function AppShell({
   initialFolded?: boolean;
 }) {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [width, setWidth] = useState(() =>
     Math.max(MIN_WIDTH, Math.round(initialWidth ?? DEFAULT_WIDTH)),
   );
   const [folded, setFolded] = useState(initialFolded ?? false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const widthRef = useRef(DEFAULT_WIDTH);
-  const dragStart = useRef({ x: 0, width: DEFAULT_WIDTH });
-
-  // Breakpoint tracking without a hardcoded pixel value: the side nav's
-  // position is itself a Radix-responsive property (fixed below its sm
-  // breakpoint, relative above), so the computed style IS the breakpoint
-  // state. Leaving mobile mode closes the drawer.
-  useEffect(() => {
-    const nav = document.getElementById("shell-sidebar");
-    if (!nav) return;
-    const apply = (): void => {
-      const mobile = getComputedStyle(nav).position === "fixed";
-      setIsMobile(mobile);
-      if (!mobile) setDrawerOpen(false);
-    };
-    apply();
-    const observer = new ResizeObserver(apply);
-    observer.observe(document.documentElement);
-    return () => observer.disconnect();
-  }, []);
+  const widthRef = useRef(width);
 
   widthRef.current = width;
-  const navShown = isMobile ? drawerOpen : !folded;
 
-  const toggleNav = (): void => {
-    if (isMobile) {
-      setDrawerOpen((open) => !open);
-      return;
-    }
-    const next = !folded;
-    setFolded(next);
-    persistShell(widthRef.current, next);
+  // The SidebarProvider owns the open state (desktop) and the drawer state
+  // (mobile); desktop changes come back through onOpenChange so the folded
+  // flag and the prefs cookie stay in sync with it.
+  const handleOpenChange = (open: boolean): void => {
+    setFolded(!open);
+    persistShell(widthRef.current, !open);
   };
 
   const maxWidth = (): number => Math.max(MIN_WIDTH, window.innerWidth - CENTER_MIN);
+
+  const dragStart = useRef({ x: 0, width: DEFAULT_WIDTH });
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
     if (isMobile) return;
@@ -138,122 +145,73 @@ export function AppShell({
     });
   };
 
+  // The stored width is capped against the center minimum in CSS, so a
+  // width from a wider screen (or a hand-edited prefs cookie) can never
+  // overflow the shell (AC-5 no-overflow). The cap resolves against the
+  // viewport (100vw), not the sidebar's own flex parent: a percentage
+  // there is indefinite (auto-width ancestor) and would collapse the
+  // in-flow column track to zero.
   const shellStyle = {
-    "--sidebar-w": `${folded ? 0 : width}px`,
-    "--right-w": "0px",
+    "--sidebar-width": `min(${width}px, calc(100vw - ${CENTER_MIN}px))`,
   } as CSSProperties;
 
   return (
-    <Grid
-      // The grid template rides Radix's responsive props: its base .rt-Grid
-      // rule (unlayered) would beat any layered Tailwind utility on the same
-      // property, while Tailwind owns what Radix never sets (transforms,
-      // borders, selection).
-      className="group data-[dragging=true]:select-none transition-[grid-template-columns] duration-200 motion-reduce:transition-none data-[dragging=true]:transition-none"
+    <SidebarProvider
+      // Controlled: onOpenChange (which persists the prefs cookie) makes the
+      // provider controlled, so the open prop is the single source of truth.
+      open={!folded}
+      onOpenChange={handleOpenChange}
       style={shellStyle}
       data-folded={folded || undefined}
-      data-drawer-open={drawerOpen || undefined}
       data-dragging={dragging || undefined}
-      columns={{
-        initial: "minmax(0, 1fr)",
-        // The sidebar column is capped by the center-min so a stored width
-        // from a wider screen (or a hand-edited prefs cookie) can never
-        // overflow the shell (review finding: AC-5 no-overflow).
-        sm: "min(var(--sidebar-w), calc(100% - 360px)) minmax(360px, 1fr) var(--right-w)",
-      }}
-      rows="auto 1fr"
-      height="100dvh"
     >
-      <Flex
-        asChild
-        gridColumn={{ initial: "1", sm: "2" }}
-        gridRow="1"
-        align="center"
-        gap="3"
-        px="4"
+      <Sidebar
+        collapsible="offcanvas"
+        // Folded on desktop the nav is off-screen; keep it out of the tab
+        // order until it is opened again (the mobile drawer is a Sheet and
+        // manages its own focus).
+        inert={isMobile ? undefined : folded || undefined}
       >
-        <header className="border-b border-[var(--gray-a5)]">
-          <IconButton
-            aria-label="Toggle navigation"
-            aria-expanded={navShown}
-            aria-controls="shell-sidebar"
-            variant="ghost"
-            color="gray"
-            onClick={toggleNav}
-          >
-            <HamburgerMenuIcon width="16" height="16" />
-          </IconButton>
-        </header>
-      </Flex>
-      <Flex
-        asChild
-        gridColumn="1"
-        gridRow="1 / -1"
-        direction="column"
-        position={{ initial: "fixed", sm: "relative" }}
-        top={{ initial: "0", sm: "auto" }}
-        bottom={{ initial: "0", sm: "auto" }}
-        left={{ initial: "0", sm: "auto" }}
-        width={{ initial: "min(var(--sidebar-w), 80vw)", sm: "auto" }}
-        overflow="hidden"
-        minWidth="0"
-      >
-        <nav
-          id="shell-sidebar"
-          aria-label="Primary"
-          inert={!navShown}
-          className="border-r border-[var(--gray-a5)] -translate-x-full transition-transform duration-200 motion-reduce:transition-none group-data-[drawer-open=true]:translate-x-0 max-md:bg-[var(--color-panel)] max-md:z-20 md:translate-x-0 md:group-data-[folded=true]:-translate-x-[100vw]"
-        >
-          <IconButton
-            aria-label="Close navigation"
-            aria-expanded={navShown}
-            aria-controls="shell-sidebar"
-            variant="ghost"
-            color="gray"
-            m="2"
-            className="self-start md:hidden!"
-            onClick={toggleNav}
-          >
-            <HamburgerMenuIcon width="16" height="16" />
-          </IconButton>
-          <Box flexGrow="1" minHeight="0" overflowY="auto" />
-          <Flex justify="center" p="2" className="border-t border-[var(--gray-a5)]">
-            <IconButton
-              aria-label="Settings"
+        <div role="navigation" aria-label="Primary" className="flex size-full min-h-0 flex-col">
+          <SidebarHeader>
+            <SidebarCloseButton />
+          </SidebarHeader>
+          <SidebarContent />
+          <SidebarFooter className="items-center">
+            <Button
               variant="ghost"
-              color="gray"
-              size="2"
+              size="icon-sm"
+              aria-label="Settings"
               onClick={() => router.push("/settings")}
             >
-              <GearIcon width="16" height="16" />
-            </IconButton>
-          </Flex>
-          <Box
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize sidebar"
-            tabIndex={0}
-            position="absolute"
-            top="0"
-            bottom="0"
-            right="0"
-            width="10px"
-            className="z-[2] hidden cursor-col-resize touch-none md:block"
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerEnd}
-            onPointerCancel={handlePointerEnd}
-            onKeyDown={handleResizeKeyDown}
+              <RiSettings3Line />
+            </Button>
+          </SidebarFooter>
+        </div>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          tabIndex={0}
+          className="absolute inset-y-0 right-0 z-10 hidden w-2.5 cursor-col-resize touch-none select-none outline-none md:block"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerEnd}
+          onPointerCancel={handlePointerEnd}
+          onKeyDown={handleResizeKeyDown}
+        />
+      </Sidebar>
+      <div className="relative flex w-full flex-1 flex-col bg-background">
+        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
+          <SidebarTrigger
+            aria-label="Toggle navigation"
+            aria-expanded={isMobile ? undefined : !folded || undefined}
           />
-        </nav>
-      </Flex>
-      <Box asChild gridColumn={{ initial: "1", sm: "2" }} gridRow="2" overflowY="auto" minWidth="0">
-        <main>
-          <Container size={{ initial: "2", sm: "3" }} px="6" py="4">
-            {children}
-          </Container>
+        </header>
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl px-6 py-4">{children}</div>
         </main>
-      </Box>
-    </Grid>
+      </div>
+    </SidebarProvider>
   );
 }
