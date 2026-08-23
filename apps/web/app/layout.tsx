@@ -12,7 +12,22 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <header>
+          <a href="/sessions">dsh-next-app</a>
+          <nav aria-label="Primary">
+            <ul>
+              <li>
+                <a href="/sessions">Sessions</a>
+              </li>
+              <li>
+                <a href="/settings">Settings</a>
+              </li>
+            </ul>
+          </nav>
+        </header>
+        <main>{children}</main>
+      </body>
     </html>
   );
 }

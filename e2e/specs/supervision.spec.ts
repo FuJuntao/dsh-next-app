@@ -72,12 +72,16 @@ test("a crashed Next child is restarted with backoff and the page is served agai
     .toMatch(/next-app-runtime: Next child exited unexpectedly .*restarting in \d+ms/);
 
   // The restarted child serves the page again (first backoff delay is 1s,
-  // then Next boots).
+  // then Next boots): / redirects to /sessions, which renders the shell and
+  // the session-list placeholder (story #94: app shell and route map).
   await expect(async () => {
     await page.goto(supervisionProfile.baseURL, { timeout: 5_000 });
   }).toPass({ timeout: 90_000 });
-  await expect(page).toHaveTitle("dsh-next-app");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("dsh-next-app");
+  await expect(page).toHaveTitle("Sessions");
+  await expect(page.getByRole("banner")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sessions");
+  await expect(page.getByRole("main")).toBeVisible();
 });
 
 test("stopping the profile terminates the child's process tree and releases the port", async ({
