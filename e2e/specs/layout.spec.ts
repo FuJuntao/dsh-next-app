@@ -27,15 +27,18 @@ test("no horizontal overflow at 320px", async ({ page }) => {
 test("the server renders the stored shell state, so first load cannot flash", async ({
   request,
 }) => {
-  // The shell state (width + folded) rides a cookie the browser writes on
-  // every change, and the server renders it into the first HTML: a reload
-  // paints the stored state directly instead of flashing the defaults.
+  // The shell state (width + folded) rides the namespaced preferences
+  // cookie (dsh-next-app.prefs, URL-encoded JSON) the browser writes on every
+  // change, and the server renders it into the first HTML: a reload paints
+  // the stored state directly instead of flashing the defaults.
   const auth =
     "Basic " + Buffer.from(`${state.auth.user}:${state.auth.password}`).toString("base64");
+  const prefsCookie = (prefs: unknown): string =>
+    "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify(prefs));
   const res = await request.get(state.baseURL + "/sessions", {
     headers: {
       authorization: auth,
-      cookie: "dsh-next-app-shell=200|1",
+      cookie: prefsCookie({ layout: { width: 200, folded: true } }),
     },
   });
   expect(res.status()).toBe(200);
@@ -47,7 +50,7 @@ test("the server renders the stored shell state, so first load cannot flash", as
   const openRes = await request.get(state.baseURL + "/sessions", {
     headers: {
       authorization: auth,
-      cookie: "dsh-next-app-shell=200|0",
+      cookie: prefsCookie({ layout: { width: 200, folded: false } }),
     },
   });
   const openHtml = await openRes.text();

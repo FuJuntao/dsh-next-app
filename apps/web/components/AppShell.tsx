@@ -10,6 +10,7 @@ import type {
 import { Container, IconButton } from "@radix-ui/themes";
 import { HamburgerMenuIcon } from "@radix-ui/react-icons";
 import { SettingsDialog } from "./SettingsDialog";
+import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
 
 /**
  * The app shell (story #97): a three-column-ready chrome — header, resizable
@@ -25,7 +26,6 @@ import { SettingsDialog } from "./SettingsDialog";
  * - Width and folded state persist in localStorage.
  */
 
-const SHELL_COOKIE = "dsh-next-app-shell";
 const DEFAULT_WIDTH = 260;
 const MIN_WIDTH = 160;
 const CENTER_MIN = 360;
@@ -36,12 +36,13 @@ function clamp(value: number, lo: number, hi: number): number {
   return Math.min(Math.max(value, lo), hi);
 }
 
-/** Persist the shell state to the cookie the server renders from (no flash). */
+/** Persist the shell prefs to the cookie the server renders from (no flash). */
 function persistShell(width: number, folded: boolean): void {
   try {
-    // `|` separator: `;` terminates cookie pairs and would silently drop
-    // the folded flag; both sides (layout.tsx) must agree on the format.
-    document.cookie = `${SHELL_COOKIE}=${Math.round(width)}|${folded ? 1 : 0};path=/;max-age=31536000;samesite=lax`;
+    const prefs = encodePreferences({
+      layout: { width: Math.round(width), folded },
+    });
+    document.cookie = `${PREFERENCES_COOKIE}=${prefs};path=/;max-age=31536000;samesite=lax`;
   } catch {
     // Storage unavailable: the in-memory state still applies.
   }
