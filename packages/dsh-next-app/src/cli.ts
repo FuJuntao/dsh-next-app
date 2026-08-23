@@ -54,7 +54,7 @@ function nextAppCommand(): Command {
     .helpOption("-h, --help", "show this help")
     .option(
       "--host <host>",
-      "bind host (default 127.0.0.1; 0.0.0.0 binds all interfaces - guarded when auth is configured); overrides the runtime row's config host",
+      "bind host (default 127.0.0.1; 0.0.0.0 binds all interfaces - guarded when auth is configured on the runtime row, see Auth below); overrides the runtime row's config host",
     )
     .option(
       "--port <port>",

@@ -34,7 +34,7 @@ v1 enforces HTTP basic auth (single user) in the Next proxy — before any route
 Generate the value with a plain node one-liner — built-ins only, runnable from any directory (ADR-0007):
 
 ```sh
-node -e "const {scryptSync, randomBytes}=require('node:crypto'); const s=randomBytes(16); const k=scryptSync(process.argv[1], s, 32, {N:16384, r:8, p:1}); console.log('scrypt$16384,8,1$'+s.toString('base64')+'$'+k.toString('base64'))" '<password>'
+node -e 'const {scryptSync, randomBytes}=require("node:crypto"); const s=randomBytes(16); const k=scryptSync(process.argv[1], s, 32, {N:16384, r:8, p:1}); console.log("scrypt$16384,8,1$"+s.toString("base64")+"$"+k.toString("base64"))' '<password>'
 ```
 
 The same override can set the bind `host` and `port` (defaults 127.0.0.1:3080); `--host`/`--port` on the command line override them for one-off runs (ADR-0009). The value is self-describing — `scrypt$<N>,<r>,<p>$<salt>$<key>` — so a deployment can raise the scrypt cost parameters without a code change. The native browser dialog's realm is the optional `auth.realm` (default `dsh-next-app`); a deployment reverse proxy that also runs basic auth can share one dialog per origin with it. The surface fails closed: without the auth config every request is denied and the server logs a loud configuration error, and an incomplete pair (exactly one of user/hash set) refuses to start.
