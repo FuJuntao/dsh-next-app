@@ -36,6 +36,7 @@
     "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-cmdline": "catalog:",
     "@deepseek-ai/dsh-subprocess": "catalog:",
+    "@deepseek-ai/schemastery": "catalog:",
     "@tsconfig/node-ts": "catalog:",
     "@tsconfig/node24": "catalog:",
     "@tsconfig/strictest": "catalog:",
@@ -46,7 +47,8 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-cmdline": "catalog:",
-    "@deepseek-ai/dsh-subprocess": "catalog:"
+    "@deepseek-ai/dsh-subprocess": "catalog:",
+    "@deepseek-ai/schemastery": "catalog:"
   },
   "dsh": {
     "bundle": {

@@ -10,6 +10,7 @@ catalog:
   # from the user's dsh installation at runtime, so the pins track the
   # tested dsh version (0.1.0-rc.8) in one place.
   "@deepseek-ai/cordis": 4.0.1
+  "@deepseek-ai/schemastery": 3.18.1
   "@deepseek-ai/dsh-cmdline": 0.1.0-rc.8
   "@deepseek-ai/dsh-subprocess": 0.1.0-rc.8
   "@deepseek-ai/dsh": 0.1.0-rc.8
