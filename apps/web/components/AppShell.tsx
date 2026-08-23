@@ -161,42 +161,40 @@ export function AppShell({ children }: { children: ReactNode }) {
           <HamburgerMenuIcon width="16" height="16" />
         </IconButton>
       </header>
-      <div className="shell-body">
-        <nav id="shell-sidebar" className="shell-sidebar" aria-label="Primary" inert={!navShown}>
-          <IconButton
-            className="shell-sidebar-toggle"
-            aria-label="Close navigation"
-            aria-expanded={navShown}
-            aria-controls="shell-sidebar"
-            variant="ghost"
-            color="gray"
-            onClick={toggleNav}
-          >
-            <HamburgerMenuIcon width="16" height="16" />
-          </IconButton>
-          <div className="shell-sidebar-list" />
-          <div className="shell-sidebar-bottom">
-            <SettingsDialog />
-          </div>
-          <div
-            className="shell-resize"
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize sidebar"
-            tabIndex={0}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerEnd}
-            onPointerCancel={handlePointerEnd}
-            onKeyDown={handleResizeKeyDown}
-          />
-        </nav>
-        <main className="shell-main">
-          <Container size="3" px="6" py="4">
-            {children}
-          </Container>
-        </main>
-      </div>
+      <nav id="shell-sidebar" className="shell-sidebar" aria-label="Primary" inert={!navShown}>
+        <IconButton
+          className="shell-sidebar-toggle"
+          aria-label="Close navigation"
+          aria-expanded={navShown}
+          aria-controls="shell-sidebar"
+          variant="ghost"
+          color="gray"
+          onClick={toggleNav}
+        >
+          <HamburgerMenuIcon width="16" height="16" />
+        </IconButton>
+        <div className="shell-sidebar-list" />
+        <div className="shell-sidebar-bottom">
+          <SettingsDialog />
+        </div>
+        <div
+          className="shell-resize"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          tabIndex={0}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerEnd}
+          onPointerCancel={handlePointerEnd}
+          onKeyDown={handleResizeKeyDown}
+        />
+      </nav>
+      <main className="shell-main">
+        <Container size="3" px="6" py="4">
+          {children}
+        </Container>
+      </main>
     </div>
   );
 }

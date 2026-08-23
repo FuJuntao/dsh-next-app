@@ -24,6 +24,21 @@ test("no horizontal overflow at 320px", async ({ page }) => {
   expect(sizes.scroll).toBeLessThanOrEqual(sizes.client);
 });
 
+test("header sits over the content column, not the side nav", async ({ page }) => {
+  await page.setViewportSize(DESKTOP);
+  await page.goto(state.baseURL + "/sessions");
+  const nav = await page.getByRole("navigation", { name: "Primary" }).boundingBox();
+  const banner = await page.getByRole("banner").boundingBox();
+  expect(nav).not.toBeNull();
+  expect(banner).not.toBeNull();
+  // The side nav spans the full height...
+  expect(nav!.y).toBe(0);
+  expect(nav!.height).toBeGreaterThanOrEqual(800);
+  // ...and the header starts at the nav's right edge, not the viewport's left.
+  expect(banner!.x).toBeGreaterThanOrEqual(nav!.x + nav!.width - 1);
+  expect(banner!.y).toBe(0);
+});
+
 test("side nav becomes an overlay drawer on mobile", async ({ page }) => {
   await page.setViewportSize(MOBILE);
   await page.goto(state.baseURL + "/sessions");

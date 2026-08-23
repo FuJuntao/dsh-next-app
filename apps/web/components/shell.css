@@ -17,20 +17,24 @@ body {
   margin: 0;
 }
 
-/* The shell: header row over a three-column-ready body row. The sidebar
-   width is a custom property set inline by AppShell; the center column's
-   minmax(360px, 1fr) IS the center-min constraint — the sidebar can never
-   push the content below 360px. --right-w reserves the future
+/* The shell: a three-column-ready grid where the side nav spans the full
+   height and the header sits only over the middle (content) column. The
+   sidebar width is a custom property set inline by AppShell; the center
+   column's minmax(360px, 1fr) IS the center-min constraint — the sidebar
+   can never push the content below 360px. --right-w reserves the future
    viewer/editor track (out of scope for this story). */
 .shell {
   --sidebar-w: 0px;
   --right-w: 0px;
   display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(360px, 1fr) var(--right-w);
   grid-template-rows: auto minmax(0, 1fr);
   height: 100dvh;
 }
 
 .shell-header {
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -54,13 +58,9 @@ body {
   display: inline-flex;
 }
 
-.shell-body {
-  display: grid;
-  grid-template-columns: var(--sidebar-w) minmax(360px, 1fr) var(--right-w);
-  min-height: 0;
-}
-
 .shell-sidebar {
+  grid-column: 1;
+  grid-row: 1 / -1;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -111,6 +111,8 @@ body {
 }
 
 .shell-main {
+  grid-column: 2;
+  grid-row: 2;
   min-width: 0;
   overflow-y: auto;
 }
@@ -128,8 +130,13 @@ body {
     display: inline-flex;
   }
 
-  .shell-body {
+  .shell {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell-header,
+  .shell-main {
+    grid-column: 1;
   }
 
   .shell-sidebar {
