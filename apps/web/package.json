@@ -10,6 +10,8 @@
     "format": "oxfmt ."
   },
   "dependencies": {
+    "@radix-ui/react-icons": "catalog:",
+    "@radix-ui/themes": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
