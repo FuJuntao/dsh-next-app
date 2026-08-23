@@ -10,12 +10,14 @@ import type {
 import { useRouter } from "next/navigation";
 import { RiCloseLine, RiSettings3Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
   SidebarProvider,
+  SidebarSeparator,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -177,6 +179,7 @@ export function AppShell({
             <SidebarCloseButton />
           </SidebarHeader>
           <SidebarContent />
+          <SidebarSeparator />
           <SidebarFooter className="items-center">
             <Button
               variant="ghost"
@@ -202,12 +205,13 @@ export function AppShell({
         />
       </Sidebar>
       <div className="relative flex w-full flex-1 flex-col bg-background">
-        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
+        <header className="flex h-12 shrink-0 items-center gap-3 px-4">
           <SidebarTrigger
             aria-label="Toggle navigation"
             aria-expanded={isMobile ? undefined : !folded || undefined}
           />
         </header>
+        <Separator />
         <main className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl px-6 py-4">{children}</div>
         </main>
