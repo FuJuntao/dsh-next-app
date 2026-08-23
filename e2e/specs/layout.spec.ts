@@ -116,6 +116,14 @@ test("side nav folds and unfolds on desktop", async ({ page }) => {
   const toggle = page.getByRole("button", { name: "Toggle navigation" });
   await expect(nav).toBeInViewport();
   await expect(toggle).toBeVisible();
+  // The toggle is animated: the nav's translate and the shell's column
+  // tracks both carry transitions (motion-reduce disables them).
+  expect(await nav.evaluate((el) => getComputedStyle(el).transitionProperty)).toContain(
+    "translate",
+  );
+  expect(
+    await page.locator(".group").evaluate((el) => getComputedStyle(el).transitionProperty),
+  ).toContain("grid-template-columns");
   await toggle.click();
   await expect(nav).not.toBeInViewport();
   await toggle.click();

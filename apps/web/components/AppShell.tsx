@@ -149,7 +149,7 @@ export function AppShell({
       // rule (unlayered) would beat any layered Tailwind utility on the same
       // property, while Tailwind owns what Radix never sets (transforms,
       // borders, selection).
-      className="group data-[dragging=true]:select-none"
+      className="group data-[dragging=true]:select-none transition-[grid-template-columns] duration-200 motion-reduce:transition-none data-[dragging=true]:transition-none"
       style={shellStyle}
       data-folded={folded || undefined}
       data-drawer-open={drawerOpen || undefined}
@@ -202,7 +202,7 @@ export function AppShell({
           id="shell-sidebar"
           aria-label="Primary"
           inert={!navShown}
-          className="border-r border-[var(--gray-a5)] -translate-x-full transition-transform group-data-[drawer-open=true]:translate-x-0 max-md:bg-[var(--color-panel)] max-md:z-20 md:translate-x-0 md:group-data-[folded=true]:-translate-x-[100vw]"
+          className="border-r border-[var(--gray-a5)] -translate-x-full transition-transform duration-200 motion-reduce:transition-none group-data-[drawer-open=true]:translate-x-0 max-md:bg-[var(--color-panel)] max-md:z-20 md:translate-x-0 md:group-data-[folded=true]:-translate-x-[100vw]"
         >
           <IconButton
             aria-label="Close navigation"
