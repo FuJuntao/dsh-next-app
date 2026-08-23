@@ -128,25 +128,23 @@ test("drag handle resizes the side nav and the width persists", async ({ page })
   expect(persisted).toBeCloseTo(after!, 0);
 });
 
-test("the side nav settings button navigates to the settings route", async ({ page }) => {
+test("the side nav settings button navigates to the settings page", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(state.baseURL + "/sessions");
-  // Settings is its own route: the gear navigates, and the dialog opens there.
+  // Settings is its own route: the gear navigates, and the page replaces the
+  // placeholder - no modal floating over anything.
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/settings$/);
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("heading", { name: "Settings" })).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Settings");
+  await expect(page.getByRole("dialog")).toBeHidden();
 });
 
-test("/settings deep-links to the open settings dialog", async ({ page }) => {
+test("/settings renders the settings page, not a modal", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(state.baseURL + "/settings");
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Settings");
+  await expect(
+    page.getByText("Placeholder: settings content lands with the settings story."),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeHidden();
 });

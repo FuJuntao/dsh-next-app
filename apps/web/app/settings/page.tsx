@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { SettingsDialog } from "../../components/SettingsDialog";
 
 export const metadata: Metadata = {
   title: "Settings",
@@ -11,7 +10,6 @@ export default function SettingsPage() {
     <section>
       <h1>Settings</h1>
       <p>Placeholder: settings content lands with the settings story.</p>
-      <SettingsDialog />
     </section>
   );
 }
