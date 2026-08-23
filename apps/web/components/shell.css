@@ -89,6 +89,14 @@ body {
   border-top: 1px solid var(--gray-a5);
 }
 
+/* Folded: zero-width column plus slide fully off-screen. A percentage
+   translate would resolve against the nav's own (0px) width, so use a
+   viewport-relative shift: nothing of the nav remains in the viewport. */
+.shell[data-folded="true"] .shell-sidebar {
+  border-right: none;
+  transform: translateX(-100vw);
+}
+
 /* The drag handle sits on the sidebar's right edge (inside it, so the
    sidebar's overflow:hidden clips it away when folded). */
 .shell-resize {

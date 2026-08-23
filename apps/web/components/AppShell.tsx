@@ -85,8 +85,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const toggleNav = (): void => {
     if (isMobile) {
       setDrawerOpen((open) => !open);
-    } else {
-      setFolded((wasFolded) => !wasFolded);
+      return;
+    }
+    const next = !folded;
+    setFolded(next);
+    try {
+      window.localStorage.setItem(FOLDED_KEY, next ? "1" : "0");
+    } catch {
+      // Storage unavailable: the in-memory state still applies.
     }
   };
 
