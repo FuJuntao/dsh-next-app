@@ -4,7 +4,7 @@ import "@radix-ui/themes/styles.css";
 import { Theme } from "@radix-ui/themes";
 import { AppShell } from "../components/AppShell";
 import { PREFERENCES_COOKIE, readPreferences } from "../lib/preferences";
-import "../components/shell.css";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "dsh-next-app",
@@ -24,10 +24,7 @@ export default async function RootLayout({
     <html lang="en">
       <body>
         <Theme appearance="inherit">
-          <AppShell
-            initialWidth={prefs.layout.width}
-            initialFolded={prefs.layout.folded}
-          >
+          <AppShell initialWidth={prefs.layout.width} initialFolded={prefs.layout.folded}>
             {children}
           </AppShell>
         </Theme>

@@ -140,7 +140,11 @@ export function AppShell({
 
   return (
     <Grid
-      className="shell"
+      // The grid template rides Radix's responsive props: its base .rt-Grid
+      // rule (unlayered) would beat any layered Tailwind utility on the same
+      // property, while Tailwind owns what Radix never sets (transforms,
+      // borders, selection).
+      className="group data-[dragging=true]:select-none"
       style={shellStyle}
       data-folded={folded || undefined}
       data-drawer-open={drawerOpen || undefined}
@@ -159,11 +163,9 @@ export function AppShell({
         align="center"
         gap="3"
         px="4"
-        style={{ borderBottom: "1px solid var(--gray-a5)" }}
       >
-        <header className="shell-header">
+        <header className="border-b border-[var(--gray-a5)]">
           <IconButton
-            className="shell-header-toggle"
             aria-label="Toggle navigation"
             aria-expanded={navShown}
             aria-controls="shell-sidebar"
@@ -187,29 +189,27 @@ export function AppShell({
         width={{ initial: "min(var(--sidebar-w), 80vw)", sm: "auto" }}
         overflow="hidden"
         minWidth="0"
-        style={{ borderRight: "1px solid var(--gray-a5)" }}
       >
-        <nav id="shell-sidebar" className="shell-sidebar" aria-label="Primary" inert={!navShown}>
+        <nav
+          id="shell-sidebar"
+          aria-label="Primary"
+          inert={!navShown}
+          className="border-r border-[var(--gray-a5)] -translate-x-full transition-transform group-data-[drawer-open=true]:translate-x-0 max-md:bg-[var(--color-panel)] max-md:z-20 md:translate-x-0 md:group-data-[folded=true]:-translate-x-[100vw]"
+        >
           <IconButton
-            className="shell-sidebar-toggle"
             aria-label="Close navigation"
             aria-expanded={navShown}
             aria-controls="shell-sidebar"
             variant="ghost"
             color="gray"
             m="2"
-            style={{ alignSelf: "flex-start" }}
+            className="self-start md:hidden!"
             onClick={toggleNav}
           >
             <HamburgerMenuIcon width="16" height="16" />
           </IconButton>
-          <Box className="shell-sidebar-list" flexGrow="1" minHeight="0" overflowY="auto" />
-          <Flex
-            className="shell-sidebar-bottom"
-            justify="center"
-            p="2"
-            style={{ borderTop: "1px solid var(--gray-a5)" }}
-          >
+          <Box flexGrow="1" minHeight="0" overflowY="auto" />
+          <Flex justify="center" p="2" className="border-t border-[var(--gray-a5)]">
             <IconButton
               aria-label="Settings"
               variant="ghost"
@@ -221,7 +221,6 @@ export function AppShell({
             </IconButton>
           </Flex>
           <Box
-            className="shell-resize"
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize sidebar"
@@ -231,7 +230,7 @@ export function AppShell({
             bottom="0"
             right="0"
             width="10px"
-            style={{ cursor: "col-resize", touchAction: "none", zIndex: 2 }}
+            className="z-[2] hidden cursor-col-resize touch-none md:block"
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerEnd}
@@ -241,7 +240,7 @@ export function AppShell({
         </nav>
       </Flex>
       <Box asChild gridColumn={{ initial: "1", sm: "2" }} gridRow="2" overflowY="auto" minWidth="0">
-        <main className="shell-main">
+        <main>
           <Container size={{ initial: "2", sm: "3" }} px="6" py="4">
             {children}
           </Container>

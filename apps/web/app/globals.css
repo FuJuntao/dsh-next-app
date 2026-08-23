@@ -1,0 +1,14 @@
+/**
+ * Global styles (story #97): Tailwind v4 + the two base rules Radix
+ * Themes does not set (the 100% height chain for the 100dvh shell).
+ * Everything else is Radix components + Tailwind utilities in the
+ * components; no bespoke stylesheet remains.
+ */
+@import "tailwindcss";
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+}

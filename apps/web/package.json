@@ -17,7 +17,9 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "catalog:",
     "@tsconfig/next": "catalog:",
+    "tailwindcss": "catalog:",
     "@tsconfig/strictest": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
