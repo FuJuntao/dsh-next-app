@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { run } from "./process";
-import { bootProfile, scryptValue, writeAuthPatch, type BootedProfile } from "./profile";
+import { bootProfile, scryptValue, writeRuntimePatch, type BootedProfile } from "./profile";
 import { STATE_PATH, type E2EState } from "./state";
 
 const REPO_ROOT = resolve(__dirname, "../..");
@@ -77,7 +77,7 @@ export default async function globalSetup(): Promise<void> {
 
     // 3. Configure the auth credential pair in the profile's patch layer
     // (ADR-0008): the runtime row reads it and forwards it to the Next child.
-    writeAuthPatch(profileDir, {
+    writeRuntimePatch(profileDir, {
       user: AUTH_USER,
       passwordHash: scryptValue(AUTH_PASSWORD),
     });

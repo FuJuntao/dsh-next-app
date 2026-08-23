@@ -29,8 +29,12 @@ export const name = "next-app-runtime";
 /** Services required before the boot glue can run. */
 export const inject = ["nextAppCli", "subprocess"];
 
-/** This row's config (ADR-0008): an id-targeted override in the profile's user patch layer. */
+/** This row's config (ADR-0008, ADR-0009): an id-targeted override in the profile's user patch layer. */
 export interface NextAppRuntimeConfig {
+  /** Bind host; the `--host` flag overrides it (ADR-0009). */
+  host?: string;
+  /** Listen port; the `--port` flag overrides it (ADR-0009). */
+  port?: number;
   /** Basic-auth config forwarded to the Next child's environment. */
   auth?: NextAppAuthConfig;
 }
@@ -118,8 +122,6 @@ function restartDelayMs(attempts: number): number {
  * @param ctx - plugin context carrying `nextAppCli` and `subprocess`.
  */
 export function apply(ctx: Context, config?: NextAppRuntimeConfig): void {
-  const host = ctx.nextAppCli?.host ?? DEFAULT_HOST;
-  const port = ctx.nextAppCli?.port ?? DEFAULT_PORT;
   const auth = config?.auth;
   if (auth !== undefined) {
     // An incomplete pair is a misconfiguration: refuse to boot loudly
@@ -133,6 +135,20 @@ export function apply(ctx: Context, config?: NextAppRuntimeConfig): void {
       );
     }
   }
+  // Serving parameters (ADR-0009): invocation flags override the row
+  // config, which overrides the defaults. A config port that is not a
+  // positive integer is a misconfiguration like an incomplete auth pair.
+  const configHost = config?.host !== undefined && config.host !== "" ? config.host : undefined;
+  const configPort = config?.port;
+  if (configPort !== undefined && (!Number.isInteger(configPort) || configPort <= 0)) {
+    throw new Error(
+      "next-app-runtime: config port must be a positive integer, got " +
+        JSON.stringify(configPort) +
+        " - configure the host/port block on this row in the profile's cordis.patch.yml",
+    );
+  }
+  const host = ctx.nextAppCli?.host ?? configHost ?? DEFAULT_HOST;
+  const port = ctx.nextAppCli?.port ?? configPort ?? DEFAULT_PORT;
   const url = servingUrl(host, port);
   const nextCli = fileURLToPath(import.meta.resolve("next/dist/bin/next"));
   const controller = new AbortController();

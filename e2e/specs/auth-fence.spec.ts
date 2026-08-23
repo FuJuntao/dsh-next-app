@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { join, resolve } from "node:path";
 import { test, expect } from "@playwright/test";
 import { freePort } from "../support/port";
-import { bootProfile, scryptValue, writeAuthPatch } from "../support/profile";
+import { bootProfile, scryptValue, writeRuntimePatch } from "../support/profile";
 import { readState } from "../support/state";
 
 const state = readState();
@@ -20,7 +20,7 @@ function basicHeader(user: string, password: string): string {
 
 /** Restore the profile's patch to the full test credential pair (ADR-0008). */
 function restoreAuthPatch(): void {
-  writeAuthPatch(state.profileDir, {
+  writeRuntimePatch(state.profileDir, {
     user: state.auth.user,
     passwordHash: scryptValue(state.auth.password),
   });
@@ -74,7 +74,7 @@ test.describe("the basic-auth fence", () => {
     // closed. A running instance hot-reloads its config, so the shared
     // instance's child restarts with this config too - it is restored
     // before this spec finishes.
-    writeAuthPatch(state.profileDir, { realm: FAIL_CLOSED_REALM });
+    writeRuntimePatch(state.profileDir, { realm: FAIL_CLOSED_REALM });
     try {
       const logsDir = join(state.scratchDir, "fail-closed");
       const profile = await bootProfile(state.dshHome, logsDir);
@@ -115,7 +115,7 @@ test.describe("the basic-auth fence", () => {
     // Exactly one side configured: the runtime row must refuse the
     // half-gated surface at mount (ADR-0008) - dsh exits non-zero with the
     // message on stderr.
-    writeAuthPatch(state.profileDir, { user: "e2e" });
+    writeRuntimePatch(state.profileDir, { user: "e2e" });
     try {
       const port = await freePort();
       const outcome = await new Promise<{ code: number | null; stderr: string }>((settle) => {

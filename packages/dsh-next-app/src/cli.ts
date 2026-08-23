@@ -54,9 +54,12 @@ function nextAppCommand(): Command {
     .helpOption("-h, --help", "show this help")
     .option(
       "--host <host>",
-      "bind host (default 127.0.0.1; 0.0.0.0 binds all interfaces - guarded by basic auth when DSH_NEXT_APP_USER/DSH_NEXT_APP_PASSWORD_HASH are provisioned)",
+      "bind host (default 127.0.0.1; 0.0.0.0 binds all interfaces - guarded when auth is configured); overrides the runtime row's config host",
     )
-    .option("--port <port>", "listen port; a positive integer (default 3080)")
+    .option(
+      "--port <port>",
+      "listen port; a positive integer (default 3080); overrides the runtime row's config port",
+    )
     .addHelpText(
       "after",
       `

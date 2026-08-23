@@ -75,33 +75,45 @@ export async function stopProfile(dshPid: number): Promise<void> {
   }
 }
 
-/** The auth block shape the suite writes into the profile's patch (ADR-0008). */
-export interface ProfileAuthConfig {
+/** The runtime-row config shape the suite writes into the profile's patch (ADR-0008, ADR-0009). */
+export interface ProfileRuntimeConfig {
   user?: string;
   passwordHash?: string;
   realm?: string;
+  host?: string;
+  port?: number;
 }
 
 /**
- * Write the profile's user patch layer: an id-targeted auth config override
- * for the next-app-runtime row (ADR-0008). Boot the profile after writing;
- * a running instance hot-reloads its config, so specs that swap the patch
- * restore it before they finish.
+ * Write the profile's user patch layer: an id-targeted config override for
+ * the next-app-runtime row (serving host/port per ADR-0009, auth per
+ * ADR-0008). Boot the profile after writing; a running instance hot-reloads
+ * its config, so specs that swap the patch restore it before they finish.
  */
-export function writeAuthPatch(profileDir: string, auth?: ProfileAuthConfig): void {
+export function writeRuntimePatch(profileDir: string, config?: ProfileRuntimeConfig): void {
   const lines: string[] = [
-    "# The e2e suite's auth config for the next-app-runtime row (ADR-0008).",
+    "# The e2e suite's config for the next-app-runtime row (ADR-0008, ADR-0009).",
     "# Rewritten per spec; boot the profile after writing for changes to apply.",
     "- id: next-app-runtime",
     "  config:",
   ];
-  if (auth === undefined) {
+  if (config === undefined) {
     lines.push("    {}");
   } else {
-    lines.push("    auth:");
-    if (auth.user !== undefined) lines.push("      user: " + auth.user);
-    if (auth.passwordHash !== undefined) lines.push("      passwordHash: " + auth.passwordHash);
-    if (auth.realm !== undefined) lines.push("      realm: " + auth.realm);
+    if (config.host !== undefined) lines.push("    host: " + config.host);
+    if (config.port !== undefined) lines.push("    port: " + config.port);
+    if (
+      config.user !== undefined ||
+      config.passwordHash !== undefined ||
+      config.realm !== undefined
+    ) {
+      lines.push("    auth:");
+      if (config.user !== undefined) lines.push("      user: " + config.user);
+      if (config.passwordHash !== undefined) {
+        lines.push("      passwordHash: " + config.passwordHash);
+      }
+      if (config.realm !== undefined) lines.push("      realm: " + config.realm);
+    }
   }
   lines.push("");
   writeFileSync(join(profileDir, "cordis.patch.yml"), lines.join("\n"));
@@ -113,10 +125,27 @@ export function writeAuthPatch(profileDir: string, auth?: ProfileAuthConfig): vo
  * teed into it for the specs to assert (the supervision specs use the stderr
  * log). Kills the instance on any boot failure.
  */
-export async function bootProfile(dshHome: string, logsDir?: string): Promise<BootedProfile> {
-  const port = await freePort();
+/** Boot options (ADR-0009): the expected port and whether --port is passed. */
+export interface BootOptions {
+  /** The expected serving port (defaults to a free port). */
+  port?: number;
+  /** Pass --port <port> on the command line; false lets the row config port serve. */
+  passPortFlag?: boolean;
+}
+
+export async function bootProfile(
+  dshHome: string,
+  logsDir?: string,
+  options?: BootOptions,
+): Promise<BootedProfile> {
+  const port = options?.port ?? (await freePort());
+  const argv = [
+    "--profile",
+    PROFILE,
+    ...(options?.passPortFlag === false ? [] : ["--port", String(port)]),
+  ];
   return new Promise((resolve, reject) => {
-    const child = spawn("dsh", ["--profile", PROFILE, "--port", String(port)], {
+    const child = spawn("dsh", argv, {
       cwd: REPO_ROOT,
       env: { ...process.env, DSH_HOME: dshHome },
       stdio: ["ignore", "pipe", "pipe"],
