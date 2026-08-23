@@ -179,7 +179,11 @@ export function AppShell({
             <SidebarCloseButton />
           </SidebarHeader>
           <SidebarContent />
-          <SidebarSeparator />
+          {/* The component's own w-auto cannot win against its
+              data-horizontal:w-full (higher specificity), so with mx-2 the
+              line overflows the sidebar; re-declaring the width in the same
+              variant group lets twMerge drop the w-full. */}
+          <SidebarSeparator className="data-horizontal:w-auto" />
           <SidebarFooter className="items-center">
             <Button
               variant="ghost"
