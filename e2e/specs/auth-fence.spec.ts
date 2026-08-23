@@ -111,6 +111,45 @@ test.describe("the basic-auth fence", () => {
     }
   });
 
+  test("a malformed passwordHash value never verifies, even with the right password", async () => {
+    // Review finding (security): a truncated key decodes to an empty buffer
+    // and scryptSync(keylen 0) + timingSafeEqual(empty, empty) would verify
+    // ANY password. The parser pins salt/key lengths and N (ADR-0007), so
+    // this value must fail closed - 401 with the right credentials and the
+    // loud malformed-value log.
+    const logsDir = join(state.scratchDir, "malformed-hash");
+    writeRuntimePatch(state.profileDir, {
+      user: state.auth.user,
+      passwordHash: "scrypt$16384,8,1$c2FsdA==$",
+    });
+    try {
+      const profile = await bootProfile(state.dshHome, logsDir);
+      if (profile.stderrPath === undefined) {
+        throw new Error("the malformed-hash profile must tee its stderr log");
+      }
+      try {
+        const ok = await fetch(profile.baseURL, {
+          headers: { authorization: basicHeader(state.auth.user, state.auth.password) },
+        });
+        expect(ok.status).toBe(401);
+        const other = await fetch(profile.baseURL, {
+          headers: { authorization: basicHeader(state.auth.user, "anything-else") },
+        });
+        expect(other.status).toBe(401);
+        await expect
+          .poll(() => readFileSync(profile.stderrPath as string, "utf8"), {
+            message: "the fence must log a loud error when the configured value is malformed",
+            timeout: 30_000,
+          })
+          .toMatch(/DSH_NEXT_APP_PASSWORD_HASH is malformed or out of format/);
+      } finally {
+        await profile.stop();
+      }
+    } finally {
+      restoreAuthPatch();
+    }
+  });
+
   test("an incomplete credential pair refuses to start with a loud error", async () => {
     // Exactly one side configured: the runtime row must refuse the
     // half-gated surface at mount (ADR-0008) - dsh exits non-zero with the

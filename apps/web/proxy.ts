@@ -5,7 +5,8 @@
  * Next 16's edge-fence entry (the `proxy.ts` convention; `middleware.ts` is
  * deprecated): one fence over the whole surface - pages, /api, and static
  * assets - before any route handler runs. A single user, credentials
- * provisioned in the environment as a self-describing scrypt value
+ * provisioned as cordis row config on the runtime row and forwarded into
+ * this process's environment (ADR-0008) as a self-describing scrypt value
  * (ADR-0007), the native browser dialog (no session UI), and a configurable
  * realm so a deployment reverse proxy that also runs basic auth can share
  * one dialog per origin.
@@ -24,6 +25,9 @@ const REALM = process.env["DSH_NEXT_APP_REALM"] ?? "dsh-next-app";
 
 /** Whether the loud fail-closed message was already logged (per process). */
 let failClosedLogged = false;
+
+/** Whether the loud malformed-value message was already logged (per process). */
+let malformedLogged = false;
 
 /** 401 with the header that summons the native browser dialog. */
 function unauthorized(): NextResponse {
@@ -92,12 +96,22 @@ function parseScryptValue(encoded: string): ScryptValue | undefined {
   ) {
     return undefined;
   }
+  const salt = Buffer.from(saltB64, "base64");
+  const expected = Buffer.from(keyB64, "base64");
+  // Pin the format (ADR-0007): 16-byte salt, 32-byte key, N a power of two.
+  // Without the pins a truncated key decodes to an empty buffer and verifies
+  // ANY password - scryptSync with keylen 0 yields an empty buffer and
+  // timingSafeEqual(empty, empty) is true. A malformed value must fail
+  // closed, never open.
+  if (salt.length !== 16 || expected.length !== 32 || (n & (n - 1)) !== 0) {
+    return undefined;
+  }
   return {
     n,
     r,
     p,
-    salt: Buffer.from(saltB64, "base64"),
-    expected: Buffer.from(keyB64, "base64"),
+    salt,
+    expected,
   };
 }
 
@@ -147,7 +161,19 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const name = decoded.slice(0, colon);
   const password = decoded.slice(colon + 1);
   if (name !== user) return unauthorized();
-  if (!verifyPassword(password, passwordHash)) return unauthorized();
+  if (!verifyPassword(password, passwordHash)) {
+    if (!malformedLogged && parseScryptValue(passwordHash) === undefined) {
+      // The pair is present but the value is malformed or out of the pinned
+      // format: fail closed loudly, exactly like a missing pair (ADR-0007) -
+      // a truncated value must never silently turn the fence into a
+      // username-only check.
+      malformedLogged = true;
+      console.error(
+        "next-app auth: DSH_NEXT_APP_PASSWORD_HASH is malformed or out of format; denying every request (fail closed)",
+      );
+    }
+    return unauthorized();
+  }
 
   return NextResponse.next();
 }
