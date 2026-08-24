@@ -54,7 +54,9 @@ test.describe("the basic-auth fence", () => {
       headers: { authorization: basicHeader(state.auth.user, state.auth.password) },
     });
     expect(ok.status).toBe(200);
-    expect(await ok.text()).toContain("dsh-next-app");
+    // The authenticated root follows the redirect to /sessions; assert a
+    // stable page marker rather than chrome text that later stories may move.
+    expect(await ok.text()).toContain("<title>Sessions</title>");
 
     const wrongPassword = await fetch(state.baseURL, {
       headers: { authorization: basicHeader(state.auth.user, "wrong-password") },

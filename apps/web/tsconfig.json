@@ -1,7 +1,10 @@
 {
   "extends": ["@tsconfig/next/tsconfig.json", "@tsconfig/strictest/tsconfig.json"],
   "compilerOptions": {
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["./*"]
+    }
   },
   "include": [
     "next-env.d.ts",
