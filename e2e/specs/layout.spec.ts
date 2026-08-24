@@ -59,10 +59,12 @@ test("the server renders the stored shell state, so first load cannot flash", as
     "Basic " + Buffer.from(`${state.auth.user}:${state.auth.password}`).toString("base64");
   const prefsCookie = (prefs: unknown): string =>
     "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify(prefs));
+  // The stored width must be above the shell's minimum (272px) - below
+  // it the server clamps to the floor, by design.
   const res = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
-      cookie: prefsCookie({ layout: { width: 200, folded: true } }),
+      cookie: prefsCookie({ layout: { width: 280, folded: true } }),
     },
   });
   expect(res.status()).toBe(200);
@@ -70,18 +72,18 @@ test("the server renders the stored shell state, so first load cannot flash", as
   // Folded: the sidebar renders collapsed (off-screen) from the first paint.
   expect(foldedHtml).toContain('data-folded="true"');
   expect(foldedHtml).toContain('data-state="collapsed"');
-  expect(foldedHtml).toContain("--sidebar-width:min(200px, calc(100vw - 360px))");
+  expect(foldedHtml).toContain("--sidebar-width:min(280px, calc(100vw - 360px))");
   // Unfolded: the stored width renders into the first paint.
   const openRes = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
-      cookie: prefsCookie({ layout: { width: 200, folded: false } }),
+      cookie: prefsCookie({ layout: { width: 280, folded: false } }),
     },
   });
   const openHtml = await openRes.text();
   expect(openHtml).not.toContain('data-folded="true"');
   expect(openHtml).toContain('data-state="expanded"');
-  expect(openHtml).toContain("--sidebar-width:min(200px, calc(100vw - 360px))");
+  expect(openHtml).toContain("--sidebar-width:min(280px, calc(100vw - 360px))");
 });
 
 test("header sits over the content column, not the side nav", async ({ page }) => {

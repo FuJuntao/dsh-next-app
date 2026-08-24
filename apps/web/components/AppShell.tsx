@@ -10,7 +10,7 @@ import type {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { RiCloseLine, RiSettings3Line } from "@remixicon/react";
-import { DshLogo, DshWordmark } from "./dsh-logo";
+import { DshHarnessChip, DshLogo, DshWordmark } from "./dsh-logo";
 import { SESSIONS } from "../lib/sessions";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -50,8 +50,11 @@ import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
  *   the header toggle; it never pushes the content.
  */
 
+// The brand row (whale + "DeepSeek Harness" wordmark) is 188px plus
+// the header padding, so the sidebar cannot narrow below 216px - the
+// full logo always fits, nothing hides at the minimum.
 const DEFAULT_WIDTH = 260;
-const MIN_WIDTH = 160;
+const MIN_WIDTH = 216;
 const CENTER_MIN = 360;
 const RESIZE_STEP = 16;
 
@@ -103,12 +106,15 @@ function SidebarBrand() {
       onClick={() => {
         if (isMobile) setOpenMobile(false);
       }}
-      // Inline brand row: the whale and the wordmark at their intrinsic
-      // sizes with an 8px gap, flat (no padding box), content-width.
+      // Inline brand row: the whale, the "DeepSeek" wordmark, and the
+      // "harness" chip - at their intrinsic sizes with 8px gaps, flat (no
+      // padding box), content-width. The sidebar's minimum width (216px)
+      // fits the full row, so nothing hides or overflows.
       className="flex w-fit items-center gap-2 text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground"
     >
       <DshLogo className="shrink-0" />
       <DshWordmark className="shrink-0" />
+      <DshHarnessChip className="shrink-0" />
     </Link>
   );
 }
