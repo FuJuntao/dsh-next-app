@@ -7,15 +7,23 @@ import type {
   PointerEvent as ReactPointerEvent,
   ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { RiCloseLine, RiSettings3Line } from "@remixicon/react";
+import { DshLogo, DshWordmark } from "./dsh-logo";
+import { SESSIONS } from "../lib/sessions";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarProvider,
   SidebarSeparator,
   SidebarTrigger,
@@ -72,11 +80,72 @@ function SidebarCloseButton() {
       variant="ghost"
       size="icon-sm"
       aria-label="Close navigation"
-      className="self-start md:hidden"
+      className="md:hidden"
       onClick={toggleSidebar}
     >
       <RiCloseLine />
     </Button>
+  );
+}
+
+/**
+ * The brand (story #104): exactly the two svgs from the built-in web app's
+ * sidebar - the whale mark and the "DeepSeek" letterform wordmark, taken
+ * verbatim (dsh-logo.tsx) - as a link to the home page. On mobile the row
+ * sits in the drawer's header beside the close button, and navigating from
+ * the drawer closes it first.
+ */
+function SidebarBrand() {
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <Link
+      href="/"
+      aria-label="DeepSeek Harness"
+      onClick={() => {
+        if (isMobile) setOpenMobile(false);
+      }}
+      // Inline brand row: the whale and the wordmark at their intrinsic
+      // sizes with an 8px gap, flat (no padding box), content-width.
+      className="flex w-fit items-center gap-2 text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground"
+    >
+      <DshLogo className="shrink-0" />
+      <DshWordmark className="shrink-0" />
+    </Link>
+  );
+}
+
+/**
+ * The sessions list (story #104): one row per session linking to its
+ * /sessions/[id] page, with the current session highlighted. The rows come
+ * from lib/sessions.ts - the static stand-in for the bridge data channel
+ * (ADR-0003) - so swapping the data source later never touches this chrome.
+ */
+function SessionsNav() {
+  const pathname = usePathname();
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>Sessions</SidebarGroupLabel>
+      <SidebarMenu>
+        {SESSIONS.map((session) => (
+          <SidebarMenuItem key={session.id}>
+            <SidebarMenuButton
+              isActive={pathname === `/sessions/${session.id}`}
+              render={
+                <Link
+                  href={`/sessions/${session.id}`}
+                  onClick={() => {
+                    if (isMobile) setOpenMobile(false);
+                  }}
+                />
+              }
+            >
+              <span className="truncate">{session.title}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
+    </SidebarGroup>
   );
 }
 
@@ -176,9 +245,14 @@ export function AppShell({
       >
         <div role="navigation" aria-label="Primary" className="flex size-full min-h-0 flex-col">
           <SidebarHeader>
-            <SidebarCloseButton />
+            <div className="flex items-center justify-between gap-2">
+              <SidebarBrand />
+              <SidebarCloseButton />
+            </div>
           </SidebarHeader>
-          <SidebarContent />
+          <SidebarContent>
+            <SessionsNav />
+          </SidebarContent>
           {/* The component's own w-auto cannot win against its
               data-horizontal:w-full (higher specificity), so with mx-2 the
               line overflows the sidebar; re-declaring the width in the same
