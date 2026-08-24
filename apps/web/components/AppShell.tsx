@@ -7,17 +7,24 @@ import type {
   PointerEvent as ReactPointerEvent,
   ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { RiCloseLine, RiSettings3Line } from "@remixicon/react";
+import { DshHarnessChip, DshLogo, DshWordmark } from "./dsh-logo";
+import { SESSIONS } from "../lib/sessions";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarProvider,
-  SidebarSeparator,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -31,7 +38,7 @@ import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
  * the box: the desktop fold (offcanvas), the mobile overlay drawer (Sheet),
  * the toggle button, and the keyboard shortcut. This component adds only
  * what the component cannot express: the drag-resize handle with its
- * clamps (160px minimum, 360px minimum center column), the preferences
+ * clamps (216px minimum, 360px minimum center column), the preferences
  * cookie channel, and the SSR markers the first paint renders from (no
  * flash). The stored width is capped in CSS (min against the center-min)
  * so a hand-edited cookie can never overflow the shell.
@@ -43,8 +50,11 @@ import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
  *   the header toggle; it never pushes the content.
  */
 
+// The brand row (whale 24 + "DeepSeek" 98 + harness chip 52, with 8px
+// gaps) is 190px plus the header padding, so the sidebar cannot narrow
+// below 216px - the full logo always fits, nothing hides at the minimum.
 const DEFAULT_WIDTH = 260;
-const MIN_WIDTH = 160;
+const MIN_WIDTH = 216;
 const CENTER_MIN = 360;
 const RESIZE_STEP = 16;
 
@@ -72,11 +82,105 @@ function SidebarCloseButton() {
       variant="ghost"
       size="icon-sm"
       aria-label="Close navigation"
-      className="self-start md:hidden"
+      className="md:hidden"
       onClick={toggleSidebar}
     >
       <RiCloseLine />
     </Button>
+  );
+}
+
+/**
+ * The brand (story #104): exactly the two svgs from the built-in web app's
+ * sidebar - the whale mark and the "DeepSeek" letterform wordmark, taken
+ * verbatim (dsh-logo.tsx) - as a link to the home page. On mobile the row
+ * sits in the drawer's header beside the close button, and navigating from
+ * the drawer closes it first.
+ */
+function SidebarBrand() {
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <Link
+      href="/"
+      aria-label="DeepSeek Harness"
+      onClick={() => {
+        if (isMobile) setOpenMobile(false);
+      }}
+      // Inline brand row: the whale, the "DeepSeek" wordmark, and the
+      // "harness" chip - at their intrinsic sizes with 8px gaps, flat (no
+      // padding box), content-width. The sidebar's minimum width (216px)
+      // fits the full row, so nothing hides or overflows.
+      className="flex w-fit items-center gap-2 text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground"
+    >
+      <DshLogo className="shrink-0" />
+      <DshWordmark className="shrink-0" />
+      <DshHarnessChip className="shrink-0" />
+    </Link>
+  );
+}
+
+/**
+ * The sessions list (story #104): one row per session linking to its
+ * /sessions/[id] page, with the current session highlighted. The rows come
+ * from lib/sessions.ts - the static stand-in for the bridge data channel
+ * (ADR-0003) - so swapping the data source later never touches this chrome.
+ */
+function SessionsNav() {
+  const pathname = usePathname();
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>Sessions</SidebarGroupLabel>
+      <SidebarMenu>
+        {SESSIONS.map((session) => (
+          <SidebarMenuItem key={session.id}>
+            <SidebarMenuButton
+              isActive={pathname === `/sessions/${session.id}`}
+              render={
+                <Link
+                  href={`/sessions/${session.id}`}
+                  onClick={() => {
+                    if (isMobile) setOpenMobile(false);
+                  }}
+                />
+              }
+            >
+              <span className="truncate">{session.title}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
+    </SidebarGroup>
+  );
+}
+
+/**
+ * The settings entry at the bottom of the side nav: a footer menu group
+ * with the gear icon and its label, active on /settings, closing the
+ * mobile drawer on navigation like the sessions rows.
+ */
+function SettingsNav() {
+  const pathname = usePathname();
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          isActive={pathname === "/settings"}
+          render={
+            <Link
+              href="/settings"
+              onClick={() => {
+                if (isMobile) setOpenMobile(false);
+              }}
+            />
+          }
+        >
+          <RiSettings3Line />
+          <span>Settings</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
   );
 }
 
@@ -89,7 +193,6 @@ export function AppShell({
   initialWidth?: number;
   initialFolded?: boolean;
 }) {
-  const router = useRouter();
   const isMobile = useIsMobile();
   const [width, setWidth] = useState(() =>
     Math.max(MIN_WIDTH, Math.round(initialWidth ?? DEFAULT_WIDTH)),
@@ -176,23 +279,16 @@ export function AppShell({
       >
         <div role="navigation" aria-label="Primary" className="flex size-full min-h-0 flex-col">
           <SidebarHeader>
-            <SidebarCloseButton />
+            <div className="flex items-center justify-between gap-2">
+              <SidebarBrand />
+              <SidebarCloseButton />
+            </div>
           </SidebarHeader>
-          <SidebarContent />
-          {/* The component's own w-auto cannot win against its
-              data-horizontal:w-full (higher specificity), so with mx-2 the
-              line overflows the sidebar; re-declaring the width in the same
-              variant group lets twMerge drop the w-full. */}
-          <SidebarSeparator className="data-horizontal:w-auto" />
-          <SidebarFooter className="items-center">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Settings"
-              onClick={() => router.push("/settings")}
-            >
-              <RiSettings3Line />
-            </Button>
+          <SidebarContent>
+            <SessionsNav />
+          </SidebarContent>
+          <SidebarFooter>
+            <SettingsNav />
           </SidebarFooter>
         </div>
         <div
