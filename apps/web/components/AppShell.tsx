@@ -8,7 +8,7 @@ import type {
   ReactNode,
 } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { RiCloseLine, RiSettings3Line } from "@remixicon/react";
 import { DshLogo, DshWordmark } from "./dsh-logo";
 import { SESSIONS } from "../lib/sessions";
@@ -25,7 +25,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  SidebarSeparator,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -149,6 +148,36 @@ function SessionsNav() {
   );
 }
 
+/**
+ * The settings entry at the bottom of the side nav: a footer menu group
+ * with the gear icon and its label, active on /settings, closing the
+ * mobile drawer on navigation like the sessions rows.
+ */
+function SettingsNav() {
+  const pathname = usePathname();
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          isActive={pathname === "/settings"}
+          render={
+            <Link
+              href="/settings"
+              onClick={() => {
+                if (isMobile) setOpenMobile(false);
+              }}
+            />
+          }
+        >
+          <RiSettings3Line />
+          <span>Settings</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+}
+
 export function AppShell({
   children,
   initialWidth,
@@ -158,7 +187,6 @@ export function AppShell({
   initialWidth?: number;
   initialFolded?: boolean;
 }) {
-  const router = useRouter();
   const isMobile = useIsMobile();
   const [width, setWidth] = useState(() =>
     Math.max(MIN_WIDTH, Math.round(initialWidth ?? DEFAULT_WIDTH)),
@@ -253,20 +281,8 @@ export function AppShell({
           <SidebarContent>
             <SessionsNav />
           </SidebarContent>
-          {/* The component's own w-auto cannot win against its
-              data-horizontal:w-full (higher specificity), so with mx-2 the
-              line overflows the sidebar; re-declaring the width in the same
-              variant group lets twMerge drop the w-full. */}
-          <SidebarSeparator className="data-horizontal:w-auto" />
-          <SidebarFooter className="items-center">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Settings"
-              onClick={() => router.push("/settings")}
-            >
-              <RiSettings3Line />
-            </Button>
+          <SidebarFooter>
+            <SettingsNav />
           </SidebarFooter>
         </div>
         <div

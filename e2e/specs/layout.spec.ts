@@ -167,12 +167,12 @@ test("drag handle resizes the side nav and the width persists", async ({ page })
   expect(persisted).toBeCloseTo(after!, 0);
 });
 
-test("the side nav settings button navigates to the settings page", async ({ page }) => {
+test("the side nav settings link navigates to the settings page", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(state.baseURL + "/");
-  // Settings is its own route: the gear navigates, and the page replaces the
-  // placeholder - no modal floating over anything.
-  await page.getByRole("button", { name: "Settings" }).click();
+  // Settings is its own route: the labeled footer menu link navigates, and
+  // the page replaces the placeholder - no modal floating over anything.
+  await page.getByRole("link", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Settings");
   await expect(page.getByRole("dialog")).toBeHidden();

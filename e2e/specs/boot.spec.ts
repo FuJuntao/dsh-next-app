@@ -21,7 +21,7 @@ test("serves the app shell and placeholder routes in a real browser", async ({ p
     await expect(page).toHaveTitle("Home");
     await expect(page.getByRole("banner")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
     await expect(page.getByRole("main")).toBeVisible();
   }).toPass({ timeout: 90_000 });
