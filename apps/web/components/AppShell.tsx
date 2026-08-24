@@ -200,7 +200,7 @@ export function AppShell({
           aria-orientation="vertical"
           aria-label="Resize sidebar"
           tabIndex={0}
-          className="absolute inset-y-0 right-0 z-10 hidden w-2.5 cursor-col-resize touch-none select-none outline-none md:block"
+          className="absolute inset-y-0 right-0 z-10 hidden w-2.5 cursor-col-resize touch-none select-none outline-hidden focus-visible:ring-1 focus-visible:ring-ring md:block"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerEnd}
@@ -212,7 +212,7 @@ export function AppShell({
         <header className="flex h-12 shrink-0 items-center gap-3 px-4">
           <SidebarTrigger
             aria-label="Toggle navigation"
-            aria-expanded={isMobile ? undefined : !folded || undefined}
+            aria-expanded={isMobile ? undefined : !folded}
           />
         </header>
         <Separator />
