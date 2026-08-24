@@ -28,7 +28,7 @@ test("a wide stored sidebar width cannot overflow a narrow viewport", async ({ p
       url: state.baseURL,
     },
   ]);
-  await page.goto(state.baseURL + "/sessions");
+  await page.goto(state.baseURL + "/");
   const sizes = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth,
     client: document.documentElement.clientWidth,
@@ -38,7 +38,7 @@ test("a wide stored sidebar width cannot overflow a narrow viewport", async ({ p
 
 test("no horizontal overflow at 320px", async ({ page }) => {
   await page.setViewportSize(NARROW);
-  await page.goto(state.baseURL + "/sessions");
+  await page.goto(state.baseURL + "/");
   const sizes = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth,
     client: document.documentElement.clientWidth,
@@ -59,7 +59,7 @@ test("the server renders the stored shell state, so first load cannot flash", as
     "Basic " + Buffer.from(`${state.auth.user}:${state.auth.password}`).toString("base64");
   const prefsCookie = (prefs: unknown): string =>
     "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify(prefs));
-  const res = await request.get(state.baseURL + "/sessions", {
+  const res = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
       cookie: prefsCookie({ layout: { width: 200, folded: true } }),
@@ -72,7 +72,7 @@ test("the server renders the stored shell state, so first load cannot flash", as
   expect(foldedHtml).toContain('data-state="collapsed"');
   expect(foldedHtml).toContain("--sidebar-width:min(200px, calc(100vw - 360px))");
   // Unfolded: the stored width renders into the first paint.
-  const openRes = await request.get(state.baseURL + "/sessions", {
+  const openRes = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
       cookie: prefsCookie({ layout: { width: 200, folded: false } }),
@@ -86,7 +86,7 @@ test("the server renders the stored shell state, so first load cannot flash", as
 
 test("header sits over the content column, not the side nav", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
-  await page.goto(state.baseURL + "/sessions");
+  await page.goto(state.baseURL + "/");
   const nav = await page.getByRole("navigation", { name: "Primary" }).boundingBox();
   const banner = await page.getByRole("banner").boundingBox();
   expect(nav).not.toBeNull();
@@ -101,7 +101,7 @@ test("header sits over the content column, not the side nav", async ({ page }) =
 
 test("side nav becomes an overlay drawer on mobile", async ({ page }) => {
   await page.setViewportSize(MOBILE);
-  await page.goto(state.baseURL + "/sessions");
+  await page.goto(state.baseURL + "/");
   const nav = page.getByRole("navigation", { name: "Primary" });
   // The drawer starts closed: the nav is not rendered and the header
   // hamburger (always visible) is the way in.
@@ -117,7 +117,7 @@ test("side nav becomes an overlay drawer on mobile", async ({ page }) => {
 
 test("side nav folds and unfolds on desktop", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
-  await page.goto(state.baseURL + "/sessions");
+  await page.goto(state.baseURL + "/");
   const nav = page.getByRole("navigation", { name: "Primary" });
   // The header toggle is always visible and folds/unfolds the nav.
   const toggle = page.getByRole("button", { name: "Toggle navigation" });
@@ -148,7 +148,7 @@ test("side nav folds and unfolds on desktop", async ({ page }) => {
 
 test("drag handle resizes the side nav and the width persists", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
-  await page.goto(state.baseURL + "/sessions");
+  await page.goto(state.baseURL + "/");
   const nav = page.getByRole("navigation", { name: "Primary" });
   const before = (await nav.boundingBox())?.width;
   expect(before).toBeGreaterThan(0);
@@ -169,7 +169,7 @@ test("drag handle resizes the side nav and the width persists", async ({ page })
 
 test("the side nav settings button navigates to the settings page", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
-  await page.goto(state.baseURL + "/sessions");
+  await page.goto(state.baseURL + "/");
   // Settings is its own route: the gear navigates, and the page replaces the
   // placeholder - no modal floating over anything.
   await page.getByRole("button", { name: "Settings" }).click();
@@ -186,4 +186,50 @@ test("/settings renders the settings page, not a modal", async ({ page }) => {
     page.getByText("Placeholder: settings content lands with the settings story."),
   ).toBeVisible();
   await expect(page.getByRole("dialog")).toBeHidden();
+});
+test("the side nav brand links to the home page", async ({ page }) => {
+  await page.setViewportSize(DESKTOP);
+  await page.goto(state.baseURL + "/sessions/1");
+  const brand = page.getByRole("link", { name: "DeepSeek Harness" });
+  await expect(brand).toBeVisible();
+  await brand.click();
+  await expect(page).toHaveURL(state.baseURL + "/");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
+});
+
+test("the side nav lists the sessions and highlights the current one", async ({ page }) => {
+  await page.setViewportSize(DESKTOP);
+  await page.goto(state.baseURL + "/");
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  for (const title of ["Session 1", "Session 2", "Session 3"]) {
+    await expect(nav.getByRole("link", { name: title })).toBeVisible();
+  }
+  // No session is selected on the home page...
+  await expect(nav.getByRole("link", { name: "Session 1" })).not.toHaveAttribute(
+    "data-active",
+    /.*/,
+  );
+  // ...and the current session is highlighted on its detail page.
+  await page.goto(state.baseURL + "/sessions/2");
+  await expect(nav.getByRole("link", { name: "Session 2" })).toHaveAttribute("data-active", /.*/);
+  await expect(nav.getByRole("link", { name: "Session 1" })).not.toHaveAttribute(
+    "data-active",
+    /.*/,
+  );
+  // Clicking a row navigates to its detail page.
+  await nav.getByRole("link", { name: "Session 3" }).click();
+  await expect(page).toHaveURL(/\/sessions\/3$/);
+});
+
+test("the mobile drawer shows the brand and the sessions list", async ({ page }) => {
+  await page.setViewportSize(MOBILE);
+  await page.goto(state.baseURL + "/");
+  await page.getByRole("button", { name: "Toggle navigation" }).click();
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await expect(nav.getByRole("link", { name: "DeepSeek Harness" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Session 1" })).toBeVisible();
+  // Navigating from the drawer closes it.
+  await nav.getByRole("link", { name: "Session 1" }).click();
+  await expect(page).toHaveURL(/\/sessions\/1$/);
+  await expect(nav).not.toBeInViewport();
 });
