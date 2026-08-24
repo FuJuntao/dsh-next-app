@@ -38,7 +38,7 @@ import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
  * the box: the desktop fold (offcanvas), the mobile overlay drawer (Sheet),
  * the toggle button, and the keyboard shortcut. This component adds only
  * what the component cannot express: the drag-resize handle with its
- * clamps (160px minimum, 360px minimum center column), the preferences
+ * clamps (216px minimum, 360px minimum center column), the preferences
  * cookie channel, and the SSR markers the first paint renders from (no
  * flash). The stored width is capped in CSS (min against the center-min)
  * so a hand-edited cookie can never overflow the shell.
@@ -50,9 +50,9 @@ import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
  *   the header toggle; it never pushes the content.
  */
 
-// The brand row (whale + "DeepSeek Harness" wordmark) is 188px plus
-// the header padding, so the sidebar cannot narrow below 216px - the
-// full logo always fits, nothing hides at the minimum.
+// The brand row (whale 24 + "DeepSeek" 98 + harness chip 52, with 8px
+// gaps) is 190px plus the header padding, so the sidebar cannot narrow
+// below 216px - the full logo always fits, nothing hides at the minimum.
 const DEFAULT_WIDTH = 260;
 const MIN_WIDTH = 216;
 const CENTER_MIN = 360;

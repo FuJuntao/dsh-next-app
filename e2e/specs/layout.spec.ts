@@ -59,7 +59,7 @@ test("the server renders the stored shell state, so first load cannot flash", as
     "Basic " + Buffer.from(`${state.auth.user}:${state.auth.password}`).toString("base64");
   const prefsCookie = (prefs: unknown): string =>
     "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify(prefs));
-  // The stored width must be above the shell's minimum (272px) - below
+  // The stored width must be above the shell's minimum (216px) - below
   // it the server clamps to the floor, by design.
   const res = await request.get(state.baseURL + "/", {
     headers: {
