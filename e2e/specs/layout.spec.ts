@@ -232,6 +232,37 @@ test("drag handle resizes the side nav and the width persists", async ({ page })
   expect(persisted).toBeCloseTo(after!, 0);
 });
 
+test("dragging starts from the stored width, not the default", async ({ page }) => {
+  await page.setViewportSize(DESKTOP);
+  // A stored width renders as a max(min(...)) expression on
+  // --sidebar-width; dragging must start from the rendered width and never
+  // snap to the 16rem default first (regression: the handle once parsed
+  // the raw custom-property expression and fell back to 256).
+  await page.context().addCookies([
+    {
+      name: "dsh-next-app.prefs",
+      value: encodeURIComponent(JSON.stringify({ layout: { width: 280 } })),
+      url: state.baseURL,
+    },
+  ]);
+  await page.goto(state.baseURL + "/");
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await expect(nav).toBeInViewport();
+  const before = (await nav.boundingBox())?.width;
+  // The stored width rendered (not the 16rem default).
+  expect(before!).toBeGreaterThan(270);
+  const handle = page.getByRole("separator", { name: "Resize sidebar" });
+  const box = (await handle.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 - 20, box.y + box.height / 2, { steps: 3 });
+  await page.mouse.up();
+  const after = (await nav.boundingBox())?.width;
+  // 20px of drag must cost exactly 20px of width - a snap to the default
+  // (256) would show up as a ~44px change instead.
+  expect(after!).toBeCloseTo(before! - 20, 0);
+});
+
 test("the side nav settings link navigates to the settings page", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(state.baseURL + "/");

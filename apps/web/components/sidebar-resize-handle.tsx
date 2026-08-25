@@ -54,10 +54,16 @@ export function SidebarResizeHandle() {
   const maxWidth = (min: number, centerMin: number): number =>
     Math.max(min, window.innerWidth - centerMin);
 
-  // The resolved width the CSS variable currently renders (a min()/max()
-  // value resolves to px in computed style). The wrapper always carries
-  // the variable: the component's own default (16rem) or the layout's cap.
+  // The sidebar's resolved width. --sidebar-width is a custom property:
+  // computed style returns the raw expression (e.g. the layout's
+  // max(min(...)) cap), not a px value, so parsing it would snap to the
+  // fallback. The gap track resolves the variable in layout, so measure
+  // it; the parse path covers a plain-px variable (mid-drag), and 256
+  // (the component's 16rem default) is the last-resort fallback.
   const readWidth = (el: HTMLElement): number => {
+    const gap = el.querySelector("[data-slot='sidebar-gap']");
+    const rect = gap?.getBoundingClientRect();
+    if (rect !== undefined && rect.width > 0) return rect.width;
     const parsed = parseFloat(getComputedStyle(el).getPropertyValue("--sidebar-width"));
     return Number.isFinite(parsed) ? parsed : 256;
   };
