@@ -49,13 +49,14 @@ export function encodePreferences(prefs: Preferences): string {
 }
 
 /**
- * Parse and validate the raw cookie value into preferences. A missing or
+ * Parse and validate a raw cookie value into preferences. A missing or
  * unparsable value reports undefined; a parsable one keeps exactly the
  * fields that validate (a finite positive width) and drops everything
  * else, so an absent field falls back to the component/CSS default
- * instead of a made-up value.
+ * instead of a made-up value. Server callers (layouts) pass the request
+ * cookie value here; client callers use readPreferences().
  */
-export function readPreferences(raw: string | undefined): Preferences | undefined {
+export function parsePreferences(raw: string | undefined): Preferences | undefined {
   if (raw === undefined) return undefined;
   let parsed: unknown;
   try {
@@ -73,13 +74,18 @@ export function readPreferences(raw: string | undefined): Preferences | undefine
   return { layout: prefs };
 }
 
-/** Read the preferences from the current document cookie (client only). */
-export function readCookiePreferences(): Preferences | undefined {
+/**
+ * Read the preferences from the current document cookie (client only).
+ * Client callers use this instead of threading the raw cookie value
+ * around; the server layout parses the request cookie with
+ * parsePreferences instead.
+ */
+export function readPreferences(): Preferences | undefined {
   const raw = document.cookie
     .split("; ")
     .find((entry) => entry.startsWith(PREFERENCES_COOKIE + "="))
     ?.slice(PREFERENCES_COOKIE.length + 1);
-  return readPreferences(raw);
+  return parsePreferences(raw);
 }
 
 /**
@@ -88,7 +94,7 @@ export function readCookiePreferences(): Preferences | undefined {
  */
 export function updatePreferences(patch: Preferences): void {
   try {
-    const current = readCookiePreferences();
+    const current = readPreferences();
     const prefs: Preferences = { layout: { ...current?.layout, ...patch.layout } };
     document.cookie =
       PREFERENCES_COOKIE + "=" + encodePreferences(prefs) + ";path=/;max-age=31536000;samesite=lax";

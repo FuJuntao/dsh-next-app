@@ -18,6 +18,16 @@ import "./sidebar-resize-handle.css";
  * (--sidebar-resize-step) are CSS variables in globals.css, the single
  * source for the shell's width constraints.
  */
+/**
+ * Fallbacks mirroring the shell's constraint variables - globals.css
+ * :root: --sidebar-min-width (216px), --sidebar-center-min (360px),
+ * --sidebar-resize-step (16px) - and the component's stock
+ * --sidebar-width (16rem = 256px). The CSS variables are the single
+ * source of truth; these literals only cover a stylesheet that fails to
+ * load them, so they live in one named place instead of inline.
+ */
+const CSS_FALLBACKS = { min: 216, centerMin: 360, step: 16, width: 256 };
+
 function clamp(value: number, lo: number, hi: number): number {
   return Math.min(Math.max(value, lo), hi);
 }
@@ -28,11 +38,11 @@ function readThemeVar(name: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-/** The shell's width clamps, from CSS; literal fallbacks if the stylesheet is broken. */
+/** The shell's width clamps, from CSS; fallbacks if the stylesheet is broken. */
 function shellClamps(): { min: number; centerMin: number } {
   return {
-    min: readThemeVar("--sidebar-min-width") ?? 216,
-    centerMin: readThemeVar("--sidebar-center-min") ?? 360,
+    min: readThemeVar("--sidebar-min-width") ?? CSS_FALLBACKS.min,
+    centerMin: readThemeVar("--sidebar-center-min") ?? CSS_FALLBACKS.centerMin,
   };
 }
 
@@ -44,7 +54,12 @@ function persistWidth(width: number): void {
 export function SidebarResizeHandle() {
   const { isMobile } = useSidebar();
   // Fallbacks for the initial value; overwritten at pointerdown from CSS.
-  const dragStart = useRef({ x: 0, width: 256, min: 216, centerMin: 360 });
+  const dragStart = useRef({
+    x: 0,
+    width: CSS_FALLBACKS.width,
+    min: CSS_FALLBACKS.min,
+    centerMin: CSS_FALLBACKS.centerMin,
+  });
   // The provider wrapper the handle resizes; null while not dragging.
   const wrapperRef = useRef<HTMLElement | null>(null);
 
@@ -58,14 +73,10 @@ export function SidebarResizeHandle() {
   // computed style returns the raw expression (e.g. the layout's
   // max(min(...)) cap), not a px value, so parsing it would snap to the
   // fallback. The gap track resolves the variable in layout, so measure
-  // it; the parse path covers a plain-px variable (mid-drag), and 256
-  // (the component's 16rem default) is the last-resort fallback.
+  // it; CSS_FALLBACKS.width only covers a missing or zero-width track.
   const readWidth = (el: HTMLElement): number => {
-    const gap = el.querySelector("[data-slot='sidebar-gap']");
-    const rect = gap?.getBoundingClientRect();
-    if (rect !== undefined && rect.width > 0) return rect.width;
-    const parsed = parseFloat(getComputedStyle(el).getPropertyValue("--sidebar-width"));
-    return Number.isFinite(parsed) ? parsed : 256;
+    const rect = el.querySelector("[data-slot='sidebar-gap']")?.getBoundingClientRect();
+    return rect !== undefined && rect.width > 0 ? rect.width : CSS_FALLBACKS.width;
   };
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -101,7 +112,7 @@ export function SidebarResizeHandle() {
     const wrapper = wrapperOf(event.currentTarget);
     if (wrapper === null) return;
     const clamps = shellClamps();
-    const step = readThemeVar("--sidebar-resize-step") ?? 16;
+    const step = readThemeVar("--sidebar-resize-step") ?? CSS_FALLBACKS.step;
     const next = clamp(
       readWidth(wrapper) + (event.key === "ArrowLeft" ? -step : step),
       clamps.min,

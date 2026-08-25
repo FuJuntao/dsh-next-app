@@ -5,7 +5,7 @@ import { DM_Sans } from "next/font/google";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell, AppSidebar } from "../components/AppShell";
-import { PREFERENCES_COOKIE, readPreferences } from "../lib/preferences";
+import { PREFERENCES_COOKIE, parsePreferences } from "../lib/preferences";
 import "./globals.css";
 
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
@@ -29,7 +29,7 @@ export default async function RootLayout({
   // uncontrolled one: the fold is transient UI state (the nav opens open
   // on every load), so nothing about it is read or persisted here.
   const cookieStore = await cookies();
-  const prefs = readPreferences(cookieStore.get(PREFERENCES_COOKIE)?.value);
+  const prefs = parsePreferences(cookieStore.get(PREFERENCES_COOKIE)?.value);
   const width = prefs?.layout.width;
   const widthStyle =
     width === undefined
