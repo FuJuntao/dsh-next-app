@@ -48,7 +48,8 @@ function shellClamps(): { min: number; centerMin: number } {
 
 /** Persist the width to the preferences cookie the server renders from (no flash). */
 function persistWidth(width: number): void {
-  updatePreferences({ layout: { width: Math.round(width) } });
+  // Fire-and-forget: updatePreferences swallows storage failures itself.
+  void updatePreferences({ layout: { width: Math.round(width) } });
 }
 
 export function SidebarResizeHandle() {

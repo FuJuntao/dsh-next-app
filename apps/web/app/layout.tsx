@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { DM_Sans } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell, AppSidebar } from "../components/AppShell";
 import { ShellSidebarProvider } from "../components/shell-sidebar-provider";
-import { PREFERENCES_COOKIE, parsePreferences } from "../lib/preferences";
+import { readPreferences } from "../lib/preferences";
 import "./globals.css";
 
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
@@ -20,13 +19,13 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // The fold and the width both ride the preferences cookie
-  // (lib/preferences.ts); the layout seeds the shell's controlled provider
-  // (shell-sidebar-provider.tsx) from the stored values for the first
-  // paint, so a reload paints the stored state directly instead of
-  // flashing the defaults. An absent field simply leaves the shell on its
-  // component/CSS default (nav open, --sidebar-width 16rem).
-  const cookieStore = await cookies();
-  const prefs = parsePreferences(cookieStore.get(PREFERENCES_COOKIE)?.value);
+  // (lib/preferences.ts); readPreferences reads it internally (the
+  // request cookie store here) and the layout seeds the shell's
+  // controlled provider for the first paint, so a reload paints the
+  // stored state directly instead of flashing the defaults. An absent
+  // field simply leaves the shell on its component/CSS default (nav
+  // open, --sidebar-width 16rem).
+  const prefs = await readPreferences();
   return (
     <html lang="en" className={dmSans.variable}>
       <body>

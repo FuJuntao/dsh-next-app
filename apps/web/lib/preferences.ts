@@ -56,9 +56,9 @@ export function encodePreferences(prefs: Preferences): string {
  * unparsable value reports undefined; a parsable one keeps exactly the
  * fields that validate (a finite positive width, a boolean folded flag)
  * and drops everything else, so an absent field falls back to the
- * component/CSS default instead of a made-up value. Server callers
- * (layouts) pass the request cookie value here; client callers use
- * readPreferences().
+ * component/CSS default instead of a made-up value. The parser behind
+ * readPreferences(); callers normally use that instead of reading the
+ * cookie themselves.
  */
 export function parsePreferences(raw: string | undefined): Preferences | undefined {
   if (raw === undefined) return undefined;
@@ -84,12 +84,22 @@ export function parsePreferences(raw: string | undefined): Preferences | undefin
 }
 
 /**
- * Read the preferences from the current document cookie (client only).
- * Client callers use this instead of threading the raw cookie value
- * around; the server layout parses the request cookie with
- * parsePreferences instead.
+ * Read the preferences, reading the cookie internally in both
+ * environments: the request cookie store (next/headers) on the server,
+ * the document cookie on the client - so layouts and client code share
+ * one call and never thread the raw value around. Returns undefined when
+ * no preference exists (the shell then falls back to its CSS/component
+ * defaults).
  */
-export function readPreferences(): Preferences | undefined {
+export async function readPreferences(): Promise<Preferences | undefined> {
+  if (typeof document === "undefined") {
+    // Server: the request cookie store (Next layout). The dynamic import
+    // keeps next/headers out of the client bundle - this branch never
+    // runs in a browser.
+    const { cookies } = await import("next/headers");
+    const store = await cookies();
+    return parsePreferences(store.get(PREFERENCES_COOKIE)?.value);
+  }
   const raw = document.cookie
     .split("; ")
     .find((entry) => entry.startsWith(PREFERENCES_COOKIE + "="))
@@ -101,9 +111,9 @@ export function readPreferences(): Preferences | undefined {
  * Merge a patch into the stored preferences and write the cookie (client
  * only). Writers merge so layout fields never clobber each other.
  */
-export function updatePreferences(patch: Preferences): void {
+export async function updatePreferences(patch: Preferences): Promise<void> {
   try {
-    const current = readPreferences();
+    const current = await readPreferences();
     const prefs: Preferences = { layout: { ...current?.layout, ...patch.layout } };
     document.cookie =
       PREFERENCES_COOKIE + "=" + encodePreferences(prefs) + ";path=/;max-age=31536000;samesite=lax";
