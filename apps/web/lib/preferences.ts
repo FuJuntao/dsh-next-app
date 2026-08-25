@@ -1,17 +1,22 @@
 /**
- * User-side preferences channel.
+ * User-side preferences channel (client-safe core).
  *
  * One namespaced cookie (dsh-next-app.prefs) carries a small, versioned JSON
- * object; the server reads it in layouts so the first HTML paint already
- * reflects stored preferences (no flash), and client components write it on
- * every change. The value is URL-encoded JSON: encodeURIComponent output is
- * entirely within the cookie-octet set, so no escaping is lost on the wire.
+ * object; the server reads it in the shell provider so the first HTML paint
+ * already reflects stored preferences (no flash), and client components
+ * write it on every change. The value is URL-encoded JSON:
+ * encodeURIComponent output is entirely within the cookie-octet set, so no
+ * escaping is lost on the wire.
  *
  * Validation is deliberate and strict: unknown keys are dropped and each
  * known field is rebuilt only when it parses, so a hand-edited or stale
  * cookie can never break the shell - an absent field simply leaves the
  * shell on its CSS/component default. (Signing/tamper protection and
  * schema growth are a dedicated story.)
+ *
+ * This module is shared with the client bundle (the resize handle writes
+ * through updatePreferences), so it must not import server-only APIs. The
+ * server-side read lives in preferences-server.ts (next/headers).
  *
  * The width constraints (minimum, center-column minimum, resize step) are
  * NOT here: they are CSS variables in globals.css, the single source the
@@ -20,10 +25,10 @@
  * width preference exists.
  *
  * The fold state lives here too: the shell's controlled client provider
- * (shell-sidebar-provider.tsx) seeds it from the prefs cookie for the
- * first paint (no flash) and persists every toggle through
- * updatePreferences - the only observer the Sidebar offers for its open
- * state. The stock sidebar_state cookie is never read.
+ * (shell-sidebar-client.tsx) seeds it from the prefs cookie for the first
+ * paint (no flash) and persists every toggle through updatePreferences -
+ * the only observer the Sidebar offers for its open state. The stock
+ * sidebar_state cookie is never read.
  */
 
 /** The cookie carrying the preferences object. */
@@ -57,8 +62,8 @@ export function encodePreferences(prefs: Preferences): string {
  * fields that validate (a finite positive width, a boolean folded flag)
  * and drops everything else, so an absent field falls back to the
  * component/CSS default instead of a made-up value. The parser behind
- * readPreferences(); callers normally use that instead of reading the
- * cookie themselves.
+ * readPreferences() (preferences-server.ts); callers normally use that
+ * instead of reading the cookie themselves.
  */
 export function parsePreferences(raw: string | undefined): Preferences | undefined {
   if (raw === undefined) return undefined;
@@ -83,28 +88,12 @@ export function parsePreferences(raw: string | undefined): Preferences | undefin
   return { layout: prefs };
 }
 
-/**
- * Read the preferences, reading the cookie internally in both
- * environments: the request cookie store (next/headers) on the server,
- * the document cookie on the client - so layouts and client code share
- * one call and never thread the raw value around. Returns undefined when
- * no preference exists (the shell then falls back to its CSS/component
- * defaults).
- */
-export async function readPreferences(): Promise<Preferences | undefined> {
-  if (typeof document === "undefined") {
-    // Server: the request cookie store (Next layout). The dynamic import
-    // keeps next/headers out of the client bundle - this branch never
-    // runs in a browser.
-    const { cookies } = await import("next/headers");
-    const store = await cookies();
-    return parsePreferences(store.get(PREFERENCES_COOKIE)?.value);
-  }
-  const raw = document.cookie
+/** The current document cookie value for the preferences cookie (client). */
+function readDocumentCookie(): string | undefined {
+  return document.cookie
     .split("; ")
     .find((entry) => entry.startsWith(PREFERENCES_COOKIE + "="))
     ?.slice(PREFERENCES_COOKIE.length + 1);
-  return parsePreferences(raw);
 }
 
 /**
@@ -113,7 +102,7 @@ export async function readPreferences(): Promise<Preferences | undefined> {
  */
 export async function updatePreferences(patch: Preferences): Promise<void> {
   try {
-    const current = await readPreferences();
+    const current = parsePreferences(readDocumentCookie());
     const prefs: Preferences = { layout: { ...current?.layout, ...patch.layout } };
     document.cookie =
       PREFERENCES_COOKIE + "=" + encodePreferences(prefs) + ";path=/;max-age=31536000;samesite=lax";
