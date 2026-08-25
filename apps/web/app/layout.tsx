@@ -3,6 +3,7 @@ import { DM_Sans } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell, AppSidebar } from "../components/AppShell";
 import { ShellSidebarProvider } from "../components/shell-sidebar-provider";
+import { readPreferences } from "../lib/preferences-server";
 import "./globals.css";
 
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
@@ -17,14 +18,21 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // The shell provider owns all preference logic: it reads the prefs
-  // cookie server-side (no flash) and seeds the controlled client
-  // provider, so a reload paints the stored fold and width directly.
+  // The fold and the width both ride the preferences cookie
+  // (lib/preferences.ts); the server reads it (lib/preferences-server.ts)
+  // and passes the stored values as defaults to the shell's controlled
+  // provider, so the first HTML paint renders the stored state directly
+  // (no flash). An absent field simply leaves the shell on its
+  // component/CSS default (nav open, --sidebar-width 16rem).
+  const prefs = await readPreferences();
   return (
     <html lang="en" className={dmSans.variable}>
       <body>
         <TooltipProvider delay={0}>
-          <ShellSidebarProvider>
+          <ShellSidebarProvider
+            initialFolded={prefs?.layout.folded ?? false}
+            initialWidth={prefs?.layout.width}
+          >
             <AppSidebar />
             <AppShell>{children}</AppShell>
           </ShellSidebarProvider>
