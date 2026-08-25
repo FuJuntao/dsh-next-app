@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { DM_Sans } from "next/font/google";
+import { Noto_Sans } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell, AppSidebar } from "../components/AppShell";
 import { ShellSidebarProvider } from "../components/shell-sidebar-provider";
 import { readPreferences } from "../lib/preferences-server";
 import "./globals.css";
 
-const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
+const notoSans = Noto_Sans({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "dsh-next-app",
@@ -20,7 +20,7 @@ export default async function RootLayout({
 }>) {
   const prefs = await readPreferences();
   return (
-    <html lang="en" className={dmSans.variable}>
+    <html lang="en" className={notoSans.variable}>
       <body>
         <TooltipProvider delay={0}>
           <ShellSidebarProvider
