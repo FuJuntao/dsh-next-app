@@ -8,9 +8,10 @@
  * encodeURIComponent output is entirely within the cookie-octet set, so no
  * escaping is lost on the wire.
  *
- * The cookie itself is parsed and serialized with the `cookie` package
- * (jshttp) - the same parser the server ecosystem uses - instead of
- * hand-rolled document.cookie string surgery.
+ * The cookie transport is hand-rolled and deliberately minimal: the value
+ * is URL-encoded JSON, which never contains "; " or "=", so a prefix scan
+ * and a plain attribute string are exact for our own writes; the value
+ * itself is guarded by the schema below.
  *
  * Validation is deliberate: the schema sanitizes the value (invalid
  * fields and unknown keys are dropped, valid ones survive - autofix), so
@@ -36,7 +37,6 @@
  */
 
 import Schema from "@deepseek-ai/schemastery";
-import { parse, serialize } from "cookie";
 
 /**
  * The preferences schema (schemastery - the same library the bundle's
@@ -112,7 +112,12 @@ export function parsePreferences(raw: string | undefined): Preferences | undefin
 
 /** The current document cookie value for the preferences cookie (client). */
 function readDocumentCookie(): string | undefined {
-  return parse(document.cookie)[PREFERENCES_COOKIE];
+  // Our value (URL-encoded JSON) never contains "; " or "=", so the
+  // prefix scan is exact; see the module comment.
+  return document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(PREFERENCES_COOKIE + "="))
+    ?.slice(PREFERENCES_COOKIE.length + 1);
 }
 
 /**
@@ -123,11 +128,8 @@ export async function updatePreferences(patch: Preferences): Promise<void> {
   try {
     const current = parsePreferences(readDocumentCookie());
     const prefs: Preferences = { layout: { ...current?.layout, ...patch.layout } };
-    document.cookie = serialize(PREFERENCES_COOKIE, encodePreferences(prefs), {
-      path: "/",
-      maxAge: 31536000,
-      sameSite: "lax",
-    });
+    document.cookie =
+      PREFERENCES_COOKIE + "=" + encodePreferences(prefs) + ";path=/;max-age=31536000;samesite=lax";
   } catch {
     // Storage unavailable: the in-memory state still applies.
   }
