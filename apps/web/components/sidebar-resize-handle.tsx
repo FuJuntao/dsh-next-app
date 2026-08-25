@@ -5,11 +5,12 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import { useSidebar } from "@/components/ui/sidebar";
 import {
   CENTER_MIN,
-  DEFAULT_WIDTH,
+  DEFAULT_LAYOUT_WIDTH,
   MIN_WIDTH,
+  PREFERENCES_COOKIE,
   RESIZE_STEP,
-  WIDTH_COOKIE,
-} from "../lib/sidebar-width";
+  encodePreferences,
+} from "../lib/preferences";
 
 /**
  * The sidebar drag-resize handle. The shadcn Sidebar sizes itself from
@@ -19,17 +20,21 @@ import {
  * (the wrapper's data-dragging attribute disables the width transitions,
  * globals.css), and persists the result to the width cookie on release.
  * Pointer and keyboard resize are clamped to the shell's minimum and the
- * center column's minimum.
+ * center column's minimum; the width persists to the preferences cookie
+ * (lib/preferences.ts).
  */
 function clamp(value: number, lo: number, hi: number): number {
   return Math.min(Math.max(value, lo), hi);
 }
 
-/** Persist the width to the cookie the server renders from (no flash). */
+/** Persist the width to the preferences cookie the server renders from (no flash). */
 function persistWidth(width: number): void {
   try {
     document.cookie =
-      WIDTH_COOKIE + "=" + Math.round(width) + ";path=/;max-age=31536000;samesite=lax";
+      PREFERENCES_COOKIE +
+      "=" +
+      encodePreferences({ layout: { width: Math.round(width) } }) +
+      ";path=/;max-age=31536000;samesite=lax";
   } catch {
     // Storage unavailable: the in-memory width still applies.
   }
@@ -37,7 +42,7 @@ function persistWidth(width: number): void {
 
 export function SidebarResizeHandle() {
   const { isMobile } = useSidebar();
-  const dragStart = useRef({ x: 0, width: DEFAULT_WIDTH });
+  const dragStart = useRef({ x: 0, width: DEFAULT_LAYOUT_WIDTH });
   // The provider wrapper the handle resizes; null while not dragging.
   const wrapperRef = useRef<HTMLElement | null>(null);
 
@@ -50,7 +55,7 @@ export function SidebarResizeHandle() {
   // resolves to px in computed style).
   const readWidth = (el: HTMLElement): number => {
     const parsed = parseFloat(getComputedStyle(el).getPropertyValue("--sidebar-width"));
-    return Number.isFinite(parsed) ? parsed : DEFAULT_WIDTH;
+    return Number.isFinite(parsed) ? parsed : DEFAULT_LAYOUT_WIDTH;
   };
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {

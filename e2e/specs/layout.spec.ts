@@ -23,8 +23,8 @@ test("a wide stored sidebar width cannot overflow a narrow viewport", async ({ p
   // min() the layout renders (center column never below 360px).
   await page.context().addCookies([
     {
-      name: "dsh-next-app.sidebar-width",
-      value: "2000",
+      name: "dsh-next-app.prefs",
+      value: encodeURIComponent(JSON.stringify({ layout: { width: 2000 } })),
       url: state.baseURL,
     },
   ]);
@@ -51,20 +51,22 @@ test("the server renders the stored shell state, so first load cannot flash", as
 }) => {
   // The fold state rides the stock sidebar_state cookie (a "true"/"false"
   // boolean string) the Sidebar writes on every toggle, and the sidebar
-  // width rides its own cookie (dsh-next-app.sidebar-width); the server
-  // reads both in the layout and renders them into the first HTML, so a
-  // reload paints the stored state directly instead of flashing the
-  // defaults. The shadcn Sidebar renders its open state (data-state) and
-  // the shell renders the width cap (--sidebar-width) from the same
-  // cookies.
+  // width rides the preferences cookie (dsh-next-app.prefs, URL-encoded
+  // JSON); the server reads both in the layout and renders them into the
+  // first HTML, so a reload paints the stored state directly instead of
+  // flashing the defaults. The shadcn Sidebar renders its open state
+  // (data-state) and the shell renders the width cap (--sidebar-width)
+  // from the same cookies.
   const auth =
     "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
+  const prefsCookie = (width: number): string =>
+    "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify({ layout: { width } }));
   // The stored width must be above the shell's minimum (216px) - below
   // it the server clamps to the floor, by design.
   const res = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
-      cookie: "sidebar_state=false; dsh-next-app.sidebar-width=280",
+      cookie: "sidebar_state=false; " + prefsCookie(280),
     },
   });
   expect(res.status()).toBe(200);
@@ -76,7 +78,7 @@ test("the server renders the stored shell state, so first load cannot flash", as
   const openRes = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
-      cookie: "sidebar_state=true; dsh-next-app.sidebar-width=280",
+      cookie: "sidebar_state=true; " + prefsCookie(280),
     },
   });
   const openHtml = await openRes.text();
@@ -163,7 +165,7 @@ test("drag handle resizes the side nav and the width persists", async ({ page })
   const after = (await nav.boundingBox())?.width;
   expect(after).toBeDefined();
   expect(after!).toBeLessThan(before!);
-  // The width persists across reloads (the width cookie, server-rendered).
+  // The width persists across reloads (the preferences cookie, server-rendered).
   await page.reload();
   const persisted = (await nav.boundingBox())?.width;
   expect(persisted).toBeCloseTo(after!, 0);
