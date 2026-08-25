@@ -18,12 +18,6 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // The fold and the width both ride the preferences cookie
-  // (lib/preferences.ts); the server reads it (lib/preferences-server.ts)
-  // and passes the stored values as defaults to the shell's controlled
-  // provider, so the first HTML paint renders the stored state directly
-  // (no flash). An absent field simply leaves the shell on its
-  // component/CSS default (nav open, --sidebar-width 16rem).
   const prefs = await readPreferences();
   return (
     <html lang="en" className={dmSans.variable}>

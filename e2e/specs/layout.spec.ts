@@ -300,6 +300,38 @@ test("dragging starts from the stored width, not the default", async ({ page }) 
   expect(after!).toBeCloseTo(before! - 20, 0);
 });
 
+test("keyboard resize while folded does not clobber the stored width", async ({ page }) => {
+  await page.setViewportSize(DESKTOP);
+  // A stored 920px width renders as a max(min(...)) expression; while the
+  // nav is folded the gap track is 0, so a keyboard resize must not read
+  // the fallback and persist it over the stored width (regression: the
+  // off-screen handle stayed tab-focusable and ArrowRight rewrote the
+  // prefs cookie to the fallback-derived width).
+  await page.context().addCookies([
+    {
+      name: "dsh-next-app.prefs",
+      value: encodeURIComponent(JSON.stringify({ layout: { width: 920 } })),
+      url: state.baseURL,
+    },
+  ]);
+  await page.goto(state.baseURL + "/");
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  const handle = page.getByRole("separator", { name: "Resize sidebar" });
+  await expect(nav).toBeInViewport();
+  const before = (await nav.boundingBox())?.width;
+  expect(before!).toBeGreaterThan(270);
+  await page.getByRole("button", { name: "Toggle navigation" }).click();
+  await expect(nav).not.toBeInViewport();
+  // The off-screen handle stays in the tab order; pressing an arrow while
+  // folded must be a no-op.
+  await handle.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.getByRole("button", { name: "Toggle navigation" }).click();
+  await expect(nav).toBeInViewport();
+  const after = (await nav.boundingBox())?.width;
+  expect(after).toBeCloseTo(before!, 0);
+});
+
 test("the side nav settings link navigates to the settings page", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(state.baseURL + "/");

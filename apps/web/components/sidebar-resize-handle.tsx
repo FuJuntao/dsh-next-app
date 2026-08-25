@@ -53,7 +53,7 @@ function persistWidth(width: number): void {
 }
 
 export function SidebarResizeHandle() {
-  const { isMobile } = useSidebar();
+  const { isMobile, state } = useSidebar();
   // Fallbacks for the initial value; overwritten at pointerdown from CSS.
   const dragStart = useRef({
     x: 0,
@@ -110,6 +110,10 @@ export function SidebarResizeHandle() {
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
+    // While folded the gap track is 0, so the width would read as the
+    // fallback and clobber the stored width; the handle is off-screen but
+    // still tab-focusable (offcanvas keeps the nav in the tab order).
+    if (state === "collapsed") return;
     const wrapper = wrapperOf(event.currentTarget);
     if (wrapper === null) return;
     const clamps = shellClamps();
