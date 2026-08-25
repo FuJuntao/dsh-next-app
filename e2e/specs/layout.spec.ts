@@ -20,11 +20,12 @@ test("a wide stored sidebar width cannot overflow a narrow viewport", async ({ p
   await page.setViewportSize(DESKTOP);
   // A cookie written on a wide screen (or hand-edited) must not overflow the
   // shell on a smaller viewport: the sidebar width is capped by the CSS
-  // min() the shell renders (center column never below 360px).
+  // min()/max() the layout renders against the constraint variables
+  // (center column never below the --sidebar-center-min variable).
   await page.context().addCookies([
     {
       name: "dsh-next-app.prefs",
-      value: encodeURIComponent(JSON.stringify({ layout: { width: 2000, folded: false } })),
+      value: encodeURIComponent(JSON.stringify({ layout: { width: 2000 } })),
       url: state.baseURL,
     },
   ]);
@@ -46,17 +47,14 @@ test("no horizontal overflow at 320px", async ({ page }) => {
   expect(sizes.scroll).toBeLessThanOrEqual(sizes.client);
 });
 
-test("the server renders the stored shell state, so first load cannot flash", async ({
-  request,
-}) => {
-  // The shell state (width + folded) rides the namespaced preferences
-  // cookie (dsh-next-app.prefs, URL-encoded JSON) the browser writes on every
-  // change, and the server renders it into the first HTML: a reload paints
-  // the stored state directly instead of flashing the defaults. The shadcn
-  // Sidebar renders its open state (data-state) and the shell renders the
-  // width cap (--sidebar-width) from the same cookie.
+test("a stored width preference renders into the first paint, so no flash", async ({ request }) => {
+  // The width rides the preferences cookie (dsh-next-app.prefs, URL-encoded
+  // JSON); the server reads it in the layout and renders it into the first
+  // HTML, so a reload paints the stored width directly instead of flashing
+  // the defaults. (The fold rides the same cookie - see the fold-persists
+  // spec - and defaults to open when absent.)
   const auth =
-    "Basic " + Buffer.from(`${state.auth.user}:${state.auth.password}`).toString("base64");
+    "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
   const prefsCookie = (prefs: unknown): string =>
     "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify(prefs));
   // The stored width must be above the shell's minimum (216px) - below
@@ -64,26 +62,88 @@ test("the server renders the stored shell state, so first load cannot flash", as
   const res = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
-      cookie: prefsCookie({ layout: { width: 280, folded: true } }),
+      cookie: prefsCookie({ layout: { width: 280 } }),
     },
   });
   expect(res.status()).toBe(200);
-  const foldedHtml = await res.text();
+  const html = await res.text();
+  expect(html).toContain('data-state="expanded"');
+  expect(html).toContain(
+    "--sidebar-width:max(min(280px,calc(100vw - var(--sidebar-center-min))),var(--sidebar-min-width))",
+  );
+});
+
+test("the fold persists: the shell renders the stored fold state on every load", async ({
+  request,
+}) => {
+  // The fold rides the preferences cookie (dsh-next-app.prefs, URL-encoded
+  // JSON) like the width: the layout seeds the controlled provider from
+  // prefs.layout.folded for the first paint, and a reload paints the
+  // stored fold directly instead of flashing. A stale stock sidebar_state
+  // cookie is ignored - the prefs cookie is the only source.
+  const auth =
+    "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
+  const prefsCookie = (prefs: unknown): string =>
+    "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify(prefs));
   // Folded: the sidebar renders collapsed (off-screen) from the first paint.
-  expect(foldedHtml).toContain('data-folded="true"');
-  expect(foldedHtml).toContain('data-state="collapsed"');
-  expect(foldedHtml).toContain("--sidebar-width:min(280px, calc(100vw - 360px))");
-  // Unfolded: the stored width renders into the first paint.
+  const foldedRes = await request.get(state.baseURL + "/", {
+    headers: { authorization: auth, cookie: prefsCookie({ layout: { folded: true } }) },
+  });
+  expect(foldedRes.status()).toBe(200);
+  expect(await foldedRes.text()).toContain('data-state="collapsed"');
+  // Open: the default renders expanded.
   const openRes = await request.get(state.baseURL + "/", {
+    headers: { authorization: auth, cookie: prefsCookie({ layout: { folded: false } }) },
+  });
+  expect(openRes.status()).toBe(200);
+  expect(await openRes.text()).toContain('data-state="expanded"');
+  // A stale fold cookie (the stock sidebar_state the component writes) must
+  // not influence the render.
+  const staleRes = await request.get(state.baseURL + "/", {
+    headers: { authorization: auth, cookie: "sidebar_state=false" },
+  });
+  expect(staleRes.status()).toBe(200);
+  expect(await staleRes.text()).toContain('data-state="expanded"');
+});
+
+test("a malformed preference field is dropped; valid fields still apply", async ({ request }) => {
+  // The sanitize contract: an invalid field (folded: "yes") is removed by
+  // the schema's autofix while the valid width still applies - the shell
+  // renders the width cap and the default open state. Unknown keys are
+  // dropped the same way.
+  const auth =
+    "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
+  const prefsCookie = (prefs: unknown): string =>
+    "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify(prefs));
+  const res = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
-      cookie: prefsCookie({ layout: { width: 280, folded: false } }),
+      cookie: prefsCookie({ layout: { width: 280, folded: "yes", extra: 1 } }),
     },
   });
-  const openHtml = await openRes.text();
-  expect(openHtml).not.toContain('data-folded="true"');
-  expect(openHtml).toContain('data-state="expanded"');
-  expect(openHtml).toContain("--sidebar-width:min(280px, calc(100vw - 360px))");
+  expect(res.status()).toBe(200);
+  const html = await res.text();
+  expect(html).toContain(
+    "--sidebar-width:max(min(280px,calc(100vw - var(--sidebar-center-min))),var(--sidebar-min-width))",
+  );
+  expect(html).toContain('data-state="expanded"');
+});
+
+test("without a width preference the shell falls back to the component's CSS default", async ({
+  request,
+}) => {
+  // No preferences cookie: the layout sets no --sidebar-width at all, so
+  // the shadcn Sidebar's own CSS default (16rem) styles the shell and the
+  // nav renders open - the constraint variables stay untouched.
+  const auth =
+    "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
+  const res = await request.get(state.baseURL + "/", {
+    headers: { authorization: auth },
+  });
+  expect(res.status()).toBe(200);
+  const html = await res.text();
+  expect(html).toContain("--sidebar-width:16rem");
+  expect(html).not.toContain("--sidebar-width:max(min(");
 });
 
 test("header sits over the content column, not the side nav", async ({ page }) => {
@@ -112,8 +172,46 @@ test("side nav becomes an overlay drawer on mobile", async ({ page }) => {
   await expect(toggle).toBeVisible();
   await toggle.click();
   await expect(nav).toBeInViewport();
-  // The drawer's own close button (inside the nav) closes it again.
+  // The drawer's own close button (the app's, in the drawer header)
+  // closes it again.
   await page.getByRole("button", { name: "Close navigation" }).click();
+  await expect(nav).not.toBeInViewport();
+});
+
+test("mobile drawer: no resize handle, and the header toggle is inert while the drawer is open", async ({
+  page,
+}) => {
+  await page.setViewportSize(MOBILE);
+  await page.goto(state.baseURL + "/");
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  // Below the desktop breakpoint the nav is a fixed-width overlay drawer:
+  // there is no resize handle at all.
+  await expect(page.getByRole("separator", { name: "Resize sidebar" })).toHaveCount(0);
+  // The header toggle opens the drawer...
+  const toggle = page.getByRole("button", { name: "Toggle navigation" });
+  await toggle.click();
+  await expect(nav).toBeInViewport();
+  // ...and while it is open the background is inert (a modal Sheet): the
+  // toggle is hidden from the accessibility tree and cannot be clicked -
+  // the drawer closes via its own close button, the backdrop, or Esc.
+  await expect(page.getByRole("button", { name: "Toggle navigation" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(nav).not.toBeInViewport();
+  // Closing restores the toggle: it opens the drawer again.
+  await expect(page.getByRole("button", { name: "Toggle navigation" })).toBeVisible();
+  await toggle.click();
+  await expect(nav).toBeInViewport();
+});
+
+test("mobile drawer closes on backdrop click", async ({ page }) => {
+  await page.setViewportSize(MOBILE);
+  await page.goto(state.baseURL + "/");
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await page.getByRole("button", { name: "Toggle navigation" }).click();
+  await expect(nav).toBeInViewport();
+  // The drawer panel is 18rem wide; clicking the backdrop strip to its
+  // right dismisses the dialog.
+  await page.mouse.click(360, 400);
   await expect(nav).not.toBeInViewport();
 });
 
@@ -142,7 +240,9 @@ test("side nav folds and unfolds on desktop", async ({ page }) => {
   await expect(nav).not.toBeInViewport();
   await toggle.click();
   await expect(nav).toBeInViewport();
-  // The folded state persists across reloads (the shell cookie, server-rendered).
+  // The folded state persists across reloads (the preferences cookie,
+  // server-rendered): the controlled provider seeds from
+  // prefs.layout.folded for the first paint.
   await toggle.click();
   await page.reload();
   await expect(nav).not.toBeInViewport();
@@ -163,10 +263,73 @@ test("drag handle resizes the side nav and the width persists", async ({ page })
   const after = (await nav.boundingBox())?.width;
   expect(after).toBeDefined();
   expect(after!).toBeLessThan(before!);
-  // The width persists across reloads (the shell cookie, server-rendered).
+  // The width persists across reloads (the preferences cookie, server-rendered).
   await page.reload();
   const persisted = (await nav.boundingBox())?.width;
   expect(persisted).toBeCloseTo(after!, 0);
+});
+
+test("dragging starts from the stored width, not the default", async ({ page }) => {
+  await page.setViewportSize(DESKTOP);
+  // A stored width renders as a max(min(...)) expression on
+  // --sidebar-width; dragging must start from the rendered width and never
+  // snap to the 16rem default first (regression: the handle once parsed
+  // the raw custom-property expression and fell back to 256).
+  await page.context().addCookies([
+    {
+      name: "dsh-next-app.prefs",
+      value: encodeURIComponent(JSON.stringify({ layout: { width: 280 } })),
+      url: state.baseURL,
+    },
+  ]);
+  await page.goto(state.baseURL + "/");
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await expect(nav).toBeInViewport();
+  const before = (await nav.boundingBox())?.width;
+  // The stored width rendered (not the 16rem default).
+  expect(before!).toBeGreaterThan(270);
+  const handle = page.getByRole("separator", { name: "Resize sidebar" });
+  const box = (await handle.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 - 20, box.y + box.height / 2, { steps: 3 });
+  await page.mouse.up();
+  const after = (await nav.boundingBox())?.width;
+  // 20px of drag must cost exactly 20px of width - a snap to the default
+  // (256) would show up as a ~44px change instead.
+  expect(after!).toBeCloseTo(before! - 20, 0);
+});
+
+test("keyboard resize while folded does not clobber the stored width", async ({ page }) => {
+  await page.setViewportSize(DESKTOP);
+  // A stored 920px width renders as a max(min(...)) expression; while the
+  // nav is folded the gap track is 0, so a keyboard resize must not read
+  // the fallback and persist it over the stored width (regression: the
+  // off-screen handle stayed tab-focusable and ArrowRight rewrote the
+  // prefs cookie to the fallback-derived width).
+  await page.context().addCookies([
+    {
+      name: "dsh-next-app.prefs",
+      value: encodeURIComponent(JSON.stringify({ layout: { width: 920 } })),
+      url: state.baseURL,
+    },
+  ]);
+  await page.goto(state.baseURL + "/");
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  const handle = page.getByRole("separator", { name: "Resize sidebar" });
+  await expect(nav).toBeInViewport();
+  const before = (await nav.boundingBox())?.width;
+  expect(before!).toBeGreaterThan(270);
+  await page.getByRole("button", { name: "Toggle navigation" }).click();
+  await expect(nav).not.toBeInViewport();
+  // The off-screen handle stays in the tab order; pressing an arrow while
+  // folded must be a no-op.
+  await handle.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.getByRole("button", { name: "Toggle navigation" }).click();
+  await expect(nav).toBeInViewport();
+  const after = (await nav.boundingBox())?.width;
+  expect(after).toBeCloseTo(before!, 0);
 });
 
 test("the side nav settings link navigates to the settings page", async ({ page }) => {

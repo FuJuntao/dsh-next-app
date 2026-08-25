@@ -1,9 +1,10 @@
 /**
  * Global styles (story #97): the shadcn lyra preset theme (tokens, Tailwind
  * v4 wiring) plus the rules the components cannot express — the 100% height
- * chain for the shell, and the shell's drag-resize behavior (instant while
- * the handle is active, none under prefers-reduced-motion). Everything
- * else is shadcn components + Tailwind utilities in the components.
+ * chain for the shell. The sidebar's transition policies (instant while
+ * dragging, none under prefers-reduced-motion) live in
+ * sidebar-resize-handle.css. Everything else is shadcn components +
+ * Tailwind utilities in the components.
  */
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -106,6 +107,13 @@
   --sidebar-accent-foreground: oklch(0.218 0.008 223.9);
   --sidebar-border: oklch(0.925 0.005 214.3);
   --sidebar-ring: oklch(0.723 0.014 214.4);
+  /* Sidebar width constraints - the single source for the resize
+     handle's clamps and the layout's cap (no TS constants). The
+     component's own --sidebar-width default (16rem) styles the shell
+     when no width preference exists. */
+  --sidebar-min-width: 216px;
+  --sidebar-center-min: 360px;
+  --sidebar-resize-step: 16px;
 }
 /*---break---
  */
@@ -144,17 +152,3 @@
 }
 /*---break---
  */
-/* Shell drag-resize: the sidebar's width transitions (fold animation) are
-   disabled while the resize handle is active so dragging is instant, and
-   never run under prefers-reduced-motion. The shell sets data-dragging on
-   the SidebarProvider wrapper. */
-[data-dragging="true"] [data-slot="sidebar-gap"],
-[data-dragging="true"] [data-slot="sidebar-container"] {
-  transition: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  [data-slot="sidebar-gap"],
-  [data-slot="sidebar-container"] {
-    transition: none;
-  }
-}

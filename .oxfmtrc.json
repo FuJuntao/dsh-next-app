@@ -1,4 +1,12 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  "ignorePatterns": ["docs/", ".agents/", "**/*.md", "pnpm-lock.yaml", "**/next-env.d.ts"]
+  "ignorePatterns": [
+    "docs/",
+    ".agents/",
+    "**/*.md",
+    "pnpm-lock.yaml",
+    "**/next-env.d.ts",
+    "apps/web/components/ui/",
+    "components/ui/"
+  ]
 }

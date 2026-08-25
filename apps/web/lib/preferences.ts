@@ -1,40 +1,71 @@
 /**
- * User-side preferences channel (minimal version).
+ * User-side preferences channel (client-safe core).
  *
  * One namespaced cookie (dsh-next-app.prefs) carries a small, versioned JSON
- * object; the server reads it in layouts so the first HTML paint already
- * reflects stored preferences (no flash), and client components write it on
- * every change. The value is URL-encoded JSON: encodeURIComponent output is
- * entirely within the cookie-octet set, so no escaping is lost on the wire.
+ * object; the server reads it in the shell provider so the first HTML paint
+ * already reflects stored preferences (no flash), and client components
+ * write it on every change. The value is URL-encoded JSON:
+ * encodeURIComponent output is entirely within the cookie-octet set, so no
+ * escaping is lost on the wire.
  *
- * Validation is deliberate and strict: unknown keys are dropped and any
- * malformed value falls back to the defaults, so a hand-edited or stale
- * cookie can never break the shell. (Signing/tamper protection and schema
- * growth are a dedicated story.)
+ * The cookie transport is hand-rolled and deliberately minimal: the value
+ * is URL-encoded JSON, which never contains "; " or "=", so a prefix scan
+ * and a plain attribute string are exact for our own writes; the value
+ * itself is guarded by the schema below.
+ *
+ * Validation is deliberate: the schema sanitizes the value (invalid
+ * fields and unknown keys are dropped, valid ones survive - autofix), so
+ * a hand-edited or stale cookie can never break the shell - an absent
+ * field simply leaves the shell on its CSS/component default.
+ * (Signing/tamper protection and schema growth are a dedicated story.)
+ *
+ * This module is shared with the client bundle (the resize handle writes
+ * through updatePreferences), so it must not import server-only APIs. The
+ * server-side read lives in preferences-server.ts (next/headers).
+ *
+ * The width constraints (minimum, center-column minimum, resize step) are
+ * NOT here: they are CSS variables in globals.css, the single source the
+ * resize handle clamps against and the layout caps with. The default width
+ * is the shadcn Sidebar's own --sidebar-width (16rem), applied whenever no
+ * width preference exists.
+ *
+ * The fold state lives here too: the shell's controlled client provider
+ * (shell-sidebar-provider.tsx) seeds it from the prefs cookie for the
+ * first paint (no flash) and persists every toggle through
+ * updatePreferences - the only observer the Sidebar offers for its open
+ * state. The stock sidebar_state cookie is never read.
  */
+
+import Schema from "@deepseek-ai/schemastery";
+
+/**
+ * The preferences schema (schemastery - the same library the bundle's
+ * cordis config is validated with). Validation runs with autofix: an
+ * invalid object property is removed instead of failing the whole value,
+ * so a hand-edited or stale cookie keeps its valid fields (the sanitize
+ * contract). Unknown keys are dropped by the parser's destructuring.
+ */
+const PreferencesSchema = Schema.object({
+  layout: Schema.object({
+    width: Schema.number().min(1),
+    folded: Schema.boolean(),
+  }),
+});
 
 /** The cookie carrying the preferences object. */
 export const PREFERENCES_COOKIE = "dsh-next-app.prefs";
 
 /** Layout prefs consumed by the shell (AppShell). */
 export interface LayoutPreferences {
-  /** The side nav width in px. */
-  width: number;
-  /** Whether the side nav is folded away. */
-  folded: boolean;
+  /** The side nav width in px; absent = the CSS default styles the shell. */
+  width?: number;
+  /** Whether the side nav is folded away; absent = open by default. */
+  folded?: boolean;
 }
 
 /** The preferences object; add namespaced sections as features need them. */
 export interface Preferences {
   layout: LayoutPreferences;
-}
-
-/** The default sidebar width, in px. */
-export const DEFAULT_LAYOUT_WIDTH = 260;
-
-/** The fallback preferences (also the SSR defaults without a cookie). */
-export function defaultPreferences(): Preferences {
-  return { layout: { width: DEFAULT_LAYOUT_WIDTH, folded: false } };
 }
 
 /**
@@ -47,27 +78,59 @@ export function encodePreferences(prefs: Preferences): string {
 }
 
 /**
- * Parse and validate the raw cookie value into preferences. Any malformed
- * or unknown shape falls back to the defaults; the known keys are rebuilt
- * strictly (a finite positive width, a boolean folded flag).
+ * Parse and validate a raw cookie value into preferences. A missing or
+ * unparsable value reports undefined; a parsable one is sanitized by the
+ * schema: invalid fields and unknown keys are dropped, the valid fields
+ * survive, so an absent or malformed field falls back to the
+ * component/CSS default instead of a made-up value (and cannot break the
+ * shell). The parser behind readPreferences() (preferences-server.ts);
+ * callers normally use that instead of reading the cookie themselves.
  */
-export function readPreferences(raw: string | undefined): Preferences {
-  if (raw === undefined) return defaultPreferences();
+export function parsePreferences(raw: string | undefined): Preferences | undefined {
+  if (raw === undefined) return undefined;
   let parsed: unknown;
   try {
     parsed = JSON.parse(decodeURIComponent(raw));
   } catch {
-    return defaultPreferences();
+    return undefined;
   }
-  if (typeof parsed !== "object" || parsed === null) return defaultPreferences();
-  const layout = (parsed as { layout?: unknown }).layout as
-    | { width?: unknown; folded?: unknown }
-    | undefined;
-  const width = layout?.width;
-  const folded = layout?.folded;
-  if (typeof width !== "number" || !Number.isFinite(width) || width <= 0) {
-    return defaultPreferences();
+  if (parsed === null || typeof parsed !== "object") return undefined;
+  try {
+    // autofix removes invalid object properties; destructuring strips
+    // unknown keys from the sanitized layout.
+    const { width, folded } = PreferencesSchema(parsed as never, { autofix: true }).layout;
+    return {
+      layout: {
+        ...(width !== undefined && { width }),
+        ...(folded !== undefined && { folded }),
+      },
+    };
+  } catch {
+    return undefined;
   }
-  if (typeof folded !== "boolean") return defaultPreferences();
-  return { layout: { width, folded } };
+}
+
+/** The current document cookie value for the preferences cookie (client). */
+function readDocumentCookie(): string | undefined {
+  // Our value (URL-encoded JSON) never contains "; " or "=", so the
+  // prefix scan is exact; see the module comment.
+  return document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(PREFERENCES_COOKIE + "="))
+    ?.slice(PREFERENCES_COOKIE.length + 1);
+}
+
+/**
+ * Merge a patch into the stored preferences and write the cookie (client
+ * only). Writers merge so layout fields never clobber each other.
+ */
+export async function updatePreferences(patch: Preferences): Promise<void> {
+  try {
+    const current = parsePreferences(readDocumentCookie());
+    const prefs: Preferences = { layout: { ...current?.layout, ...patch.layout } };
+    document.cookie =
+      PREFERENCES_COOKIE + "=" + encodePreferences(prefs) + ";path=/;max-age=31536000;samesite=lax";
+  } catch {
+    // Storage unavailable: the in-memory state still applies.
+  }
 }

@@ -1,0 +1,18 @@
+/* Sidebar transition policies (owned by SidebarResizeHandle): while the
+   handle drags, the sidebar's width/fold transitions must not animate -
+   the resize stays instant; and the fold animation never runs under
+   prefers-reduced-motion. The handle sets data-dragging on the
+   SidebarProvider wrapper; the attribute selectors reach the stock
+   gap/container elements, whose transitions come from the component's
+   Tailwind classes. Unlayered CSS wins over @layer utilities, so these
+   rules beat them regardless of order. */
+[data-dragging="true"] [data-slot="sidebar-gap"],
+[data-dragging="true"] [data-slot="sidebar-container"] {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="sidebar-gap"],
+  [data-slot="sidebar-container"] {
+    transition: none;
+  }
+}

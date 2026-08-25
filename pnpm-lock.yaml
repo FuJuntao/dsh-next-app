@@ -113,6 +113,9 @@ importers:
       '@base-ui/react':
         specifier: 'catalog:'
         version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@deepseek-ai/schemastery':
+        specifier: 'catalog:'
+        version: 3.18.1
       '@remixicon/react':
         specifier: 'catalog:'
         version: 4.9.0(react@19.2.8)
@@ -189,6 +192,9 @@ importers:
       '@base-ui/react':
         specifier: 'catalog:'
         version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@deepseek-ai/schemastery':
+        specifier: 'catalog:'
+        version: 3.18.1
       '@remixicon/react':
         specifier: 'catalog:'
         version: 4.9.0(react@19.2.8)
@@ -223,9 +229,6 @@ importers:
       '@deepseek-ai/dsh-subprocess':
         specifier: 'catalog:'
         version: 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))
-      '@deepseek-ai/schemastery':
-        specifier: 'catalog:'
-        version: 3.18.1
       '@tsconfig/node-ts':
         specifier: 'catalog:'
         version: 23.6.4
