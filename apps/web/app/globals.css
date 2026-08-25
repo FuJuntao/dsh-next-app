@@ -144,7 +144,14 @@
 }
 /*---break---
  */
-/* The sidebar's fold animation never runs under prefers-reduced-motion. */
+/* Shell drag-resize: the sidebar's width transitions (fold animation) are
+   disabled while the resize handle is active so dragging is instant, and
+   never run under prefers-reduced-motion. The handle sets data-dragging on
+   the SidebarProvider wrapper. */
+[data-dragging="true"] [data-slot="sidebar-gap"],
+[data-dragging="true"] [data-slot="sidebar-container"] {
+  transition: none;
+}
 @media (prefers-reduced-motion: reduce) {
   [data-slot="sidebar-gap"],
   [data-slot="sidebar-container"] {

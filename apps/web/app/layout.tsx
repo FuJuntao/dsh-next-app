@@ -5,6 +5,7 @@ import { DM_Sans } from "next/font/google";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell, AppSidebar } from "../components/AppShell";
+import { CENTER_MIN, WIDTH_COOKIE, parseStoredWidth } from "../lib/sidebar-width";
 import "./globals.css";
 
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
@@ -22,18 +23,25 @@ export default async function RootLayout({
   // The fold state rides the stock sidebar_state cookie the Sidebar writes
   // on every toggle; reading it here renders the stored state into the
   // first HTML so a reload paints it directly instead of flashing the
-  // defaults. The sidebar width is the docs' CSS-variable channel: the
-  // shell declares --sidebar-width (16.25rem, the pre-resize default) and
-  // the component reads it everywhere it sizes itself.
+  // defaults. The sidebar width rides the width cookie through the docs'
+  // CSS-variable channel: the shell declares --sidebar-width (the stored
+  // width, capped against the center column's minimum in CSS so a
+  // hand-edited cookie can never overflow the shell) and the component
+  // reads it everywhere it sizes itself.
   const cookieStore = await cookies();
   const folded = cookieStore.get("sidebar_state")?.value === "false";
+  const width = parseStoredWidth(cookieStore.get(WIDTH_COOKIE)?.value);
   return (
     <html lang="en" className={dmSans.variable}>
       <body>
         <TooltipProvider delay={0}>
           <SidebarProvider
             defaultOpen={!folded}
-            style={{ "--sidebar-width": "16.25rem" } as CSSProperties}
+            style={
+              {
+                "--sidebar-width": "min(" + width + "px, calc(100vw - " + CENTER_MIN + "px))",
+              } as CSSProperties
+            }
           >
             <AppSidebar />
             <AppShell>{children}</AppShell>

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { RiSettings3Line } from "@remixicon/react";
 import { DshHarnessChip, DshLogo, DshWordmark } from "./dsh-logo";
 import { SESSIONS } from "../lib/sessions";
+import { SidebarResizeHandle } from "./sidebar-resize-handle";
 import { Separator } from "@/components/ui/separator";
 import {
   Sidebar,
@@ -33,8 +34,9 @@ import {
  * layout's provider context through useSidebar.
  *
  * - Desktop (>= 768px, useIsMobile's breakpoint): the side nav sits in
- *   flow at a fixed width; the always-visible header toggle folds it away
- *   (offcanvas).
+ *   flow at the stored width, drag-resizable from the edge handle
+ *   (sidebar-resize-handle.tsx); the always-visible header toggle folds
+ *   it away (offcanvas).
  * - Below 768px: the side nav becomes a Sheet overlay drawer opened from
  *   the header toggle; it never pushes the content.
  */
@@ -153,6 +155,7 @@ export function AppSidebar() {
           <SettingsNav />
         </SidebarFooter>
       </div>
+      <SidebarResizeHandle />
     </Sidebar>
   );
 }
