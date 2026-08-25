@@ -73,6 +73,27 @@ test("a stored width preference renders into the first paint, so no flash", asyn
   );
 });
 
+test("the fold is never persisted: the shell renders open on every load", async ({ request }) => {
+  // The fold is transient UI state (story #97): no cookie controls it, and
+  // even a stale stock sidebar_state cookie is ignored - the shell renders
+  // open (data-state="expanded") on every load. The width cookie only
+  // affects the width, never the fold.
+  const auth =
+    "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
+  const noCookieRes = await request.get(state.baseURL + "/", {
+    headers: { authorization: auth },
+  });
+  expect(noCookieRes.status()).toBe(200);
+  expect(await noCookieRes.text()).toContain('data-state="expanded"');
+  // A stale fold cookie (the stock sidebar_state the component writes when
+  // uncontrolled) must not influence the render.
+  const staleRes = await request.get(state.baseURL + "/", {
+    headers: { authorization: auth, cookie: "sidebar_state=false" },
+  });
+  expect(staleRes.status()).toBe(200);
+  expect(await staleRes.text()).toContain('data-state="expanded"');
+});
+
 test("without a width preference the shell falls back to the component's CSS default", async ({
   request,
 }) => {
