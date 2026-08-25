@@ -9,12 +9,15 @@ import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
  * The sidebar drag-resize handle. The shadcn Sidebar sizes itself from
  * the --sidebar-width CSS variable (the docs' width channel), so the
  * handle needs no React state: it reads the variable off the
- * SidebarProvider wrapper, writes the new width into it while dragging
- * (the wrapper's data-dragging attribute disables the width transitions,
- * globals.css), and persists the result to the preferences cookie on
- * release. The clamps (--sidebar-min-width, --sidebar-center-min) and the
- * keyboard step (--sidebar-resize-step) are CSS variables in globals.css,
- * the single source for the shell's width constraints.
+ * SidebarProvider wrapper and writes the new width into it while
+ * dragging, then persists the result to the preferences cookie on
+ * release. The wrapper's data-dragging attribute arms the Tailwind
+ * variants (group-data-[dragging=true]/sidebar-wrapper:transition-none)
+ * on the stock gap/container elements (sidebar.tsx), so the width
+ * transitions stay off while dragging. The clamps
+ * (--sidebar-min-width, --sidebar-center-min) and the keyboard step
+ * (--sidebar-resize-step) are CSS variables in globals.css, the single
+ * source for the shell's width constraints.
  */
 function clamp(value: number, lo: number, hi: number): number {
   return Math.min(Math.max(value, lo), hi);
