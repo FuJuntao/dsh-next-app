@@ -122,6 +122,43 @@ test("side nav becomes an overlay drawer on mobile", async ({ page }) => {
   await expect(nav).not.toBeInViewport();
 });
 
+test("mobile drawer: no resize handle, and the header toggle is inert while the drawer is open", async ({
+  page,
+}) => {
+  await page.setViewportSize(MOBILE);
+  await page.goto(state.baseURL + "/");
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  // Below the desktop breakpoint the nav is a fixed-width overlay drawer:
+  // there is no resize handle at all.
+  await expect(page.getByRole("separator", { name: "Resize sidebar" })).toHaveCount(0);
+  // The header toggle opens the drawer...
+  const toggle = page.getByRole("button", { name: "Toggle navigation" });
+  await toggle.click();
+  await expect(nav).toBeInViewport();
+  // ...and while it is open the background is inert (a modal Sheet): the
+  // toggle is hidden from the accessibility tree and cannot be clicked -
+  // the drawer closes via its own close button, the backdrop, or Esc.
+  await expect(page.getByRole("button", { name: "Toggle navigation" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(nav).not.toBeInViewport();
+  // Closing restores the toggle: it opens the drawer again.
+  await expect(page.getByRole("button", { name: "Toggle navigation" })).toBeVisible();
+  await toggle.click();
+  await expect(nav).toBeInViewport();
+});
+
+test("mobile drawer closes on backdrop click", async ({ page }) => {
+  await page.setViewportSize(MOBILE);
+  await page.goto(state.baseURL + "/");
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await page.getByRole("button", { name: "Toggle navigation" }).click();
+  await expect(nav).toBeInViewport();
+  // The drawer panel is 18rem wide; clicking the backdrop strip to its
+  // right dismisses the dialog.
+  await page.mouse.click(360, 400);
+  await expect(nav).not.toBeInViewport();
+});
+
 test("side nav folds and unfolds on desktop", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(state.baseURL + "/");
