@@ -20,7 +20,8 @@ test("a wide stored sidebar width cannot overflow a narrow viewport", async ({ p
   await page.setViewportSize(DESKTOP);
   // A cookie written on a wide screen (or hand-edited) must not overflow the
   // shell on a smaller viewport: the sidebar width is capped by the CSS
-  // min() the layout renders (center column never below 360px).
+  // min()/max() the layout renders against the constraint variables
+  // (center column never below the --sidebar-center-min variable).
   await page.context().addCookies([
     {
       name: "dsh-next-app.prefs",
@@ -73,7 +74,9 @@ test("the server renders the stored shell state, so first load cannot flash", as
   const foldedHtml = await res.text();
   // Folded: the sidebar renders collapsed (off-screen) from the first paint.
   expect(foldedHtml).toContain('data-state="collapsed"');
-  expect(foldedHtml).toContain("--sidebar-width:min(280px, calc(100vw - 360px))");
+  expect(foldedHtml).toContain(
+    "--sidebar-width:max(min(280px,calc(100vw - var(--sidebar-center-min))),var(--sidebar-min-width))",
+  );
   // Unfolded: the stored width renders into the first paint as well.
   const openRes = await request.get(state.baseURL + "/", {
     headers: {
@@ -83,7 +86,26 @@ test("the server renders the stored shell state, so first load cannot flash", as
   });
   const openHtml = await openRes.text();
   expect(openHtml).toContain('data-state="expanded"');
-  expect(openHtml).toContain("--sidebar-width:min(280px, calc(100vw - 360px))");
+  expect(openHtml).toContain(
+    "--sidebar-width:max(min(280px,calc(100vw - var(--sidebar-center-min))),var(--sidebar-min-width))",
+  );
+});
+
+test("without a width preference the shell falls back to the component's CSS default", async ({
+  request,
+}) => {
+  // No preferences cookie (and no sidebar_state cookie): the layout sets no
+  // --sidebar-width at all, so the shadcn Sidebar's own CSS default
+  // (16rem) styles the shell - the constraint variables stay untouched.
+  const auth =
+    "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
+  const res = await request.get(state.baseURL + "/", {
+    headers: { authorization: auth },
+  });
+  expect(res.status()).toBe(200);
+  const html = await res.text();
+  expect(html).toContain("--sidebar-width:16rem");
+  expect(html).not.toContain("--sidebar-width:max(min(");
 });
 
 test("header sits over the content column, not the side nav", async ({ page }) => {

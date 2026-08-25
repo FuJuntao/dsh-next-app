@@ -3,14 +3,7 @@
 import { useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useSidebar } from "@/components/ui/sidebar";
-import {
-  CENTER_MIN,
-  DEFAULT_LAYOUT_WIDTH,
-  MIN_WIDTH,
-  PREFERENCES_COOKIE,
-  RESIZE_STEP,
-  encodePreferences,
-} from "../lib/preferences";
+import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
 
 /**
  * The sidebar drag-resize handle. The shadcn Sidebar sizes itself from
@@ -18,13 +11,27 @@ import {
  * handle needs no React state: it reads the variable off the
  * SidebarProvider wrapper, writes the new width into it while dragging
  * (the wrapper's data-dragging attribute disables the width transitions,
- * globals.css), and persists the result to the width cookie on release.
- * Pointer and keyboard resize are clamped to the shell's minimum and the
- * center column's minimum; the width persists to the preferences cookie
- * (lib/preferences.ts).
+ * globals.css), and persists the result to the preferences cookie on
+ * release. The clamps (--sidebar-min-width, --sidebar-center-min) and the
+ * keyboard step (--sidebar-resize-step) are CSS variables in globals.css,
+ * the single source for the shell's width constraints.
  */
 function clamp(value: number, lo: number, hi: number): number {
   return Math.min(Math.max(value, lo), hi);
+}
+
+/** Resolve a theme constraint variable (globals.css) to px. */
+function readThemeVar(name: string): number | null {
+  const parsed = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** The shell's width clamps, from CSS; literal fallbacks if the stylesheet is broken. */
+function shellClamps(): { min: number; centerMin: number } {
+  return {
+    min: readThemeVar("--sidebar-min-width") ?? 216,
+    centerMin: readThemeVar("--sidebar-center-min") ?? 360,
+  };
 }
 
 /** Persist the width to the preferences cookie the server renders from (no flash). */
@@ -42,20 +49,23 @@ function persistWidth(width: number): void {
 
 export function SidebarResizeHandle() {
   const { isMobile } = useSidebar();
-  const dragStart = useRef({ x: 0, width: DEFAULT_LAYOUT_WIDTH });
+  // Fallbacks for the initial value; overwritten at pointerdown from CSS.
+  const dragStart = useRef({ x: 0, width: 256, min: 216, centerMin: 360 });
   // The provider wrapper the handle resizes; null while not dragging.
   const wrapperRef = useRef<HTMLElement | null>(null);
 
   const wrapperOf = (el: HTMLElement): HTMLElement | null =>
     el.closest("[data-slot='sidebar-wrapper']");
 
-  const maxWidth = (): number => Math.max(MIN_WIDTH, window.innerWidth - CENTER_MIN);
+  const maxWidth = (min: number, centerMin: number): number =>
+    Math.max(min, window.innerWidth - centerMin);
 
-  // The resolved width the CSS variable currently renders (a min() value
-  // resolves to px in computed style).
+  // The resolved width the CSS variable currently renders (a min()/max()
+  // value resolves to px in computed style). The wrapper always carries
+  // the variable: the component's own default (16rem) or the layout's cap.
   const readWidth = (el: HTMLElement): number => {
     const parsed = parseFloat(getComputedStyle(el).getPropertyValue("--sidebar-width"));
-    return Number.isFinite(parsed) ? parsed : DEFAULT_LAYOUT_WIDTH;
+    return Number.isFinite(parsed) ? parsed : 256;
   };
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -65,18 +75,15 @@ export function SidebarResizeHandle() {
     const wrapper = wrapperOf(event.currentTarget);
     if (wrapper === null) return;
     wrapperRef.current = wrapper;
-    dragStart.current = { x: event.clientX, width: readWidth(wrapper) };
+    dragStart.current = { x: event.clientX, width: readWidth(wrapper), ...shellClamps() };
     wrapper.setAttribute("data-dragging", "true");
   };
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
     const wrapper = wrapperRef.current;
     if (wrapper === null) return;
-    const next = clamp(
-      dragStart.current.width + event.clientX - dragStart.current.x,
-      MIN_WIDTH,
-      maxWidth(),
-    );
+    const { x, width, min, centerMin } = dragStart.current;
+    const next = clamp(width + event.clientX - x, min, maxWidth(min, centerMin));
     wrapper.style.setProperty("--sidebar-width", next + "px");
   };
 
@@ -93,10 +100,12 @@ export function SidebarResizeHandle() {
     event.preventDefault();
     const wrapper = wrapperOf(event.currentTarget);
     if (wrapper === null) return;
+    const clamps = shellClamps();
+    const step = readThemeVar("--sidebar-resize-step") ?? 16;
     const next = clamp(
-      readWidth(wrapper) + (event.key === "ArrowLeft" ? -RESIZE_STEP : RESIZE_STEP),
-      MIN_WIDTH,
-      maxWidth(),
+      readWidth(wrapper) + (event.key === "ArrowLeft" ? -step : step),
+      clamps.min,
+      maxWidth(clamps.min, clamps.centerMin),
     );
     wrapper.style.setProperty("--sidebar-width", next + "px");
     persistWidth(next);

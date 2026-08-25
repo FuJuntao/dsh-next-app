@@ -5,7 +5,7 @@ import { DM_Sans } from "next/font/google";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell, AppSidebar } from "../components/AppShell";
-import { CENTER_MIN, MIN_WIDTH, PREFERENCES_COOKIE, readPreferences } from "../lib/preferences";
+import { PREFERENCES_COOKIE, readPreferences } from "../lib/preferences";
 import "./globals.css";
 
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
@@ -24,17 +24,15 @@ export default async function RootLayout({
   // on every toggle; reading it here renders the stored state into the
   // first HTML so a reload paints it directly instead of flashing the
   // defaults. The sidebar width rides the preferences cookie
-  // (lib/preferences.ts) through the docs' CSS-variable channel: the shell
-  // declares --sidebar-width (the stored width, floored at the shell's
-  // minimum and capped against the center column's minimum in CSS so a
-  // hand-edited cookie can never overflow the shell) and the component
-  // reads it everywhere it sizes itself.
+  // (lib/preferences.ts) through the docs' CSS-variable channel: when a
+  // width preference exists the shell declares --sidebar-width from it,
+  // floored and capped against the CSS constraint variables in globals.css
+  // (so a hand-edited cookie can never overflow the shell); without one it
+  // sets nothing and the component's own CSS default (16rem) styles the
+  // shell.
   const cookieStore = await cookies();
   const folded = cookieStore.get("sidebar_state")?.value === "false";
-  const width = Math.max(
-    MIN_WIDTH,
-    readPreferences(cookieStore.get(PREFERENCES_COOKIE)?.value).layout.width,
-  );
+  const prefs = readPreferences(cookieStore.get(PREFERENCES_COOKIE)?.value);
   return (
     <html lang="en" className={dmSans.variable}>
       <body>
@@ -42,9 +40,14 @@ export default async function RootLayout({
           <SidebarProvider
             defaultOpen={!folded}
             style={
-              {
-                "--sidebar-width": "min(" + width + "px, calc(100vw - " + CENTER_MIN + "px))",
-              } as CSSProperties
+              prefs === undefined
+                ? undefined
+                : ({
+                    "--sidebar-width":
+                      "max(min(" +
+                      prefs.layout.width +
+                      "px,calc(100vw - var(--sidebar-center-min))),var(--sidebar-min-width))",
+                  } as CSSProperties)
             }
           >
             <AppSidebar />
