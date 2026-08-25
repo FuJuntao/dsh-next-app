@@ -47,15 +47,12 @@ test("no horizontal overflow at 320px", async ({ page }) => {
   expect(sizes.scroll).toBeLessThanOrEqual(sizes.client);
 });
 
-test("the server renders the stored shell state, so first load cannot flash", async ({
-  request,
-}) => {
-  // The fold and the width both ride the preferences cookie
-  // (dsh-next-app.prefs, URL-encoded JSON); the server reads them in the
-  // layout and renders them into the first HTML, so a reload paints the
-  // stored state directly instead of flashing the defaults. The shadcn
-  // Sidebar renders its open state (data-state) and the shell renders the
-  // width cap (--sidebar-width) from the same cookie.
+test("a stored width preference renders into the first paint, so no flash", async ({ request }) => {
+  // The width rides the preferences cookie (dsh-next-app.prefs, URL-encoded
+  // JSON); the server reads it in the layout and renders it into the first
+  // HTML, so a reload paints the stored width directly instead of flashing
+  // the defaults. The fold is transient: it is not persisted, so the shell
+  // renders open (data-state="expanded") on every load.
   const auth =
     "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
   const prefsCookie = (prefs: unknown): string =>
@@ -65,26 +62,13 @@ test("the server renders the stored shell state, so first load cannot flash", as
   const res = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
-      cookie: prefsCookie({ layout: { width: 280, folded: true } }),
+      cookie: prefsCookie({ layout: { width: 280 } }),
     },
   });
   expect(res.status()).toBe(200);
-  const foldedHtml = await res.text();
-  // Folded: the sidebar renders collapsed (off-screen) from the first paint.
-  expect(foldedHtml).toContain('data-state="collapsed"');
-  expect(foldedHtml).toContain(
-    "--sidebar-width:max(min(280px,calc(100vw - var(--sidebar-center-min))),var(--sidebar-min-width))",
-  );
-  // Unfolded: the stored width renders into the first paint as well.
-  const openRes = await request.get(state.baseURL + "/", {
-    headers: {
-      authorization: auth,
-      cookie: prefsCookie({ layout: { width: 280, folded: false } }),
-    },
-  });
-  const openHtml = await openRes.text();
-  expect(openHtml).toContain('data-state="expanded"');
-  expect(openHtml).toContain(
+  const html = await res.text();
+  expect(html).toContain('data-state="expanded"');
+  expect(html).toContain(
     "--sidebar-width:max(min(280px,calc(100vw - var(--sidebar-center-min))),var(--sidebar-min-width))",
   );
 });
@@ -94,7 +78,7 @@ test("without a width preference the shell falls back to the component's CSS def
 }) => {
   // No preferences cookie: the layout sets no --sidebar-width at all, so
   // the shadcn Sidebar's own CSS default (16rem) styles the shell and the
-  // fold defaults to open - the constraint variables stay untouched.
+  // nav renders open - the constraint variables stay untouched.
   const auth =
     "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
   const res = await request.get(state.baseURL + "/", {
@@ -163,11 +147,10 @@ test("side nav folds and unfolds on desktop", async ({ page }) => {
   await expect(nav).not.toBeInViewport();
   await toggle.click();
   await expect(nav).toBeInViewport();
-  // The folded state persists across reloads (the preferences cookie,
-  // server-rendered).
+  // The fold is transient: a reload resets the nav to open.
   await toggle.click();
   await page.reload();
-  await expect(nav).not.toBeInViewport();
+  await expect(nav).toBeInViewport();
 });
 
 test("drag handle resizes the side nav and the width persists", async ({ page }) => {

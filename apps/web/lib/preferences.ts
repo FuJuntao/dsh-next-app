@@ -19,10 +19,10 @@
  * is the shadcn Sidebar's own --sidebar-width (16rem), applied whenever no
  * width preference exists.
  *
- * The fold state lives here too: the layout renders it into the first
- * paint, and the shell's controlled client provider
- * (shell-sidebar-provider.tsx) persists toggles through updatePreferences -
- * the only observer the Sidebar offers for its open state.
+ * The fold state is deliberately not here: it is transient UI state (the
+ * nav opens open on every load), so the shell never persists it - the
+ * provider runs uncontrolled and nothing reads the stock sidebar_state
+ * cookie.
  */
 
 /** The cookie carrying the preferences object. */
@@ -32,8 +32,6 @@ export const PREFERENCES_COOKIE = "dsh-next-app.prefs";
 export interface LayoutPreferences {
   /** The side nav width in px; absent = the CSS default styles the shell. */
   width?: number;
-  /** Whether the side nav is folded away; absent = open by default. */
-  folded?: boolean;
 }
 
 /** The preferences object; add namespaced sections as features need them. */
@@ -53,9 +51,9 @@ export function encodePreferences(prefs: Preferences): string {
 /**
  * Parse and validate the raw cookie value into preferences. A missing or
  * unparsable value reports undefined; a parsable one keeps exactly the
- * fields that validate (a finite positive width, a boolean folded flag)
- * and drops everything else, so an absent field falls back to the
- * component/CSS default instead of a made-up value.
+ * fields that validate (a finite positive width) and drops everything
+ * else, so an absent field falls back to the component/CSS default
+ * instead of a made-up value.
  */
 export function readPreferences(raw: string | undefined): Preferences | undefined {
   if (raw === undefined) return undefined;
@@ -66,16 +64,11 @@ export function readPreferences(raw: string | undefined): Preferences | undefine
     return undefined;
   }
   if (typeof parsed !== "object" || parsed === null) return undefined;
-  const layout = (parsed as { layout?: unknown }).layout as
-    | { width?: unknown; folded?: unknown }
-    | undefined;
+  const layout = (parsed as { layout?: unknown }).layout as { width?: unknown } | undefined;
   if (layout === undefined) return { layout: {} };
   const prefs: LayoutPreferences = {};
   if (typeof layout.width === "number" && Number.isFinite(layout.width) && layout.width > 0) {
     prefs.width = layout.width;
-  }
-  if (typeof layout.folded === "boolean") {
-    prefs.folded = layout.folded;
   }
   return { layout: prefs };
 }
@@ -91,8 +84,7 @@ export function readCookiePreferences(): Preferences | undefined {
 
 /**
  * Merge a patch into the stored preferences and write the cookie (client
- * only). Writers merge so the layout fields (width, folded) never clobber
- * each other.
+ * only). Writers merge so layout fields never clobber each other.
  */
 export function updatePreferences(patch: Preferences): void {
   try {
