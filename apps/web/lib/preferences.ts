@@ -8,6 +8,10 @@
  * encodeURIComponent output is entirely within the cookie-octet set, so no
  * escaping is lost on the wire.
  *
+ * The cookie itself is parsed and serialized with the `cookie` package
+ * (jshttp) - the same parser the server ecosystem uses - instead of
+ * hand-rolled document.cookie string surgery.
+ *
  * Validation is deliberate and strict: unknown keys are dropped and each
  * known field is rebuilt only when it parses, so a hand-edited or stale
  * cookie can never break the shell - an absent field simply leaves the
@@ -30,6 +34,8 @@
  * the only observer the Sidebar offers for its open state. The stock
  * sidebar_state cookie is never read.
  */
+
+import { parse, serialize } from "cookie";
 
 /** The cookie carrying the preferences object. */
 export const PREFERENCES_COOKIE = "dsh-next-app.prefs";
@@ -90,10 +96,7 @@ export function parsePreferences(raw: string | undefined): Preferences | undefin
 
 /** The current document cookie value for the preferences cookie (client). */
 function readDocumentCookie(): string | undefined {
-  return document.cookie
-    .split("; ")
-    .find((entry) => entry.startsWith(PREFERENCES_COOKIE + "="))
-    ?.slice(PREFERENCES_COOKIE.length + 1);
+  return parse(document.cookie)[PREFERENCES_COOKIE];
 }
 
 /**
@@ -104,8 +107,11 @@ export async function updatePreferences(patch: Preferences): Promise<void> {
   try {
     const current = parsePreferences(readDocumentCookie());
     const prefs: Preferences = { layout: { ...current?.layout, ...patch.layout } };
-    document.cookie =
-      PREFERENCES_COOKIE + "=" + encodePreferences(prefs) + ";path=/;max-age=31536000;samesite=lax";
+    document.cookie = serialize(PREFERENCES_COOKIE, encodePreferences(prefs), {
+      path: "/",
+      maxAge: 31536000,
+      sameSite: "lax",
+    });
   } catch {
     // Storage unavailable: the in-memory state still applies.
   }
