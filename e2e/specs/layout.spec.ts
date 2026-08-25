@@ -51,8 +51,8 @@ test("a stored width preference renders into the first paint, so no flash", asyn
   // The width rides the preferences cookie (dsh-next-app.prefs, URL-encoded
   // JSON); the server reads it in the layout and renders it into the first
   // HTML, so a reload paints the stored width directly instead of flashing
-  // the defaults. The fold is transient: it is not persisted, so the shell
-  // renders open (data-state="expanded") on every load.
+  // the defaults. (The fold rides the same cookie - see the fold-persists
+  // spec - and defaults to open when absent.)
   const auth =
     "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
   const prefsCookie = (prefs: unknown): string =>
@@ -73,20 +73,32 @@ test("a stored width preference renders into the first paint, so no flash", asyn
   );
 });
 
-test("the fold is never persisted: the shell renders open on every load", async ({ request }) => {
-  // The fold is transient UI state (story #97): no cookie controls it, and
-  // even a stale stock sidebar_state cookie is ignored - the shell renders
-  // open (data-state="expanded") on every load. The width cookie only
-  // affects the width, never the fold.
+test("the fold persists: the shell renders the stored fold state on every load", async ({
+  request,
+}) => {
+  // The fold rides the preferences cookie (dsh-next-app.prefs, URL-encoded
+  // JSON) like the width: the layout seeds the controlled provider from
+  // prefs.layout.folded for the first paint, and a reload paints the
+  // stored fold directly instead of flashing. A stale stock sidebar_state
+  // cookie is ignored - the prefs cookie is the only source.
   const auth =
     "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
-  const noCookieRes = await request.get(state.baseURL + "/", {
-    headers: { authorization: auth },
+  const prefsCookie = (prefs: unknown): string =>
+    "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify(prefs));
+  // Folded: the sidebar renders collapsed (off-screen) from the first paint.
+  const foldedRes = await request.get(state.baseURL + "/", {
+    headers: { authorization: auth, cookie: prefsCookie({ layout: { folded: true } }) },
   });
-  expect(noCookieRes.status()).toBe(200);
-  expect(await noCookieRes.text()).toContain('data-state="expanded"');
-  // A stale fold cookie (the stock sidebar_state the component writes when
-  // uncontrolled) must not influence the render.
+  expect(foldedRes.status()).toBe(200);
+  expect(await foldedRes.text()).toContain('data-state="collapsed"');
+  // Open: the default renders expanded.
+  const openRes = await request.get(state.baseURL + "/", {
+    headers: { authorization: auth, cookie: prefsCookie({ layout: { folded: false } }) },
+  });
+  expect(openRes.status()).toBe(200);
+  expect(await openRes.text()).toContain('data-state="expanded"');
+  // A stale fold cookie (the stock sidebar_state the component writes) must
+  // not influence the render.
   const staleRes = await request.get(state.baseURL + "/", {
     headers: { authorization: auth, cookie: "sidebar_state=false" },
   });
@@ -205,10 +217,12 @@ test("side nav folds and unfolds on desktop", async ({ page }) => {
   await expect(nav).not.toBeInViewport();
   await toggle.click();
   await expect(nav).toBeInViewport();
-  // The fold is transient: a reload resets the nav to open.
+  // The folded state persists across reloads (the preferences cookie,
+  // server-rendered): the controlled provider seeds from
+  // prefs.layout.folded for the first paint.
   await toggle.click();
   await page.reload();
-  await expect(nav).toBeInViewport();
+  await expect(nav).not.toBeInViewport();
 });
 
 test("drag handle resizes the side nav and the width persists", async ({ page }) => {
