@@ -12,11 +12,11 @@
  * (jshttp) - the same parser the server ecosystem uses - instead of
  * hand-rolled document.cookie string surgery.
  *
- * Validation is deliberate and strict: unknown keys are dropped and each
- * known field is rebuilt only when it parses, so a hand-edited or stale
- * cookie can never break the shell - an absent field simply leaves the
- * shell on its CSS/component default. (Signing/tamper protection and
- * schema growth are a dedicated story.)
+ * Validation is deliberate: the schema sanitizes the value (invalid
+ * fields and unknown keys are dropped, valid ones survive - autofix), so
+ * a hand-edited or stale cookie can never break the shell - an absent
+ * field simply leaves the shell on its CSS/component default.
+ * (Signing/tamper protection and schema growth are a dedicated story.)
  *
  * This module is shared with the client bundle (the resize handle writes
  * through updatePreferences), so it must not import server-only APIs. The
@@ -29,13 +29,28 @@
  * width preference exists.
  *
  * The fold state lives here too: the shell's controlled client provider
- * (shell-sidebar-client.tsx) seeds it from the prefs cookie for the first
- * paint (no flash) and persists every toggle through updatePreferences -
- * the only observer the Sidebar offers for its open state. The stock
- * sidebar_state cookie is never read.
+ * (shell-sidebar-provider.tsx) seeds it from the prefs cookie for the
+ * first paint (no flash) and persists every toggle through
+ * updatePreferences - the only observer the Sidebar offers for its open
+ * state. The stock sidebar_state cookie is never read.
  */
 
+import Schema from "@deepseek-ai/schemastery";
 import { parse, serialize } from "cookie";
+
+/**
+ * The preferences schema (schemastery - the same library the bundle's
+ * cordis config is validated with). Validation runs with autofix: an
+ * invalid object property is removed instead of failing the whole value,
+ * so a hand-edited or stale cookie keeps its valid fields (the sanitize
+ * contract). Unknown keys are dropped by the parser's destructuring.
+ */
+const PreferencesSchema = Schema.object({
+  layout: Schema.object({
+    width: Schema.number().min(1),
+    folded: Schema.boolean(),
+  }),
+});
 
 /** The cookie carrying the preferences object. */
 export const PREFERENCES_COOKIE = "dsh-next-app.prefs";
@@ -64,12 +79,12 @@ export function encodePreferences(prefs: Preferences): string {
 
 /**
  * Parse and validate a raw cookie value into preferences. A missing or
- * unparsable value reports undefined; a parsable one keeps exactly the
- * fields that validate (a finite positive width, a boolean folded flag)
- * and drops everything else, so an absent field falls back to the
- * component/CSS default instead of a made-up value. The parser behind
- * readPreferences() (preferences-server.ts); callers normally use that
- * instead of reading the cookie themselves.
+ * unparsable value reports undefined; a parsable one is sanitized by the
+ * schema: invalid fields and unknown keys are dropped, the valid fields
+ * survive, so an absent or malformed field falls back to the
+ * component/CSS default instead of a made-up value (and cannot break the
+ * shell). The parser behind readPreferences() (preferences-server.ts);
+ * callers normally use that instead of reading the cookie themselves.
  */
 export function parsePreferences(raw: string | undefined): Preferences | undefined {
   if (raw === undefined) return undefined;
@@ -79,19 +94,20 @@ export function parsePreferences(raw: string | undefined): Preferences | undefin
   } catch {
     return undefined;
   }
-  if (typeof parsed !== "object" || parsed === null) return undefined;
-  const layout = (parsed as { layout?: unknown }).layout as
-    | { width?: unknown; folded?: unknown }
-    | undefined;
-  if (layout === undefined) return { layout: {} };
-  const prefs: LayoutPreferences = {};
-  if (typeof layout.width === "number" && Number.isFinite(layout.width) && layout.width > 0) {
-    prefs.width = layout.width;
+  if (parsed === null || typeof parsed !== "object") return undefined;
+  try {
+    // autofix removes invalid object properties; destructuring strips
+    // unknown keys from the sanitized layout.
+    const { width, folded } = PreferencesSchema(parsed as never, { autofix: true }).layout;
+    return {
+      layout: {
+        ...(width !== undefined && { width }),
+        ...(folded !== undefined && { folded }),
+      },
+    };
+  } catch {
+    return undefined;
   }
-  if (typeof layout.folded === "boolean") {
-    prefs.folded = layout.folded;
-  }
-  return { layout: prefs };
 }
 
 /** The current document cookie value for the preferences cookie (client). */

@@ -106,6 +106,29 @@ test("the fold persists: the shell renders the stored fold state on every load",
   expect(await staleRes.text()).toContain('data-state="expanded"');
 });
 
+test("a malformed preference field is dropped; valid fields still apply", async ({ request }) => {
+  // The sanitize contract: an invalid field (folded: "yes") is removed by
+  // the schema's autofix while the valid width still applies - the shell
+  // renders the width cap and the default open state. Unknown keys are
+  // dropped the same way.
+  const auth =
+    "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
+  const prefsCookie = (prefs: unknown): string =>
+    "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify(prefs));
+  const res = await request.get(state.baseURL + "/", {
+    headers: {
+      authorization: auth,
+      cookie: prefsCookie({ layout: { width: 280, folded: "yes", extra: 1 } }),
+    },
+  });
+  expect(res.status()).toBe(200);
+  const html = await res.text();
+  expect(html).toContain(
+    "--sidebar-width:max(min(280px,calc(100vw - var(--sidebar-center-min))),var(--sidebar-min-width))",
+  );
+  expect(html).toContain('data-state="expanded"');
+});
+
 test("without a width preference the shell falls back to the component's CSS default", async ({
   request,
 }) => {
