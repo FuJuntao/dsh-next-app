@@ -50,24 +50,22 @@ test("no horizontal overflow at 320px", async ({ page }) => {
 test("the server renders the stored shell state, so first load cannot flash", async ({
   request,
 }) => {
-  // The fold state rides the stock sidebar_state cookie (a "true"/"false"
-  // boolean string) the Sidebar writes on every toggle, and the sidebar
-  // width rides the preferences cookie (dsh-next-app.prefs, URL-encoded
-  // JSON); the server reads both in the layout and renders them into the
-  // first HTML, so a reload paints the stored state directly instead of
-  // flashing the defaults. The shadcn Sidebar renders its open state
-  // (data-state) and the shell renders the width cap (--sidebar-width)
-  // from the same cookies.
+  // The fold and the width both ride the preferences cookie
+  // (dsh-next-app.prefs, URL-encoded JSON); the server reads them in the
+  // layout and renders them into the first HTML, so a reload paints the
+  // stored state directly instead of flashing the defaults. The shadcn
+  // Sidebar renders its open state (data-state) and the shell renders the
+  // width cap (--sidebar-width) from the same cookie.
   const auth =
     "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
-  const prefsCookie = (width: number): string =>
-    "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify({ layout: { width } }));
+  const prefsCookie = (prefs: unknown): string =>
+    "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify(prefs));
   // The stored width must be above the shell's minimum (216px) - below
   // it the server clamps to the floor, by design.
   const res = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
-      cookie: "sidebar_state=false; " + prefsCookie(280),
+      cookie: prefsCookie({ layout: { width: 280, folded: true } }),
     },
   });
   expect(res.status()).toBe(200);
@@ -81,7 +79,7 @@ test("the server renders the stored shell state, so first load cannot flash", as
   const openRes = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
-      cookie: "sidebar_state=true; " + prefsCookie(280),
+      cookie: prefsCookie({ layout: { width: 280, folded: false } }),
     },
   });
   const openHtml = await openRes.text();
@@ -94,9 +92,9 @@ test("the server renders the stored shell state, so first load cannot flash", as
 test("without a width preference the shell falls back to the component's CSS default", async ({
   request,
 }) => {
-  // No preferences cookie (and no sidebar_state cookie): the layout sets no
-  // --sidebar-width at all, so the shadcn Sidebar's own CSS default
-  // (16rem) styles the shell - the constraint variables stay untouched.
+  // No preferences cookie: the layout sets no --sidebar-width at all, so
+  // the shadcn Sidebar's own CSS default (16rem) styles the shell and the
+  // fold defaults to open - the constraint variables stay untouched.
   const auth =
     "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
   const res = await request.get(state.baseURL + "/", {
@@ -134,9 +132,9 @@ test("side nav becomes an overlay drawer on mobile", async ({ page }) => {
   await expect(toggle).toBeVisible();
   await toggle.click();
   await expect(nav).toBeInViewport();
-  // The drawer's own close button (the Sheet's stock one, sr-only labeled
-  // "Close") closes it again.
-  await page.getByRole("button", { name: "Close" }).click();
+  // The drawer's own close button (the app's, in the drawer header)
+  // closes it again.
+  await page.getByRole("button", { name: "Close navigation" }).click();
   await expect(nav).not.toBeInViewport();
 });
 
@@ -165,8 +163,8 @@ test("side nav folds and unfolds on desktop", async ({ page }) => {
   await expect(nav).not.toBeInViewport();
   await toggle.click();
   await expect(nav).toBeInViewport();
-  // The folded state persists across reloads (the stock sidebar_state
-  // cookie, server-rendered).
+  // The folded state persists across reloads (the preferences cookie,
+  // server-rendered).
   await toggle.click();
   await page.reload();
   await expect(nav).not.toBeInViewport();

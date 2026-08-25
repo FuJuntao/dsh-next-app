@@ -1,10 +1,10 @@
 /**
  * Global styles (story #97): the shadcn lyra preset theme (tokens, Tailwind
  * v4 wiring) plus the rules the components cannot express — the 100% height
- * chain for the shell. The sidebar's transition policies (instant while the
- * resize handle drags, none under prefers-reduced-motion) are Tailwind
- * variants on the stock gap/container elements (sidebar.tsx). Everything
- * else is shadcn components + Tailwind utilities in the components.
+ * chain for the shell and the fold animation's prefers-reduced-motion rule.
+ * The resize handle's own drag CSS lives in its component
+ * (sidebar-resize-handle.css). Everything else is shadcn components +
+ * Tailwind utilities in the components.
  */
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -152,3 +152,12 @@
 }
 /*---break---
  */
+/* The sidebar's fold animation never runs under prefers-reduced-motion
+   (the drag-resize transition suppression lives in
+   sidebar-resize-handle.css). */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="sidebar-gap"],
+  [data-slot="sidebar-container"] {
+    transition: none;
+  }
+}

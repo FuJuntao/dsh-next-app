@@ -3,7 +3,8 @@
 import { useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useSidebar } from "@/components/ui/sidebar";
-import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
+import { updatePreferences } from "../lib/preferences";
+import "./sidebar-resize-handle.css";
 
 /**
  * The sidebar drag-resize handle. The shadcn Sidebar sizes itself from
@@ -11,10 +12,8 @@ import { PREFERENCES_COOKIE, encodePreferences } from "../lib/preferences";
  * handle needs no React state: it reads the variable off the
  * SidebarProvider wrapper and writes the new width into it while
  * dragging, then persists the result to the preferences cookie on
- * release. The wrapper's data-dragging attribute arms the Tailwind
- * variants (group-data-[dragging=true]/sidebar-wrapper:transition-none)
- * on the stock gap/container elements (sidebar.tsx), so the width
- * transitions stay off while dragging. The clamps
+ * release. The wrapper's data-dragging attribute (this component's CSS)
+ * disables the width transitions while dragging. The clamps
  * (--sidebar-min-width, --sidebar-center-min) and the keyboard step
  * (--sidebar-resize-step) are CSS variables in globals.css, the single
  * source for the shell's width constraints.
@@ -39,15 +38,7 @@ function shellClamps(): { min: number; centerMin: number } {
 
 /** Persist the width to the preferences cookie the server renders from (no flash). */
 function persistWidth(width: number): void {
-  try {
-    document.cookie =
-      PREFERENCES_COOKIE +
-      "=" +
-      encodePreferences({ layout: { width: Math.round(width) } }) +
-      ";path=/;max-age=31536000;samesite=lax";
-  } catch {
-    // Storage unavailable: the in-memory width still applies.
-  }
+  updatePreferences({ layout: { width: Math.round(width) } });
 }
 
 export function SidebarResizeHandle() {

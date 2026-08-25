@@ -3,10 +3,11 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { RiSettings3Line } from "@remixicon/react";
+import { RiCloseLine, RiSettings3Line } from "@remixicon/react";
 import { DshHarnessChip, DshLogo, DshWordmark } from "./dsh-logo";
 import { SESSIONS } from "../lib/sessions";
 import { SidebarResizeHandle } from "./sidebar-resize-handle";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   Sidebar,
@@ -15,6 +16,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarHeader,
+  SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -26,9 +28,10 @@ import {
  * The app shell (story #97): side nav and content column, composed
  * entirely from the shadcn Sidebar (Base UI) over the preset's lyra
  * theme. The component supplies what it ships out of the box: the desktop
- * fold (offcanvas), the mobile overlay drawer (Sheet with its stock close
- * button), the toggle button, the keyboard shortcut, and the sidebar
- * width via the --sidebar-width CSS variable the layout declares. This
+ * fold (offcanvas), the mobile overlay drawer (Sheet - its built-in close
+ * stays hidden, the app renders its own in the drawer header), the toggle
+ * button, the keyboard shortcut, and the sidebar width via the
+ * --sidebar-width CSS variable the layout declares. This
  * file only adds what the component cannot express: the brand row, the
  * sessions list, and the settings entry - small components that read the
  * layout's provider context through useSidebar.
@@ -40,6 +43,24 @@ import {
  * - Below 768px: the side nav becomes a Sheet overlay drawer opened from
  *   the header toggle; it never pushes the content.
  */
+
+/**
+ * The mobile drawer's own close button (the Sheet hides its built-in one).
+ */
+function SidebarCloseButton() {
+  const { toggleSidebar } = useSidebar();
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Close navigation"
+      className="md:hidden"
+      onClick={toggleSidebar}
+    >
+      <RiCloseLine />
+    </Button>
+  );
+}
 
 /**
  * The brand (story #104): exactly the two svgs from the built-in web app's
@@ -146,7 +167,10 @@ export function AppSidebar() {
     <Sidebar collapsible="offcanvas">
       <div role="navigation" aria-label="Primary" className="flex size-full min-h-0 flex-col">
         <SidebarHeader>
-          <SidebarBrand />
+          <div className="flex items-center justify-between gap-2">
+            <SidebarBrand />
+            <SidebarCloseButton />
+          </div>
         </SidebarHeader>
         <SidebarContent>
           <SessionsNav />
@@ -161,21 +185,24 @@ export function AppSidebar() {
 }
 
 /**
- * The content column: the always-visible header with the fold toggle,
- * then the scrollable page area (max-width 48rem) under the separator.
- * The SidebarProvider lives in app/layout.tsx (the docs' usage pattern),
- * so this column needs no sidebar state of its own.
+ * The content column on the stock SidebarInset: the always-visible header
+ * with the fold toggle, then the scrollable page area (max-width 48rem)
+ * under the separator. The SidebarProvider lives in app/layout.tsx (the
+ * docs' usage pattern), so this column needs no sidebar state of its own.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
-    <div className="relative flex w-full flex-1 flex-col bg-background">
-      <header className="flex h-12 shrink-0 items-center gap-3 px-4">
+    <SidebarInset>
+      {/* The header sits inside the inset's <main> column, so its implicit
+          banner role would be lost (header->banner only outside main);
+          the explicit role keeps the page landmark. */}
+      <header role="banner" className="flex h-12 shrink-0 items-center gap-3 px-4">
         <SidebarTrigger aria-label="Toggle navigation" />
       </header>
       <Separator />
-      <main className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-6 py-4">{children}</div>
-      </main>
-    </div>
+      </div>
+    </SidebarInset>
   );
 }

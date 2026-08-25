@@ -7,11 +7,11 @@
  * every change. The value is URL-encoded JSON: encodeURIComponent output is
  * entirely within the cookie-octet set, so no escaping is lost on the wire.
  *
- * Validation is deliberate and strict: unknown keys are dropped and any
- * malformed value reports no preference at all, so a hand-edited or stale
- * cookie can never break the shell - the shell then falls back to the
- * component's own CSS defaults. (Signing/tamper protection and schema
- * growth are a dedicated story.)
+ * Validation is deliberate and strict: unknown keys are dropped and each
+ * known field is rebuilt only when it parses, so a hand-edited or stale
+ * cookie can never break the shell - an absent field simply leaves the
+ * shell on its CSS/component default. (Signing/tamper protection and
+ * schema growth are a dedicated story.)
  *
  * The width constraints (minimum, center-column minimum, resize step) are
  * NOT here: they are CSS variables in globals.css, the single source the
@@ -19,12 +19,10 @@
  * is the shadcn Sidebar's own --sidebar-width (16rem), applied whenever no
  * width preference exists.
  *
- * The fold state is deliberately not here either: it rides the stock
- * sidebar_state cookie the shadcn Sidebar writes on its own toggle, so
- * the shell never needs a controlled provider to persist it (the layout
- * reads that cookie for the first paint too). This channel carries
- * shell-level preferences only - width today, more namespaced sections
- * as features need them.
+ * The fold state lives here too: the layout renders it into the first
+ * paint, and the shell's controlled client provider
+ * (shell-sidebar-provider.tsx) persists toggles through updatePreferences -
+ * the only observer the Sidebar offers for its open state.
  */
 
 /** The cookie carrying the preferences object. */
@@ -32,8 +30,10 @@ export const PREFERENCES_COOKIE = "dsh-next-app.prefs";
 
 /** Layout prefs consumed by the shell (AppShell). */
 export interface LayoutPreferences {
-  /** The side nav width in px. */
-  width: number;
+  /** The side nav width in px; absent = the CSS default styles the shell. */
+  width?: number;
+  /** Whether the side nav is folded away; absent = open by default. */
+  folded?: boolean;
 }
 
 /** The preferences object; add namespaced sections as features need them. */
@@ -52,9 +52,10 @@ export function encodePreferences(prefs: Preferences): string {
 
 /**
  * Parse and validate the raw cookie value into preferences. A missing or
- * malformed value (including a non-positive or non-finite width) reports
- * undefined, so the caller can fall back to the CSS defaults instead of
- * rendering a made-up width.
+ * unparsable value reports undefined; a parsable one keeps exactly the
+ * fields that validate (a finite positive width, a boolean folded flag)
+ * and drops everything else, so an absent field falls back to the
+ * component/CSS default instead of a made-up value.
  */
 export function readPreferences(raw: string | undefined): Preferences | undefined {
   if (raw === undefined) return undefined;
@@ -65,10 +66,41 @@ export function readPreferences(raw: string | undefined): Preferences | undefine
     return undefined;
   }
   if (typeof parsed !== "object" || parsed === null) return undefined;
-  const layout = (parsed as { layout?: unknown }).layout as { width?: unknown } | undefined;
-  const width = layout?.width;
-  if (typeof width !== "number" || !Number.isFinite(width) || width <= 0) {
-    return undefined;
+  const layout = (parsed as { layout?: unknown }).layout as
+    | { width?: unknown; folded?: unknown }
+    | undefined;
+  if (layout === undefined) return { layout: {} };
+  const prefs: LayoutPreferences = {};
+  if (typeof layout.width === "number" && Number.isFinite(layout.width) && layout.width > 0) {
+    prefs.width = layout.width;
   }
-  return { layout: { width } };
+  if (typeof layout.folded === "boolean") {
+    prefs.folded = layout.folded;
+  }
+  return { layout: prefs };
+}
+
+/** Read the preferences from the current document cookie (client only). */
+export function readCookiePreferences(): Preferences | undefined {
+  const raw = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(PREFERENCES_COOKIE + "="))
+    ?.slice(PREFERENCES_COOKIE.length + 1);
+  return readPreferences(raw);
+}
+
+/**
+ * Merge a patch into the stored preferences and write the cookie (client
+ * only). Writers merge so the layout fields (width, folded) never clobber
+ * each other.
+ */
+export function updatePreferences(patch: Preferences): void {
+  try {
+    const current = readCookiePreferences();
+    const prefs: Preferences = { layout: { ...current?.layout, ...patch.layout } };
+    document.cookie =
+      PREFERENCES_COOKIE + "=" + encodePreferences(prefs) + ";path=/;max-age=31536000;samesite=lax";
+  } catch {
+    // Storage unavailable: the in-memory state still applies.
+  }
 }
