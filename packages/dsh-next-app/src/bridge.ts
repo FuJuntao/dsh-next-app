@@ -230,7 +230,6 @@ export async function startBridge(
           res.end(error.message);
           return;
         }
-        if (res.writableEnded || res.destroyed) return;
         res.statusCode = 500;
         res.end(`handler failure: ${String(error)}`);
       } finally {
