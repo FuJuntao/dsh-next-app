@@ -2,10 +2,12 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { RiCloseLine, RiCloudOffLine, RiSettings3Line } from "@remixicon/react";
+import { usePathname } from "next/navigation";
+import { RiCloseLine, RiSettings3Line } from "@remixicon/react";
 import { DshHarnessChip, DshLogo, DshWordmark } from "./dsh-logo";
+import type { SessionViewPreferences } from "../lib/preferences";
 import type { SessionsResult } from "../lib/sessions";
+import { SessionsNav } from "./sessions-nav";
 import { SidebarResizeHandle } from "./sidebar-resize-handle";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -13,8 +15,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -94,65 +94,6 @@ function SidebarBrand() {
 }
 
 /**
- * The sessions list (story #104, real data #108): one row per session
- * linking to its /sessions/[id] page, with the current session highlighted.
- * The rows are fetched from the live profile through the bridge (ADR-0003)
- * by the root layout and arrive here as props. A bridge-down fetch renders
- * a distinct error row with a Retry action - the rest of the page still
- * renders, and stale placeholder rows never appear. The retry re-runs the
- * layout's server fetch (router.refresh), so a recovered bridge is picked
- * up on the next render.
- */
-function SessionsNav({ sessions }: { sessions: SessionsResult }) {
-  const pathname = usePathname();
-  const { isMobile, setOpenMobile } = useSidebar();
-  const router = useRouter();
-  return (
-    <SidebarGroup>
-      <SidebarGroupLabel>Sessions</SidebarGroupLabel>
-      <SidebarMenu>
-        {sessions.status === "unavailable" ? (
-          <SidebarMenuItem className="flex h-8 w-full items-center gap-2 px-2 text-xs">
-            {/* The destructive tone is scoped to the status content (icon +
-                text) only; the outline button keeps its neutral foreground. */}
-            <RiCloudOffLine aria-hidden="true" className="size-4 shrink-0 text-destructive/80" />
-            <span className="min-w-0 flex-1 truncate text-destructive/80">
-              Sessions unavailable
-            </span>
-            <Button
-              variant="outline"
-              size="xs"
-              aria-label="Retry loading sessions"
-              onClick={() => router.refresh()}
-            >
-              Retry
-            </Button>
-          </SidebarMenuItem>
-        ) : (
-          sessions.sessions.map((session) => (
-            <SidebarMenuItem key={session.id}>
-              <SidebarMenuButton
-                isActive={pathname === `/sessions/${session.id}`}
-                render={
-                  <Link
-                    href={`/sessions/${session.id}`}
-                    onClick={() => {
-                      if (isMobile) setOpenMobile(false);
-                    }}
-                  />
-                }
-              >
-                <span className="truncate">{session.title}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))
-        )}
-      </SidebarMenu>
-    </SidebarGroup>
-  );
-}
-
-/**
  * The settings entry at the bottom of the side nav: a footer menu group
  * with the gear icon and its label, active on /settings, closing the
  * mobile drawer on navigation like the sessions rows.
@@ -186,9 +127,17 @@ function SettingsNav() {
  * The side nav, as the docs compose it: brand in the sticky header, the
  * sessions group in the scrollable content region, settings in the sticky
  * footer. The nav landmark wrapper is what the e2e suite's layout specs
- * address (and a real landmark for screen readers).
+ * address (and a real landmark for screen readers). The sessions list and
+ * its view prefs arrive from the layout's server fetch and cookie read;
+ * sessions-nav.tsx owns everything about rendering them.
  */
-export function AppSidebar({ sessions }: { sessions: SessionsResult }) {
+export function AppSidebar({
+  sessions,
+  view,
+}: {
+  sessions: SessionsResult;
+  view: SessionViewPreferences;
+}) {
   return (
     <Sidebar collapsible="offcanvas">
       <div role="navigation" aria-label="Primary" className="flex size-full min-h-0 flex-col">
@@ -199,7 +148,7 @@ export function AppSidebar({ sessions }: { sessions: SessionsResult }) {
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <SessionsNav sessions={sessions} />
+          <SessionsNav sessions={sessions} view={view} />
         </SidebarContent>
         <SidebarFooter>
           <SettingsNav />
