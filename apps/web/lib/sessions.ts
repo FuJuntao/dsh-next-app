@@ -70,8 +70,9 @@ function toSession(summary: SessionSummary): Session {
  */
 export async function fetchSessions(): Promise<SessionsResult> {
   // Dev-only mock seam (visual testing): returns the controlled list or
-  // the bridge-down state before any bridge call; the env is never set in
-  // production, so the real path below is the only one that runs there.
+  // the bridge-down state before any bridge call. The gate is the absence
+  // of the <runDir>/mock-sessions switch file - without it the real path
+  // below is the only one that ever runs, production included.
   const mock = mockSessionsResult();
   if (mock !== undefined) return mock;
   try {
