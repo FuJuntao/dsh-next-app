@@ -3,9 +3,9 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { RiCloseLine, RiSettings3Line } from "@remixicon/react";
+import { RiCloseLine, RiCloudOffLine, RiSettings3Line } from "@remixicon/react";
 import { DshHarnessChip, DshLogo, DshWordmark } from "./dsh-logo";
-import { SESSIONS } from "../lib/sessions";
+import type { SessionsResult } from "../lib/sessions";
 import { SidebarResizeHandle } from "./sidebar-resize-handle";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -93,35 +93,46 @@ function SidebarBrand() {
 }
 
 /**
- * The sessions list (story #104): one row per session linking to its
- * /sessions/[id] page, with the current session highlighted. The rows come
- * from lib/sessions.ts - the static stand-in for the bridge data channel
- * (ADR-0003) - so swapping the data source later never touches this chrome.
+ * The sessions list (story #104, real data #108): one row per session
+ * linking to its /sessions/[id] page, with the current session highlighted.
+ * The rows are fetched from the live profile through the bridge (ADR-0003)
+ * by the root layout and arrive here as props. A bridge-down fetch renders
+ * a distinct unavailable row - the rest of the page still renders, and
+ * stale placeholder rows never appear.
  */
-function SessionsNav() {
+function SessionsNav({ sessions }: { sessions: SessionsResult }) {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Sessions</SidebarGroupLabel>
       <SidebarMenu>
-        {SESSIONS.map((session) => (
-          <SidebarMenuItem key={session.id}>
-            <SidebarMenuButton
-              isActive={pathname === `/sessions/${session.id}`}
-              render={
-                <Link
-                  href={`/sessions/${session.id}`}
-                  onClick={() => {
-                    if (isMobile) setOpenMobile(false);
-                  }}
-                />
-              }
-            >
-              <span className="truncate">{session.title}</span>
-            </SidebarMenuButton>
+        {sessions.status === "unavailable" ? (
+          <SidebarMenuItem>
+            <div className="flex items-center gap-2 text-sidebar-foreground/60">
+              <RiCloudOffLine className="size-4 shrink-0" />
+              <span className="truncate">Sessions unavailable</span>
+            </div>
           </SidebarMenuItem>
-        ))}
+        ) : (
+          sessions.sessions.map((session) => (
+            <SidebarMenuItem key={session.id}>
+              <SidebarMenuButton
+                isActive={pathname === `/sessions/${session.id}`}
+                render={
+                  <Link
+                    href={`/sessions/${session.id}`}
+                    onClick={() => {
+                      if (isMobile) setOpenMobile(false);
+                    }}
+                  />
+                }
+              >
+                <span className="truncate">{session.title}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))
+        )}
       </SidebarMenu>
     </SidebarGroup>
   );
@@ -163,7 +174,7 @@ function SettingsNav() {
  * footer. The nav landmark wrapper is what the e2e suite's layout specs
  * address (and a real landmark for screen readers).
  */
-export function AppSidebar() {
+export function AppSidebar({ sessions }: { sessions: SessionsResult }) {
   return (
     <Sidebar collapsible="offcanvas">
       <div role="navigation" aria-label="Primary" className="flex size-full min-h-0 flex-col">
@@ -174,7 +185,7 @@ export function AppSidebar() {
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <SessionsNav />
+          <SessionsNav sessions={sessions} />
         </SidebarContent>
         <SidebarFooter>
           <SettingsNav />

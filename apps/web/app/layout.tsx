@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell, AppSidebar } from "../components/AppShell";
 import { ShellSidebarProvider } from "../components/shell-sidebar-provider";
 import { readPreferences } from "../lib/preferences-server";
+import { fetchSessions } from "../lib/sessions";
 import "./globals.css";
 
 const notoSans = Noto_Sans({ subsets: ["latin"], variable: "--font-sans" });
@@ -19,6 +20,10 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const prefs = await readPreferences();
+  // The live sessions list (ADR-0003): fetched through the bridge at
+  // request time, so the first paint already carries the profile's real
+  // sessions (the bridge-down state is a distinct render, never stale rows).
+  const sessions = await fetchSessions();
   return (
     <html lang="en" className={notoSans.variable}>
       <body>
@@ -27,7 +32,7 @@ export default async function RootLayout({
             initialFolded={prefs?.layout.folded ?? false}
             initialWidth={prefs?.layout.width}
           >
-            <AppSidebar />
+            <AppSidebar sessions={sessions} />
             <AppShell>{children}</AppShell>
           </ShellSidebarProvider>
         </TooltipProvider>
