@@ -52,14 +52,17 @@ unlink on stop, path forwarded to the child via environment):
   per request.
 
 Supersedes: ADR-0003's framing paragraph (NDJSON), its connection-model
-paragraph (one multiplexed rpc connection with a pending table), and its
-consequence describing the bespoke ~400-line bridge surface.
+paragraph (one multiplexed rpc connection with a pending table), its
+client-side reconnect-with-backoff clause, and the consequence describing
+the bespoke ~400-line bridge surface.
 
 ## Consequences
 
-- The bespoke bridge surface shrinks to two thin transport adapters (~120
-  lines across the row and the app); the protocol lives in the shipped,
-  catalog-pinned package (ADR-0006), where the gateway's own tests cover it.
+- The bespoke bridge surface shrinks to two thin transport adapters - an
+  HTTP-server adapter on the row and a socket transport on the client -
+  instead of a bespoke protocol implementation; the protocol lives in the
+  shipped, catalog-pinned package (ADR-0006), where the gateway's own tests
+  cover it.
 - Version-drift protection is unchanged in strength: the shipped handler and
   client validate the same pinned schemas on both ends, so a host bump that
   changes the envelope or a method's payload/value shape fails loud at the
