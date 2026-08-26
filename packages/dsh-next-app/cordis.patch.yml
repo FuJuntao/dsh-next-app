@@ -1,9 +1,11 @@
 # The dsh-next-app bundle patch: the next-app profile's boot layer over
-# dsh-base. Rows here are boot-minimal (ADR-0001): the flag provider and the
-# boot glue that spawns the packed Next app as a managed child of the dsh
-# host. The unix-socket bridge, the transport rows, and the browser roster
-# are the bridge and UI stories' rows - nothing here touches the dsh
-# `webserver` carrier, because Next is the only public HTTP surface.
+# dsh-base. Rows here are boot-minimal (ADR-0001): the flag provider, the
+# host rows the API gateway needs, and the boot glue that spawns the packed
+# Next app as a managed child of the dsh host and serves the unix-socket
+# envelope bridge (ADR-0003). Nothing here touches the dsh `webserver`
+# carrier - Next is the only public HTTP surface, and the bridge rows mount
+# only what the gateway's service chain requires, not the web-app transport
+# layer (the browser roster and the transport rows are the UI stories').
 #
 # A patch replaces the targeted row's whole `config`, so each row below
 # restates every key it owns; these rows carry no config of their own.
@@ -16,9 +18,44 @@
     - id: next-app-cli
       name: "@scope/dsh-next-app/cli"
 
-    # The boot glue: spawns the packed Next app (`next start`) as a managed
-    # child through the base layer's subprocess service, detects readiness
-    # from the child's stdout, restarts it with backoff on unexpected exit,
+    # ── the API gateway and its service chain (mirrors dsh-web-app's host
+    #    rows, minus the webserver/transport layer) ────────────────────────
+    # The runtime row dispatches the bridge's unary methods to the injected
+    # apiProxy service (ctx.apiProxy, provided by the gateway plugin), whose
+    # static service chain reaches rows the base layer does not mount:
+    # storage (workspace's storageDomain backend), the workspace registry,
+    # and a directory-picker backend (the gateway injects directoryPicker).
+    # The browse backend serves remote clients over the host filesystem and
+    # needs no webserver; the -auto backend injects webServer, which this
+    # profile deliberately lacks.
+
+    - id: storage
+      name: "@deepseek-ai/dsh-storage"
+
+    - id: storage-json
+      name: "@deepseek-ai/dsh-storage-json"
+      config:
+        root: !!js dshHomePath('storages')
+
+    - id: storage-domain
+      name: "@deepseek-ai/dsh-storage-domain"
+      config:
+        backend: json
+
+    - id: workspace
+      name: "@deepseek-ai/dsh-workspace"
+
+    - id: directory-picker
+      name: "@deepseek-ai/dsh-host-directory-picker-browse"
+
+    - id: api-gateway
+      name: "@deepseek-ai/dsh-host-apiproxy"
+
+    # The boot glue and the bridge: spawns the packed Next app (`next
+    # start`) as a managed child through the base layer's subprocess
+    # service, serves the unary envelope bridge over a mode-0600 unix socket
+    # under the profile's run directory (ADR-0003), detects readiness from
+    # the child's stdout, restarts it with backoff on unexpected exit,
     # terminates its process tree on profile stop, and announces the serving
     # URL after the Loader tree settles. Its serving config (host, port -
     # ADR-0009) and auth config (auth.user, auth.passwordHash, auth.realm -

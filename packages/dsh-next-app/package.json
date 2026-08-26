@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@base-ui/react": "catalog:",
+    "@deepseek-ai/dsh-host-apiproxy": "catalog:",
     "@deepseek-ai/schemastery": "catalog:",
     "@remixicon/react": "catalog:",
     "class-variance-authority": "catalog:",
@@ -53,6 +54,7 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-cmdline": "catalog:",
+    "@deepseek-ai/dsh-host-apiproxy": "catalog:",
     "@deepseek-ai/dsh-subprocess": "catalog:",
     "@deepseek-ai/schemastery": "catalog:"
   },
