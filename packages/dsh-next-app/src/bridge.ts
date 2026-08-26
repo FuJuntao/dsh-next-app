@@ -46,6 +46,9 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 /** How long to probe a suspicious socket file before treating it as stale. */
 const PROBE_TIMEOUT_MS = 200;
 
+/** Default request-body ceiling (envelope calls are kilobytes; 1 MiB is generous). */
+const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+
 /** The bridge server handle the runtime row owns. */
 export interface BridgeServer {
   /** Close the listener, drop open connections, and unlink the socket file. */
@@ -56,12 +59,33 @@ export interface BridgeServer {
 export interface BridgeOptions {
   /** Per-request timeout for unary POSTs; defaults to 30s. */
   requestTimeoutMs?: number;
+  /** Request-body ceiling in bytes; defaults to 1 MiB. */
+  maxBodyBytes?: number;
 }
 
-/** Buffer an IncomingMessage body (the handler consumes it through req.json()). */
-async function readBody(req: IncomingMessage): Promise<Buffer> {
+/** The request body exceeded the bridge's configured ceiling. */
+class BodyTooLargeError extends Error {
+  constructor(readonly maxBodyBytes: number) {
+    super(`request body exceeds ${String(maxBodyBytes)} bytes`);
+    this.name = "BodyTooLargeError";
+  }
+}
+
+/**
+ * Buffer an IncomingMessage body (the handler consumes it through
+ * req.json()), refusing anything past `maxBytes`: the timeout bounds how
+ * long a client may hold a connection, this bounds how much memory one may
+ * make the host spend on it.
+ */
+async function readBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
+  let total = 0;
   for await (const chunk of req) {
+    total += (chunk as Buffer).length;
+    if (total > maxBytes) {
+      req.destroy();
+      throw new BodyTooLargeError(maxBytes);
+    }
     chunks.push(chunk as Buffer);
   }
   return Buffer.concat(chunks);
@@ -167,6 +191,7 @@ export async function startBridge(
   options?: BridgeOptions,
 ): Promise<BridgeServer> {
   const requestTimeoutMs = options?.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const maxBodyBytes = options?.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const state = await probeSocket(socketPath);
   if (state === "live") {
     throw new Error(`next-app-bridge: another instance is already serving ${socketPath}`);
@@ -189,11 +214,19 @@ export async function startBridge(
         : undefined;
     void (async () => {
       try {
-        const body = await readBody(req);
+        const body = await readBody(req, maxBodyBytes);
         const request = toRequest(req, body, "http://dsh.internal");
         const response = await handler.fetch(request);
         await writeResponse(res, response);
       } catch (error) {
+        if (res.writableEnded || res.destroyed) return;
+        if (error instanceof BodyTooLargeError) {
+          // Shed the rest of the upload and tell the caller why.
+          if (!req.destroyed) req.destroy();
+          res.statusCode = 413;
+          res.end(error.message);
+          return;
+        }
         if (res.writableEnded || res.destroyed) return;
         res.statusCode = 500;
         res.end(`handler failure: ${String(error)}`);
@@ -202,15 +235,23 @@ export async function startBridge(
       }
     })();
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(socketPath, () => {
-      server.off("error", reject);
-      resolve();
+  // The listener creates the socket file at process-umask-derived mode;
+  // the bridge's filesystem permissions are its access control (ADR-0003),
+  // so they must hold from the first byte - not only once a later chmod
+  // lands. Bind under a tightened umask, then restore; the explicit
+  // chmodSync afterwards stays as the pin against inherited oddities.
+  const previousUmask = process.umask(0o077);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(socketPath, () => {
+        server.off("error", reject);
+        resolve();
+      });
     });
-  });
-  // The listener creates the file with the process umask; the bridge's
-  // filesystem permissions are its access control (ADR-0003), so pin them.
+  } finally {
+    process.umask(previousUmask);
+  }
   chmodSync(socketPath, 0o600);
   // A listener error after the bind is not a boot failure anymore, but an
   // unhandled 'error' event would crash the host - log it instead.
