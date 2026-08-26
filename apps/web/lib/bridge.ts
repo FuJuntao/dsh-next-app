@@ -25,6 +25,17 @@ import { AbstractApiClient } from "@deepseek-ai/dsh-host-apiproxy/client";
 const SOCKET_PATH = process.env["DSH_NEXT_APP_BRIDGE_SOCKET"];
 
 /**
+ * Deadline for the nav's bounded calls. The root layout awaits the fetch
+ * (story #107's data flow), so a wedged bridge - one that accepts and
+ * never answers - must not stall the whole page for the shipped 30s
+ * default: a refused connect fails fast (AC 6), and this bound turns a
+ * hung impl into a bounded one. Local session.list answers in
+ * milliseconds, so the bound is generous; heavier future calls can use
+ * their own client instance with the shipped default.
+ */
+const NAV_FETCH_TIMEOUT_MS = 5_000;
+
+/**
  * The bridge is unreachable: the socket env is absent or the socket refused
  * the connection. Callers surface this as the distinct bridge-down state -
  * never stale data.
@@ -98,11 +109,24 @@ export class BridgeApiClient extends AbstractApiClient {
             );
           });
           res.on("end", () => {
+            // Normalize Node's IncomingHttpHeaders (values may be string[],
+            // e.g. set-cookie, or undefined) onto the WHATWG Headers the
+            // Response constructor accepts - the row-side adapter does the
+            // same in reverse; a multi-value header must not throw here.
+            const headers = new Headers();
+            for (const [name, value] of Object.entries(res.headers)) {
+              if (value === undefined) continue;
+              if (Array.isArray(value)) {
+                for (const entry of value) headers.append(name, entry);
+              } else {
+                headers.set(name, value);
+              }
+            }
             resolve(
               new Response(Buffer.concat(chunks), {
                 status: res.statusCode ?? 500,
                 ...(res.statusMessage !== undefined && { statusText: res.statusMessage }),
-                headers: res.headers as Record<string, string>,
+                headers,
               }),
             );
           });
@@ -132,6 +156,7 @@ let shared: BridgeApiClient | undefined;
 
 /** The bridge client; calls fail with BridgeUnavailableError when the bridge is down. */
 export function getBridgeClient(): BridgeApiClient {
-  shared ??= new BridgeApiClient(SOCKET_PATH);
+  // The nav fetch must never stall the first paint (see NAV_FETCH_TIMEOUT_MS).
+  shared ??= new BridgeApiClient(SOCKET_PATH, NAV_FETCH_TIMEOUT_MS);
   return shared;
 }
