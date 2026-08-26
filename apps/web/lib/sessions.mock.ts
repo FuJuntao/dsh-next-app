@@ -1,22 +1,27 @@
 /**
- * Dev-only mock sessions for visual testing (env-gated; never active
- * without the operator's explicit opt-in).
+ * Dev-only mock sessions for visual testing - switched by a file in the
+ * profile's run directory, so the mode changes without restarting the
+ * service: write "sample" or "down" to <runDir>/mock-sessions (the run
+ * dir is where the bridge socket lives) and refresh the page.
  *
- * The runtime row forwards DSH_NEXT_APP_MOCK_SESSIONS to the child when
- * the profile is launched with it (the host scrubs DSH_* names from
- * implicit inheritance, so it never reaches the app otherwise):
  *   - "sample": fetchSessions returns a controlled list - varied titles,
  *     running flags, cwds, one subagent row - so the nav can be exercised
  *     without depending on a real profile's data.
  *   - "down": fetchSessions reports the bridge-down state, so the error
  *     row and its Retry action can be tested visually.
- * Any other value (or absence) leaves the real bridge path untouched: the
- * mock is never a fallback, and the e2e suite runs with it off.
+ *
+ * An absent, empty, or unrecognized value leaves the real bridge path
+ * untouched: the mock is never a fallback, and the e2e suite runs with
+ * the file absent (the scratch profile never writes it). One tiny file
+ * read per fetch keeps the switch live at request time; page loads are
+ * rare events, so the cost is noise.
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Session, SessionsResult } from "./sessions";
 
-/** The mock switch env; "sample" and "down" are the only meaningful values. */
-const MOCK_SESSIONS_ENV = "DSH_NEXT_APP_MOCK_SESSIONS";
+/** The switch file sits beside the bridge socket, under the profile run dir. */
+const MOCK_SESSIONS_FILENAME = "mock-sessions";
 
 const HOUR = 3_600_000;
 const now = Date.now();
@@ -62,12 +67,26 @@ const SAMPLE_SESSIONS: Session[] = [
   },
 ];
 
+/** Read the switch file; absent/unreadable/unrecognized means the real path. */
+function readMockMode(): string | undefined {
+  const socketPath = process.env["DSH_NEXT_APP_BRIDGE_SOCKET"];
+  if (socketPath === undefined) return undefined;
+  try {
+    const mode = readFileSync(join(dirname(socketPath), MOCK_SESSIONS_FILENAME), "utf8")
+      .trim()
+      .toLowerCase();
+    return mode === "sample" || mode === "down" ? mode : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * The mock result when the mock env is set; undefined leaves the real
- * bridge path untouched.
+ * The mock result when the switch file names a mode; undefined leaves the
+ * real bridge path untouched.
  */
 export function mockSessionsResult(): SessionsResult | undefined {
-  switch (process.env[MOCK_SESSIONS_ENV]) {
+  switch (readMockMode()) {
     case "sample":
       return { status: "ok", sessions: SAMPLE_SESSIONS };
     case "down":
