@@ -65,9 +65,12 @@ export interface BridgeOptions {
 
 /** The request body exceeded the bridge's configured ceiling. */
 class BodyTooLargeError extends Error {
-  constructor(readonly maxBodyBytes: number) {
+  readonly maxBodyBytes: number;
+
+  constructor(maxBodyBytes: number) {
     super(`request body exceeds ${String(maxBodyBytes)} bytes`);
     this.name = "BodyTooLargeError";
+    this.maxBodyBytes = maxBodyBytes;
   }
 }
 
