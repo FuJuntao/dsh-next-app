@@ -79,11 +79,12 @@ function SidebarBrand() {
         if (isMobile) setOpenMobile(false);
       }}
       // Inline brand row: the whale, the "DeepSeek" wordmark, and the
-      // "harness" chip - at their intrinsic sizes with 8px gaps, flat (no
-      // padding box), content-width. The row fits the shell's minimum
-      // sidebar width (--sidebar-min-width, globals.css), so nothing
-      // hides or overflows at the narrowest setting.
-      className="flex w-fit items-center gap-2 text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground"
+      // "harness" chip - at their intrinsic sizes with 8px gaps, padded
+      // with p-4 so the row's box aligns with the shell's padding rhythm.
+      // The row still fits the shell's minimum sidebar width
+      // (--sidebar-min-width, globals.css), so nothing hides or overflows
+      // at the narrowest setting.
+      className="flex w-fit items-center gap-2 p-4 text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground"
     >
       <DshLogo className="shrink-0" />
       <DshWordmark className="shrink-0" />
