@@ -117,11 +117,17 @@ function SessionsNav({ sessions }: { sessions: SessionsResult }) {
                 shares the height band), and the app's Button as the
                 action - text labels are its native content, no
                 menu-action slot shape overrides. */}
-            <div className="flex h-8 w-full items-center gap-2 px-2 text-xs text-destructive/80">
-              <RiCloudOffLine aria-hidden="true" className="size-4 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">Sessions unavailable</span>
+            {/* The destructive tone is scoped to the status content (icon +
+                text) only: the container carries no text color, so the
+                outline button keeps its own neutral foreground. */}
+            <div className="flex h-8 w-full items-center gap-2 px-2 text-xs">
+              <RiCloudOffLine aria-hidden="true" className="size-4 shrink-0 text-destructive/80" />
+              <span className="min-w-0 flex-1 truncate text-destructive/80">
+                Sessions unavailable
+              </span>
               <Button
                 variant="outline"
+                size="sm"
                 aria-label="Retry loading sessions"
                 onClick={() => router.refresh()}
               >
