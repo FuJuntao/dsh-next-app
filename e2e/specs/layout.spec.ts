@@ -362,39 +362,27 @@ test("the side nav brand links to the home page", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
 });
 
-test("the side nav lists the sessions and highlights the current one", async ({ page }) => {
+test("the side nav shows the real sessions list, empty in a fresh profile", async ({ page }) => {
+  // The list is fetched from the live profile over the bridge (#108): a
+  // fresh scratch profile has no sessions, so the nav renders the Sessions
+  // group with no rows - the static sample list is gone, and no stale
+  // placeholder row (e.g. "Session 1") appears anywhere.
   await page.setViewportSize(DESKTOP);
   await page.goto(state.baseURL + "/");
   const nav = page.getByRole("navigation", { name: "Primary" });
-  for (const title of ["Session 1", "Session 2", "Session 3"]) {
-    await expect(nav.getByRole("link", { name: title })).toBeVisible();
-  }
-  // No session is selected on the home page...
-  await expect(nav.getByRole("link", { name: "Session 1" })).not.toHaveAttribute(
-    "data-active",
-    /.*/,
-  );
-  // ...and the current session is highlighted on its detail page.
+  await expect(nav.getByText("Sessions")).toBeVisible();
+  await expect(nav.getByRole("link", { name: /Session/ })).toHaveCount(0);
+  // The sessions detail route still renders as its own page.
   await page.goto(state.baseURL + "/sessions/2");
-  await expect(nav.getByRole("link", { name: "Session 2" })).toHaveAttribute("data-active", /.*/);
-  await expect(nav.getByRole("link", { name: "Session 1" })).not.toHaveAttribute(
-    "data-active",
-    /.*/,
-  );
-  // Clicking a row navigates to its detail page.
-  await nav.getByRole("link", { name: "Session 3" }).click();
-  await expect(page).toHaveURL(/\/sessions\/3$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session 2");
 });
 
-test("the mobile drawer shows the brand and the sessions list", async ({ page }) => {
+test("the mobile drawer shows the brand and the empty sessions list", async ({ page }) => {
   await page.setViewportSize(MOBILE);
   await page.goto(state.baseURL + "/");
   await page.getByRole("button", { name: "Toggle navigation" }).click();
   const nav = page.getByRole("navigation", { name: "Primary" });
   await expect(nav.getByRole("link", { name: "DeepSeek Harness" })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "Session 1" })).toBeVisible();
-  // Navigating from the drawer closes it.
-  await nav.getByRole("link", { name: "Session 1" }).click();
-  await expect(page).toHaveURL(/\/sessions\/1$/);
-  await expect(nav).not.toBeInViewport();
+  await expect(nav.getByText("Sessions")).toBeVisible();
+  await expect(nav.getByRole("link", { name: /Session/ })).toHaveCount(0);
 });
