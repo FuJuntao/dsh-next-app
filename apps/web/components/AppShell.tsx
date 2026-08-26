@@ -79,11 +79,12 @@ function SidebarBrand() {
         if (isMobile) setOpenMobile(false);
       }}
       // Inline brand row: the whale, the "DeepSeek" wordmark, and the
-      // "harness" chip - at their intrinsic sizes with 8px gaps, flat (no
-      // padding box), content-width. The row fits the shell's minimum
-      // sidebar width (--sidebar-min-width, globals.css), so nothing
-      // hides or overflows at the narrowest setting.
-      className="flex w-fit items-center gap-2 text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground"
+      // "harness" chip - at their intrinsic sizes with 8px gaps, padded
+      // with p-2 on the brand itself (the header keeps its stock p-2, so
+      // the row's box sits at the shell's 16px inset). The row fits the
+      // shell's minimum sidebar width (--sidebar-min-width, globals.css),
+      // so nothing hides or overflows at the narrowest setting.
+      className="flex w-fit items-center gap-2 p-2 text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground"
     >
       <DshLogo className="shrink-0" />
       <DshWordmark className="shrink-0" />
@@ -191,7 +192,7 @@ export function AppSidebar({ sessions }: { sessions: SessionsResult }) {
   return (
     <Sidebar collapsible="offcanvas">
       <div role="navigation" aria-label="Primary" className="flex size-full min-h-0 flex-col">
-        <SidebarHeader className="p-4">
+        <SidebarHeader>
           <div className="flex items-center justify-between gap-2">
             <SidebarBrand />
             <SidebarCloseButton />
