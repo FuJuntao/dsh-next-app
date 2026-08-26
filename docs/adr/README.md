@@ -23,3 +23,4 @@ records that predate the reset refer to that numbering.
 | [0007](0007-basic-auth-scrypt.md) | Basic-auth password verification — built-in scrypt, no dependencies (supersedes ADR-0001's bcrypt clause) | Accepted |
 | [0008](0008-auth-config-cordis.md) | Basic-auth configuration — cordis row config on the runtime row (supersedes the env-channel clauses of ADR-0001/ADR-0007) | Accepted |
 | [0009](0009-serving-config-cordis.md) | Serving parameters (host, port) as cordis row config on the runtime row, flags override | Accepted |
+| [0010](0010-bridge-carrier-reuse.md) | Unix-socket bridge over the shipped fetch carrier (supersedes ADR-0003's framing and connection model) | Accepted |

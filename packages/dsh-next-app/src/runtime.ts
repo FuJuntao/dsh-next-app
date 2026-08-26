@@ -3,32 +3,39 @@
  *
  * Spawns the packed Next app (`next start`) as a managed child of the dsh
  * host through the base layer's `subprocess` service when the `next-app`
- * profile starts (forwarding the row's basic-auth config - ADR-0008 - into
- * the child's environment through the spawn spec's explicit env layer,
- * because the host service scrubs `DSH_*` and credential-shaped names from
- * implicit inheritance): detects readiness from the child's stdout, restarts the
- * child with backoff on unexpected exit, terminates its process tree on
- * profile stop, and announces the serving URL once the child is ready and
- * the Loader tree has settled. The dsh `webserver` carrier is deliberately
- * not in the serving path - Next is the only public HTTP surface.
+ * profile starts (forwarding the row's basic-auth config - ADR-0008 - and
+ * the bridge socket path - ADR-0003 - into the child's environment through
+ * the spawn spec's explicit env layer, because the host service scrubs
+ * `DSH_*` and credential-shaped names from implicit inheritance): detects
+ * readiness from the child's stdout, restarts the child with backoff on
+ * unexpected exit, terminates its process tree on profile stop, and
+ * announces the serving URL once the child is ready and the Loader tree
+ * has settled. The envelope bridge (bridge.ts - ADR-0003 socket lifecycle,
+ * ADR-0010 framing) lives in this row: its unix socket is created before
+ * the child spawns, its path rides `DSH_NEXT_APP_BRIDGE_SOCKET` in the
+ * spawn env, and it is torn down with the row. The dsh `webserver` carrier
+ * is deliberately not in the serving path - Next is the only public HTTP
+ * surface.
  *
  * Import surface: host packages only, resolved from the user's dsh
  * installation as peerDependencies (ADR-0002).
  *
  * @module @scope/dsh-next-app/runtime
  */
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Context } from "@deepseek-ai/cordis";
+import type { ApiProxy } from "@deepseek-ai/dsh-host-apiproxy";
 import type { SubprocessHandle } from "@deepseek-ai/dsh-subprocess";
 import Schema from "@deepseek-ai/schemastery";
+import { BRIDGE_SOCKET_ENV, startBridge, type BridgeServer } from "./bridge.js";
 
 /** Stable Cordis plugin name. */
 export const name = "next-app-runtime";
 
 /** Services required before the boot glue can run. */
-export const inject = ["nextAppCli", "subprocess"];
+export const inject = ["nextAppCli", "subprocess", "apiProxy"];
 
 /** Default bind host: loopback; an all-interfaces bind is guarded by basic auth when provisioned (ADR-0001). */
 const DEFAULT_HOST = "127.0.0.1";
@@ -105,6 +112,15 @@ const BUNDLE_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const APP_DIR = join(BUNDLE_ROOT, "web");
 
 /**
+ * The bridge socket's run directory: a per-profile subdirectory (mode 0700)
+ * under the profile directory the Loader anchors at (`ctx.baseUrl`). The
+ * host defines no run-dir concept, so the row owns this one - the socket is
+ * per-instance state that must never be packed or shared, and the profile
+ * directory is the only in-process anchor to it (ADR-0003).
+ */
+const RUN_DIR_NAME = "run";
+
+/**
  * The stdout line Next prints once the server accepts connections.
  *
  * REGRESSION NOTE: Next's console output is an implementation detail, not a
@@ -172,6 +188,20 @@ export function apply(ctx: Context, config: Config): void {
   const nextCli = fileURLToPath(import.meta.resolve("next/dist/bin/next"));
   const controller = new AbortController();
 
+  // The bridge socket path (ADR-0003): under the profile's run directory,
+  // named per port so two instances of the same profile (different serving
+  // ports) never fight over one socket file - each child connects to the
+  // exact path its row forwards. Derived at boot, never configured.
+  if (ctx.baseUrl === undefined) {
+    throw new Error(
+      "next-app-runtime: no profile baseUrl - the bridge socket path cannot be derived (is the Loader root missing?)",
+    );
+  }
+  const runDir = join(fileURLToPath(ctx.baseUrl), RUN_DIR_NAME);
+  // The per-port filename is a naming contract: the e2e suite pins it
+  // (e2e/specs/bridge.spec.ts), so a rename fails loudly there.
+  const socketPath = join(runDir, `next-app-${port}.sock`);
+
   let handle: SubprocessHandle | undefined;
   let stopping = false;
   let attempts = 0;
@@ -217,6 +247,9 @@ export function apply(ctx: Context, config: Config): void {
             DSH_NEXT_APP_PASSWORD_HASH: auth.passwordHash,
           }),
         ...(auth?.realm !== undefined && auth.realm !== "" && { DSH_NEXT_APP_REALM: auth.realm }),
+        // DSH_* names are scrubbed from implicit inheritance; the socket
+        // path is deliberately forwarded like the auth config (ADR-0003).
+        [BRIDGE_SOCKET_ENV]: socketPath,
       },
       stdio: { stdin: "ignore", stdout: "pipe", stderr: "inherit" },
       graceMs: TERMINATE_GRACE_MS,
@@ -274,14 +307,33 @@ export function apply(ctx: Context, config: Config): void {
     );
   }
 
-  ctx.effect(() => {
-    spawnChild();
+  ctx.effect(async () => {
+    // The bridge socket must exist before the child's first request can
+    // reach it. Each app-side call is its own connection attempt, so a call
+    // placed before listen refuses fast into the unavailable state; starting
+    // the bridge first means even the very first page load carries data. A
+    // bridge that cannot start (live socket conflict, unboundable path)
+    // fails the fiber - the profile refuses to boot half-wired (the child
+    // would silently serve a dead data channel). The effect body always
+    // returns a disposer (cordis' async-effect contract), so a disposal
+    // that raced the bridge startup still stops it.
+    mkdirSync(runDir, { recursive: true, mode: 0o700 });
+    // The typed service face (the apiProxy service's own Context merge
+    // declares it; this local keeps the type loaded and in use).
+    const api: ApiProxy = ctx.apiProxy;
+    const bridge: BridgeServer = await startBridge(api, socketPath).catch((error: unknown) => {
+      throw new Error(
+        `next-app-runtime: starting the bridge failed (${error instanceof Error ? error.message : String(error)})`,
+      );
+    });
+    if (!stopping) spawnChild();
     return () => {
       stopping = true;
       controller.abort();
       clearTimeout(readyWarning);
       if (restartTimer !== undefined) clearTimeout(restartTimer);
       handle?.terminate();
+      bridge.stop();
     };
   });
 }

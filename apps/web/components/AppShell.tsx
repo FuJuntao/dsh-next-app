@@ -2,10 +2,10 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { RiCloseLine, RiSettings3Line } from "@remixicon/react";
+import { usePathname, useRouter } from "next/navigation";
+import { RiCloseLine, RiCloudOffLine, RiSettings3Line } from "@remixicon/react";
 import { DshHarnessChip, DshLogo, DshWordmark } from "./dsh-logo";
-import { SESSIONS } from "../lib/sessions";
+import type { SessionsResult } from "../lib/sessions";
 import { SidebarResizeHandle } from "./sidebar-resize-handle";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -79,11 +79,12 @@ function SidebarBrand() {
         if (isMobile) setOpenMobile(false);
       }}
       // Inline brand row: the whale, the "DeepSeek" wordmark, and the
-      // "harness" chip - at their intrinsic sizes with 8px gaps, flat (no
-      // padding box), content-width. The row fits the shell's minimum
-      // sidebar width (--sidebar-min-width, globals.css), so nothing
-      // hides or overflows at the narrowest setting.
-      className="flex w-fit items-center gap-2 text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground"
+      // "harness" chip - at their intrinsic sizes with 8px gaps, padded
+      // with p-2 on the brand itself (the header keeps its stock p-2, so
+      // the row's box sits at the shell's 16px inset). The row fits the
+      // shell's minimum sidebar width (--sidebar-min-width, globals.css),
+      // so nothing hides or overflows at the narrowest setting.
+      className="flex w-fit items-center gap-2 p-2 text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground"
     >
       <DshLogo className="shrink-0" />
       <DshWordmark className="shrink-0" />
@@ -93,35 +94,59 @@ function SidebarBrand() {
 }
 
 /**
- * The sessions list (story #104): one row per session linking to its
- * /sessions/[id] page, with the current session highlighted. The rows come
- * from lib/sessions.ts - the static stand-in for the bridge data channel
- * (ADR-0003) - so swapping the data source later never touches this chrome.
+ * The sessions list (story #104, real data #108): one row per session
+ * linking to its /sessions/[id] page, with the current session highlighted.
+ * The rows are fetched from the live profile through the bridge (ADR-0003)
+ * by the root layout and arrive here as props. A bridge-down fetch renders
+ * a distinct error row with a Retry action - the rest of the page still
+ * renders, and stale placeholder rows never appear. The retry re-runs the
+ * layout's server fetch (router.refresh), so a recovered bridge is picked
+ * up on the next render.
  */
-function SessionsNav() {
+function SessionsNav({ sessions }: { sessions: SessionsResult }) {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
+  const router = useRouter();
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Sessions</SidebarGroupLabel>
       <SidebarMenu>
-        {SESSIONS.map((session) => (
-          <SidebarMenuItem key={session.id}>
-            <SidebarMenuButton
-              isActive={pathname === `/sessions/${session.id}`}
-              render={
-                <Link
-                  href={`/sessions/${session.id}`}
-                  onClick={() => {
-                    if (isMobile) setOpenMobile(false);
-                  }}
-                />
-              }
+        {sessions.status === "unavailable" ? (
+          <SidebarMenuItem className="flex h-8 w-full items-center gap-2 px-2 text-xs">
+            {/* The destructive tone is scoped to the status content (icon +
+                text) only; the outline button keeps its neutral foreground. */}
+            <RiCloudOffLine aria-hidden="true" className="size-4 shrink-0 text-destructive/80" />
+            <span className="min-w-0 flex-1 truncate text-destructive/80">
+              Sessions unavailable
+            </span>
+            <Button
+              variant="outline"
+              size="xs"
+              aria-label="Retry loading sessions"
+              onClick={() => router.refresh()}
             >
-              <span className="truncate">{session.title}</span>
-            </SidebarMenuButton>
+              Retry
+            </Button>
           </SidebarMenuItem>
-        ))}
+        ) : (
+          sessions.sessions.map((session) => (
+            <SidebarMenuItem key={session.id}>
+              <SidebarMenuButton
+                isActive={pathname === `/sessions/${session.id}`}
+                render={
+                  <Link
+                    href={`/sessions/${session.id}`}
+                    onClick={() => {
+                      if (isMobile) setOpenMobile(false);
+                    }}
+                  />
+                }
+              >
+                <span className="truncate">{session.title}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))
+        )}
       </SidebarMenu>
     </SidebarGroup>
   );
@@ -163,7 +188,7 @@ function SettingsNav() {
  * footer. The nav landmark wrapper is what the e2e suite's layout specs
  * address (and a real landmark for screen readers).
  */
-export function AppSidebar() {
+export function AppSidebar({ sessions }: { sessions: SessionsResult }) {
   return (
     <Sidebar collapsible="offcanvas">
       <div role="navigation" aria-label="Primary" className="flex size-full min-h-0 flex-col">
@@ -174,7 +199,7 @@ export function AppSidebar() {
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <SessionsNav />
+          <SessionsNav sessions={sessions} />
         </SidebarContent>
         <SidebarFooter>
           <SettingsNav />

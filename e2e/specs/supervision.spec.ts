@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import net from "node:net";
+import { join } from "node:path";
 import { test, expect } from "../support/fixtures";
 import { readState } from "../support/state";
 import {
@@ -122,4 +123,16 @@ test("stopping the profile terminates the child's process tree and releases the 
 
   // The port is released: the listener is gone, so connections are refused.
   expect(await portAcceptsConnections(supervisionProfile.port)).toBe(false);
+
+  // The bridge socket is unlinked with the row (ADR-0003): the per-port
+  // socket file under the profile run directory must not outlive the
+  // instance - a stale file would be replaced at the next boot anyway, but
+  // a lingering one is a sign the row's teardown stopped early.
+  const bridgeSocket = join(state.profileDir, "run", `next-app-${supervisionProfile.port}.sock`);
+  await expect
+    .poll(() => existsSync(bridgeSocket), {
+      message: "stopping the profile must unlink the bridge socket",
+      timeout: 30_000,
+    })
+    .toBe(false);
 });
