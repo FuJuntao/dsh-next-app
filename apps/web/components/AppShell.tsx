@@ -121,8 +121,7 @@ function SessionsNav({ sessions }: { sessions: SessionsResult }) {
               <RiCloudOffLine aria-hidden="true" className="size-4 shrink-0" />
               <span className="min-w-0 flex-1 truncate">Sessions unavailable</span>
               <Button
-                variant="ghost"
-                size="sm"
+                variant="outline"
                 aria-label="Retry loading sessions"
                 onClick={() => router.refresh()}
               >
