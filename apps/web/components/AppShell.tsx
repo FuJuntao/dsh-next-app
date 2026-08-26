@@ -18,6 +18,7 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarTrigger,
@@ -112,18 +113,22 @@ function SessionsNav({ sessions }: { sessions: SessionsResult }) {
       <SidebarMenu>
         {sessions.status === "unavailable" ? (
           <SidebarMenuItem>
-            {/* The error row is a menu button like the session rows, so its
-                padding, height, and type size match them; the whole row is
-                the retry action, with a trailing hint. */}
-            <SidebarMenuButton
-              onClick={() => router.refresh()}
+            {/* The row is content plus a retry action, matching the session
+                rows' padding, height, and type size: the status content is
+                not itself a button, and the Retry action sits in the
+                menu-item's action slot (the shadcn SidebarMenuAction
+                pattern), clear of the truncated text. */}
+            <div className="flex h-8 w-full items-center gap-2 overflow-hidden p-2 pr-8 text-xs text-destructive/80">
+              <RiCloudOffLine aria-hidden="true" className="size-4 shrink-0" />
+              <span className="truncate">Sessions unavailable</span>
+            </div>
+            <SidebarMenuAction
               aria-label="Retry loading sessions"
-              className="text-destructive/80 hover:text-destructive"
+              onClick={() => router.refresh()}
+              className="top-1/2 aspect-auto w-auto -translate-y-1/2 rounded-sm px-1.5 text-xs font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
             >
-              <RiCloudOffLine aria-hidden="true" />
-              <span>Sessions unavailable</span>
-              <span className="ml-auto shrink-0 text-sidebar-foreground/50">Retry</span>
-            </SidebarMenuButton>
+              Retry
+            </SidebarMenuAction>
           </SidebarMenuItem>
         ) : (
           sessions.sessions.map((session) => (
