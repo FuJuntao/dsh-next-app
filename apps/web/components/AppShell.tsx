@@ -112,19 +112,18 @@ function SessionsNav({ sessions }: { sessions: SessionsResult }) {
       <SidebarMenu>
         {sessions.status === "unavailable" ? (
           <SidebarMenuItem>
-            <div role="status" className="flex items-center gap-2">
-              <RiCloudOffLine aria-hidden="true" className="size-4 shrink-0 text-destructive/80" />
-              <span className="truncate text-destructive/80">Sessions unavailable</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="ml-auto h-6 shrink-0"
-                aria-label="Retry loading sessions"
-                onClick={() => router.refresh()}
-              >
-                Retry
-              </Button>
-            </div>
+            {/* The error row is a menu button like the session rows, so its
+                padding, height, and type size match them; the whole row is
+                the retry action, with a trailing hint. */}
+            <SidebarMenuButton
+              onClick={() => router.refresh()}
+              aria-label="Retry loading sessions"
+              className="text-destructive/80 hover:text-destructive"
+            >
+              <RiCloudOffLine aria-hidden="true" />
+              <span>Sessions unavailable</span>
+              <span className="ml-auto shrink-0 text-sidebar-foreground/50">Retry</span>
+            </SidebarMenuButton>
           </SidebarMenuItem>
         ) : (
           sessions.sessions.map((session) => (
