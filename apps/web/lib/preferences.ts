@@ -37,6 +37,7 @@
  */
 
 import Schema from "@deepseek-ai/schemastery";
+import type { SessionViewPreferences } from "./session-view";
 
 /**
  * The preferences schema (schemastery - the same library the bundle's
@@ -44,11 +45,22 @@ import Schema from "@deepseek-ai/schemastery";
  * invalid object property is removed instead of failing the whole value,
  * so a hand-edited or stale cookie keeps its valid fields (the sanitize
  * contract). Unknown keys are dropped by the parser's destructuring.
+ *
+ * The sessions section carries the nav's view state (story #109): enum
+ * unions drop an out-of-vocabulary value wholesale, and the manual order
+ * is id strings. One caveat verified against schemastery's autofix: array
+ * items that fail their element schema are nulled, not dropped, so
+ * parsePreferences filters non-string entries itself.
  */
 const PreferencesSchema = Schema.object({
   layout: Schema.object({
     width: Schema.number().min(1),
     folded: Schema.boolean(),
+  }),
+  sessions: Schema.object({
+    group: Schema.union(["workspace", "none"]),
+    sort: Schema.union(["recency", "title", "manual"]),
+    order: Schema.array(String),
   }),
 });
 
@@ -63,9 +75,16 @@ export interface LayoutPreferences {
   folded?: boolean;
 }
 
+/**
+ * Sessions-nav view prefs (story #109), re-exported from the pure view
+ * module that owns their semantics; the cookie stores them verbatim.
+ */
+export type { SessionGroupMode, SessionSortMode, SessionViewPreferences } from "./session-view";
+
 /** The preferences object; add namespaced sections as features need them. */
 export interface Preferences {
   layout: LayoutPreferences;
+  sessions?: SessionViewPreferences;
 }
 
 /**
@@ -97,13 +116,30 @@ export function parsePreferences(raw: string | undefined): Preferences | undefin
   if (parsed === null || typeof parsed !== "object") return undefined;
   try {
     // autofix removes invalid object properties; destructuring strips
-    // unknown keys from the sanitized layout.
-    const { width, folded } = PreferencesSchema(parsed as never, { autofix: true }).layout;
+    // unknown keys from the sanitized sections. The sessions order array
+    // is additionally filtered (see the schema comment): schemastery's
+    // autofix nulls items that fail their element schema instead of
+    // dropping them, and a null id would corrupt the manual order.
+    const parsedPrefs = PreferencesSchema(parsed as never, { autofix: true });
+    const { width, folded } = parsedPrefs.layout;
+    const { group, sort, order } = parsedPrefs.sessions ?? {};
+    const sessions = {
+      ...(group === "workspace" || group === "none" ? { group } : {}),
+      ...(sort === "recency" || sort === "title" || sort === "manual" ? { sort } : {}),
+      ...(order !== undefined && {
+        order: order.filter((id): id is string => typeof id === "string"),
+      }),
+    };
     return {
       layout: {
         ...(width !== undefined && { width }),
         ...(folded !== undefined && { folded }),
       },
+      ...((sessions.group !== undefined ||
+        sessions.sort !== undefined ||
+        sessions.order !== undefined) && {
+        sessions,
+      }),
     };
   } catch {
     return undefined;
@@ -121,13 +157,28 @@ function readDocumentCookie(): string | undefined {
 }
 
 /**
- * Merge a patch into the stored preferences and write the cookie (client
- * only). Writers merge so layout fields never clobber each other.
+ * The patch shape for updatePreferences: any subset of sections, each
+ * itself partial, so writers touch only the fields they change.
  */
-export async function updatePreferences(patch: Preferences): Promise<void> {
+export type PreferencesPatch = {
+  [K in keyof Preferences]?: Partial<Preferences[K]>;
+};
+
+/**
+ * Merge a patch into the stored preferences and write the cookie (client
+ * only). Writers merge section-wise - every top-level section spreads over
+ * the stored one independently, so layout fields never clobber sessions
+ * fields (and vice versa).
+ */
+export async function updatePreferences(patch: PreferencesPatch): Promise<void> {
   try {
     const current = parsePreferences(readDocumentCookie());
-    const prefs: Preferences = { layout: { ...current?.layout, ...patch.layout } };
+    const prefs: Preferences = {
+      layout: { ...current?.layout, ...patch.layout },
+      ...(patch.sessions !== undefined && {
+        sessions: { ...current?.sessions, ...patch.sessions },
+      }),
+    };
     document.cookie =
       PREFERENCES_COOKIE + "=" + encodePreferences(prefs) + ";path=/;max-age=31536000;samesite=lax";
   } catch {
