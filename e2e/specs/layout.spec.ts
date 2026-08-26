@@ -372,6 +372,9 @@ test("the side nav shows the real sessions list, empty in a fresh profile", asyn
   const nav = page.getByRole("navigation", { name: "Primary" });
   await expect(nav.getByText("Sessions")).toBeVisible();
   await expect(nav.getByRole("link", { name: /Session/ })).toHaveCount(0);
+  // An empty list through a healthy bridge (ok) must be distinguishable
+  // from the bridge-down state: no error row may render here.
+  await expect(nav.getByText("Sessions unavailable")).toHaveCount(0);
   // The sessions detail route still renders as its own page.
   await page.goto(state.baseURL + "/sessions/2");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session 2");
@@ -385,4 +388,6 @@ test("the mobile drawer shows the brand and the empty sessions list", async ({ p
   await expect(nav.getByRole("link", { name: "DeepSeek Harness" })).toBeVisible();
   await expect(nav.getByText("Sessions")).toBeVisible();
   await expect(nav.getByRole("link", { name: /Session/ })).toHaveCount(0);
+  // As on desktop: healthy-and-empty renders no bridge-down error row.
+  await expect(nav.getByText("Sessions unavailable")).toHaveCount(0);
 });
