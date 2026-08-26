@@ -18,7 +18,6 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarTrigger,
@@ -113,22 +112,23 @@ function SessionsNav({ sessions }: { sessions: SessionsResult }) {
       <SidebarMenu>
         {sessions.status === "unavailable" ? (
           <SidebarMenuItem>
-            {/* The row is content plus a retry action, matching the session
-                rows' padding, height, and type size: the status content is
-                not itself a button, and the Retry action sits in the
-                menu-item's action slot (the shadcn SidebarMenuAction
-                pattern), clear of the truncated text. */}
-            <div className="flex h-8 w-full items-center gap-2 overflow-hidden p-2 pr-8 text-xs text-destructive/80">
+            {/* The row is content plus a retry action: the status text in
+                the row's chrome (horizontal padding only, so the button
+                shares the height band), and the app's Button as the
+                action - text labels are its native content, no
+                menu-action slot shape overrides. */}
+            <div className="flex h-8 w-full items-center gap-2 px-2 text-xs text-destructive/80">
               <RiCloudOffLine aria-hidden="true" className="size-4 shrink-0" />
-              <span className="truncate">Sessions unavailable</span>
+              <span className="min-w-0 flex-1 truncate">Sessions unavailable</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Retry loading sessions"
+                onClick={() => router.refresh()}
+              >
+                Retry
+              </Button>
             </div>
-            <SidebarMenuAction
-              aria-label="Retry loading sessions"
-              onClick={() => router.refresh()}
-              className="aspect-auto w-auto px-1.5 py-0.5 text-xs"
-            >
-              Retry
-            </SidebarMenuAction>
           </SidebarMenuItem>
         ) : (
           sessions.sessions.map((session) => (
