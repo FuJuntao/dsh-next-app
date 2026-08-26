@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { RiCloseLine, RiCloudOffLine, RiSettings3Line } from "@remixicon/react";
 import { DshHarnessChip, DshLogo, DshWordmark } from "./dsh-logo";
 import type { SessionsResult } from "../lib/sessions";
@@ -97,21 +97,33 @@ function SidebarBrand() {
  * linking to its /sessions/[id] page, with the current session highlighted.
  * The rows are fetched from the live profile through the bridge (ADR-0003)
  * by the root layout and arrive here as props. A bridge-down fetch renders
- * a distinct unavailable row - the rest of the page still renders, and
- * stale placeholder rows never appear.
+ * a distinct error row with a Retry action - the rest of the page still
+ * renders, and stale placeholder rows never appear. The retry re-runs the
+ * layout's server fetch (router.refresh), so a recovered bridge is picked
+ * up on the next render.
  */
 function SessionsNav({ sessions }: { sessions: SessionsResult }) {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
+  const router = useRouter();
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Sessions</SidebarGroupLabel>
       <SidebarMenu>
         {sessions.status === "unavailable" ? (
           <SidebarMenuItem>
-            <div className="flex items-center gap-2 text-sidebar-foreground/60">
-              <RiCloudOffLine className="size-4 shrink-0" />
-              <span className="truncate">Sessions unavailable</span>
+            <div role="status" className="flex items-center gap-2">
+              <RiCloudOffLine aria-hidden="true" className="size-4 shrink-0 text-destructive/80" />
+              <span className="truncate text-destructive/80">Sessions unavailable</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto h-6 shrink-0"
+                aria-label="Retry loading sessions"
+                onClick={() => router.refresh()}
+              >
+                Retry
+              </Button>
             </div>
           </SidebarMenuItem>
         ) : (
