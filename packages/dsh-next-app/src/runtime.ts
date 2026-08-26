@@ -309,8 +309,9 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.effect(async () => {
     // The bridge socket must exist before the child's first request can
-    // reach it; the child reconnects with backoff anyway, but a refused
-    // first page load would defeat the "no first-load flash" story. A
+    // reach it. Each app-side call is its own connection attempt, so a call
+    // placed before listen refuses fast into the unavailable state; starting
+    // the bridge first means even the very first page load carries data. A
     // bridge that cannot start (live socket conflict, unboundable path)
     // fails the fiber - the profile refuses to boot half-wired (the child
     // would silently serve a dead data channel). The effect body always
