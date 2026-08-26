@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { RiCloseLine, RiCloudOffLine, RiRefreshLine, RiSettings3Line } from "@remixicon/react";
+import { RiCloseLine, RiCloudOffLine, RiSettings3Line } from "@remixicon/react";
 import { DshHarnessChip, DshLogo, DshWordmark } from "./dsh-logo";
 import type { SessionsResult } from "../lib/sessions";
 import { SidebarResizeHandle } from "./sidebar-resize-handle";
@@ -115,15 +115,19 @@ function SessionsNav({ sessions }: { sessions: SessionsResult }) {
           <SidebarMenuItem>
             {/* The row is content plus a retry action, matching the session
                 rows' padding, height, and type size: the status content is
-                not itself a button, and the stock SidebarMenuAction (icon
-                slot, no class overrides) is the retry, clear of the
-                truncated text. */}
+                not itself a button, and the Retry action sits in the
+                menu-item's action slot (the shadcn SidebarMenuAction
+                pattern), clear of the truncated text. */}
             <div className="flex h-8 w-full items-center gap-2 overflow-hidden p-2 pr-8 text-xs text-destructive/80">
               <RiCloudOffLine aria-hidden="true" className="size-4 shrink-0" />
               <span className="truncate">Sessions unavailable</span>
             </div>
-            <SidebarMenuAction aria-label="Retry loading sessions" onClick={() => router.refresh()}>
-              <RiRefreshLine />
+            <SidebarMenuAction
+              aria-label="Retry loading sessions"
+              onClick={() => router.refresh()}
+              className="top-1/2 aspect-auto w-auto -translate-y-1/2 rounded-sm px-1.5 text-xs font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            >
+              Retry
             </SidebarMenuAction>
           </SidebarMenuItem>
         ) : (
