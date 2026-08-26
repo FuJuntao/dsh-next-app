@@ -127,7 +127,7 @@ function SessionsNav({ sessions }: { sessions: SessionsResult }) {
               </span>
               <Button
                 variant="outline"
-                size="sm"
+                size="xs"
                 aria-label="Retry loading sessions"
                 onClick={() => router.refresh()}
               >
