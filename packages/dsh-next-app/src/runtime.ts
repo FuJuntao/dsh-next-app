@@ -250,6 +250,12 @@ export function apply(ctx: Context, config: Config): void {
         // DSH_* names are scrubbed from implicit inheritance; the socket
         // path is deliberately forwarded like the auth config (ADR-0003).
         [BRIDGE_SOCKET_ENV]: socketPath,
+        // Dev-only mock seam: forwarded only when the operator launched the
+        // profile with it (visual testing without a real bridge); scrubbed
+        // otherwise, so the child never sees it in production.
+        ...(process.env["DSH_NEXT_APP_MOCK_SESSIONS"] !== undefined && {
+          DSH_NEXT_APP_MOCK_SESSIONS: process.env["DSH_NEXT_APP_MOCK_SESSIONS"],
+        }),
       },
       stdio: { stdin: "ignore", stdout: "pipe", stderr: "inherit" },
       graceMs: TERMINATE_GRACE_MS,
