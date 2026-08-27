@@ -15,14 +15,15 @@
  * last-activity time, subagent children nested beneath their parent, links
  * to /sessions/<id> with the active row highlighted. Bridge-down keeps
  * task #108's distinct error state with Retry - never stale placeholder
- * rows (AC 6). Sorting offers recency and title; manual reorder was
- * dropped from this scope before review.
+ * rows (AC 6). Rows order by last activity - the session.list wire order;
+ * grouping is the one user choice (revised scope: recency covers what a
+ * sort control added, so it was dropped before review).
  */
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { RiCloudOffLine, RiFolderLine, RiSortDesc } from "@remixicon/react";
+import { RiCloudOffLine, RiFolderLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -42,13 +43,12 @@ import {
 import { updatePreferences, type SessionViewPreferences } from "../lib/preferences";
 import type { SessionsResult } from "../lib/sessions";
 import {
-  DEFAULT_SESSION_VIEW,
+  DEFAULT_GROUP,
   arrangeSessions,
   formatRelativeTime,
   type SessionGroup,
   type SessionGroupMode,
   type SessionRow,
-  type SessionSortMode,
 } from "../lib/session-view";
 
 /** One header pick-list: an icon trigger opening a radio group. */
@@ -184,8 +184,8 @@ function RowGroup({
 
 /**
  * The whole nav section. Props arrive pre-parsed from the prefs channel,
- * so state can trust them as the hydration seed; the resolved defaults
- * live in lib/session-view (DEFAULT_SESSION_VIEW).
+ * so state can trust them as the hydration seed; the flat default lives in
+ * lib/session-view (DEFAULT_GROUP).
  */
 export function SessionsNav({
   sessions,
@@ -198,24 +198,13 @@ export function SessionsNav({
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
   const [group, setGroup] = useState<SessionGroupMode>(
-    sessionViewPreferences.group ?? DEFAULT_SESSION_VIEW.group,
+    sessionViewPreferences.group ?? DEFAULT_GROUP,
   );
-  const [sort, setSort] = useState<SessionSortMode>(
-    sessionViewPreferences.sort ?? DEFAULT_SESSION_VIEW.sort,
-  );
-
-  const persistView = (next: { group?: SessionGroupMode; sort?: SessionSortMode }) => {
-    // Persist the full pair so one control change never blanks the other.
-    void updatePreferences({
-      sessionGroup: next.group ?? group,
-      sessionSort: next.sort ?? sort,
-    });
-  };
 
   const groups = useMemo(() => {
     if (sessions.status !== "ok") return [];
-    return arrangeSessions(sessions.sessions, { group, sort });
-  }, [sessions, group, sort]);
+    return arrangeSessions(sessions.sessions, group);
+  }, [sessions, group]);
 
   if (sessions.status === "unavailable") {
     return (
@@ -250,8 +239,8 @@ export function SessionsNav({
     <SidebarGroup data-testid="sessions-nav">
       <SidebarGroupLabel className="flex items-center justify-between gap-1 pr-1">
         <span>Sessions</span>
-        {/* Controls sit in the sessions header (AC 3/4): grouping left of
-            sorting, each a radio pick-list writing straight to the prefs. */}
+        {/* The one header control (revised AC): a radio pick-list that
+            writes straight through to the prefs cookie. */}
         <span className="flex items-center gap-0.5">
           <HeaderPicker
             label="Session grouping"
@@ -264,21 +253,7 @@ export function SessionsNav({
             onChange={(next) => {
               const mode = next as SessionGroupMode;
               setGroup(mode);
-              persistView({ group: mode });
-            }}
-          />
-          <HeaderPicker
-            label="Session sorting"
-            icon={<RiSortDesc className="size-3.5" />}
-            value={sort}
-            options={[
-              { value: "recency", label: "Recency" },
-              { value: "title", label: "Title A-Z" },
-            ]}
-            onChange={(next) => {
-              const mode = next as SessionSortMode;
-              setSort(mode);
-              persistView({ sort: mode });
+              void updatePreferences({ sessionGroup: mode });
             }}
           />
         </span>

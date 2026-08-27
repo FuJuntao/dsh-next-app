@@ -37,8 +37,7 @@
  */
 
 import Schema from "@deepseek-ai/schemastery";
-import type { SessionGroupMode, SessionSortMode } from "./session-view";
-
+import type { SessionGroupMode } from "./session-view";
 
 /**
  * The preferences schema (schemastery - the same library the bundle's
@@ -52,7 +51,7 @@ import type { SessionGroupMode, SessionSortMode } from "./session-view";
  * state (story #109). Flat keys keep writers one Partial away from a merge
  * and need no section bookkeeping when features grow. Enum unions drop an
  * out-of-vocabulary value wholesale, so a stale cookie naming a retired
- * mode sanitizes back to the recency default instead of failing. Cookies
+ * mode sanitizes back to the flat default instead of failing. Cookies
  * written before the flattening used nested sections; parsePreferences
  * maps that legacy shape onto the flat keys once (writes are always flat).
  */
@@ -60,7 +59,6 @@ const PreferencesSchema = Schema.object({
   layoutWidth: Schema.number().min(1),
   layoutFolded: Schema.boolean(),
   sessionGroup: Schema.union(["workspace", "none"]),
-  sessionSort: Schema.union(["recency", "title"]),
 });
 
 /** The cookie carrying the preferences object. */
@@ -68,10 +66,11 @@ export const PREFERENCES_COOKIE = "dsh-next-app.prefs";
 
 /**
  * Sessions-nav view prefs (story #109), re-exported from the pure view
- * module that owns their semantics; the cookie stores their group/sort
- * fields under the flat session* keys.
+ * module that owns their semantics; the cookie stores the grouping under
+ * the flat sessionGroup key - row order is recency by construction, so no
+ * stored choice for it exists.
  */
-export type { SessionGroupMode, SessionSortMode, SessionViewPreferences } from "./session-view";
+export type { SessionGroupMode, SessionViewPreferences } from "./session-view";
 
 /**
  * The preferences object: one flat record of prefixed keys (see the schema
@@ -84,8 +83,6 @@ export interface Preferences {
   layoutFolded?: boolean;
   /** The sessions nav grouping mode; absent = flat ("none"). */
   sessionGroup?: SessionGroupMode;
-  /** The sessions nav sorting mode; absent = recency. */
-  sessionSort?: SessionSortMode;
 }
 
 /**
@@ -117,13 +114,14 @@ export function parsePreferences(raw: string | undefined): Preferences | undefin
   if (parsed === null || typeof parsed !== "object") return undefined;
   try {
     // Cookies written before the flat-key migration carry nested sections
-    // ({layout:{width,folded}, sessions:{group,sort,order?}}); map them onto
-    // the flat keys so an existing browser upgrades in place instead of
-    // losing its width/fold on the next write. The retired order array and
-    // any unknown key drop out through the schema's autofix below.
+    // ({layout:{width,folded}, sessions:{group,...}}); map them onto the
+    // flat keys so an existing browser upgrades in place instead of losing
+    // its width/fold on the next write. Retired fields (sort modes, the
+    // manual order array) and any unknown key drop out through the schema's
+    // autofix below.
     const legacy = parsed as {
       layout?: { width?: unknown; folded?: unknown };
-      sessions?: { group?: unknown; sort?: unknown };
+      sessions?: { group?: unknown };
     };
     const normalized =
       typeof legacy.layout === "object" && legacy.layout !== null
@@ -132,7 +130,6 @@ export function parsePreferences(raw: string | undefined): Preferences | undefin
             layoutWidth: legacy.layout.width,
             layoutFolded: legacy.layout.folded,
             sessionGroup: legacy.sessions?.group,
-            sessionSort: legacy.sessions?.sort,
           }
         : parsed;
     // autofix removes invalid object properties; destructuring strips
@@ -144,9 +141,6 @@ export function parsePreferences(raw: string | undefined): Preferences | undefin
       ...(parsedPrefs.layoutFolded !== undefined && { layoutFolded: parsedPrefs.layoutFolded }),
       ...((parsedPrefs.sessionGroup === "workspace" || parsedPrefs.sessionGroup === "none") && {
         sessionGroup: parsedPrefs.sessionGroup,
-      }),
-      ...((parsedPrefs.sessionSort === "recency" || parsedPrefs.sessionSort === "title") && {
-        sessionSort: parsedPrefs.sessionSort,
       }),
     };
     return Object.keys(prefs).length > 0 ? prefs : undefined;

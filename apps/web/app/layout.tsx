@@ -30,7 +30,6 @@ export default async function RootLayout({
   // exactOptionalPropertyTypes (the same shape parsePreferences emits).
   const sessionViewPreferences = {
     ...(prefs?.sessionGroup !== undefined && { group: prefs.sessionGroup }),
-    ...(prefs?.sessionSort !== undefined && { sort: prefs.sessionSort }),
   };
   return (
     <html lang="en" className={notoSans.variable}>

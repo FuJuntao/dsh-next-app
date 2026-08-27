@@ -14,41 +14,32 @@
  * orphaned parents (id not in the list) and cyclic chains fall back to
  * top-level rows instead of vanishing or looping (AC 2).
  *
- * Sorting decisions the story leaves open, recorded here as the contract:
- *   - children within a subtree always sort by recency;
- *   - workspace groups sort by their newest activity, Ungrouped last;
- *   - title comparison is plain lowercased code-unit order, not
- *     localeCompare - locale tables differ between the server runtime and
- *     the browser, and a differing order would reintroduce the flash AC 5
- *     forbids.
+ * Ordering decisions, recorded here as the contract (revised scope:
+ * grouping is the one user choice - rows always order by last activity):
+ *   - rows order by recency, newest first - the session.list wire order -
+ *     both across top-level siblings and inside every subtree;
+ *   - workspace groups order by their newest member's activity, Ungrouped
+ *     last;
+ *   - exact updatedAt ties break by id, so server and client render the
+ *     same sequence deterministically (a differing order would reintroduce
+ *     the flash AC 5 forbids).
  */
 import type { Session } from "./sessions";
 
 /** How the nav groups sessions (AC 3). */
 export type SessionGroupMode = "workspace" | "none";
 
-/** How the nav sorts sessions (AC 4). */
-export type SessionSortMode = "recency" | "title";
-
-/** The persisted half of the view state (the prefs cookie's sessions section). */
+/**
+ * The persisted half of the view state (the prefs cookie's flat
+ * sessionGroup key). Recency needs no stored choice - it is the only order.
+ */
 export interface SessionViewPreferences {
   /** Grouping mode; absent = flat ("none"). */
   group?: SessionGroupMode;
-  /** Sorting mode; absent = recency. */
-  sort?: SessionSortMode;
 }
 
-/** The fully-resolved view options {@link arrangeSessions} consumes. */
-export interface SessionViewOptions {
-  group: SessionGroupMode;
-  sort: SessionSortMode;
-}
-
-/** The defaults behind an absent prefs section (flat, recency). */
-export const DEFAULT_SESSION_VIEW: SessionViewOptions = {
-  group: "none",
-  sort: "recency",
-};
+/** The default behind an absent pref (flat). */
+export const DEFAULT_GROUP: SessionGroupMode = "none";
 
 /** One rendered row: a parent session plus its nested children. */
 export interface SessionRow {
@@ -99,13 +90,6 @@ function byRecency(a: Session, b: Session): number {
   return b.updatedAt - a.updatedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
-/** Title comparator: lowercased code-unit order (see module comment). */
-function byTitle(a: Session, b: Session): number {
-  const ta = a.title.toLowerCase();
-  const tb = b.title.toLowerCase();
-  return ta < tb ? -1 : ta > tb ? 1 : 0;
-}
-
 /** Build the nested forest: valid chains nest, broken ones stay top-level. */
 function buildForest(sessions: Session[]): {
   topLevel: Session[];
@@ -144,15 +128,14 @@ function toRows(topLevel: Session[], childrenOf: Map<string, Session[]>): Sessio
 }
 
 /**
- * Arrange raw session rows into the render model for one view option set.
+ * Arrange raw session rows into the render model for one grouping mode.
  * The same call runs on the server (initial paint) and in the client shell
  * (interactive changes); see the module comment for the ordering contract.
  */
-export function arrangeSessions(sessions: Session[], options: SessionViewOptions): SessionGroup[] {
-  const compare = options.sort === "title" ? byTitle : byRecency;
+export function arrangeSessions(sessions: Session[], group: SessionGroupMode): SessionGroup[] {
   const { topLevel, childrenOf } = buildForest(sessions);
-  topLevel.sort(compare);
-  if (options.group === "none") {
+  topLevel.sort(byRecency);
+  if (group === "none") {
     // Flat view: one implicit group without a header - subagent nesting
     // still applies inside it.
     return [{ key: "", label: undefined, rows: toRows(topLevel, childrenOf) }];
