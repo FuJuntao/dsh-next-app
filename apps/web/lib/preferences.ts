@@ -71,7 +71,7 @@ export const PREFERENCES_COOKIE = "dsh-next-app.prefs";
  * the flat sessionGroup key - row order is recency by construction, so no
  * stored choice for it exists.
  */
-export type { SessionGroupMode, SessionViewPreferences } from "./session-view";
+export type { SessionGroupMode } from "./session-view";
 
 /**
  * The preferences object: one flat record of prefixed keys (see the schema

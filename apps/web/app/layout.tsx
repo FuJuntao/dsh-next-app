@@ -26,11 +26,6 @@ export default async function RootLayout({
   // The stored view prefs ride along; arranging with them happens in the
   // shared pure model, server-side for this very paint (no flash).
   const sessions = await fetchSessions();
-  // Built field-wise so absent cookie fields stay absent under
-  // exactOptionalPropertyTypes (the same shape parsePreferences emits).
-  const sessionViewPreferences = {
-    ...(prefs?.sessionGroup !== undefined && { group: prefs.sessionGroup }),
-  };
   return (
     <html lang="en" className={notoSans.variable}>
       <body>
@@ -39,7 +34,7 @@ export default async function RootLayout({
             initialFolded={prefs?.layoutFolded ?? false}
             initialWidth={prefs?.layoutWidth}
           >
-            <AppSidebar sessions={sessions} sessionViewPreferences={sessionViewPreferences} />
+            <AppSidebar sessions={sessions} sessionGroup={prefs?.sessionGroup} />
             <AppShell>{children}</AppShell>
           </ShellSidebarProvider>
         </TooltipProvider>

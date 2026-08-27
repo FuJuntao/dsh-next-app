@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { RiCloseLine, RiSettings3Line } from "@remixicon/react";
 import { DshHarnessChip, DshLogo, DshWordmark } from "./dsh-logo";
-import type { SessionViewPreferences } from "../lib/preferences";
+import type { SessionGroupMode } from "../lib/session-view";
 import type { SessionsResult } from "../lib/sessions";
 import { SessionsNav } from "./sessions-nav";
 import { SidebarResizeHandle } from "./sidebar-resize-handle";
@@ -128,15 +128,15 @@ function SettingsNav() {
  * sessions group in the scrollable content region, settings in the sticky
  * footer. The nav landmark wrapper is what the e2e suite's layout specs
  * address (and a real landmark for screen readers). The sessions list and
- * its view prefs arrive from the layout's server fetch and cookie read;
+ * its grouping pref arrive from the layout's server fetch and cookie read;
  * sessions-nav.tsx owns everything about rendering them.
  */
 export function AppSidebar({
   sessions,
-  sessionViewPreferences,
+  sessionGroup,
 }: {
   sessions: SessionsResult;
-  sessionViewPreferences: SessionViewPreferences;
+  sessionGroup: SessionGroupMode | undefined;
 }) {
   return (
     <Sidebar collapsible="offcanvas">
@@ -148,7 +148,7 @@ export function AppSidebar({
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <SessionsNav sessions={sessions} sessionViewPreferences={sessionViewPreferences} />
+          <SessionsNav sessions={sessions} sessionGroup={sessionGroup} />
         </SidebarContent>
         <SidebarFooter>
           <SettingsNav />

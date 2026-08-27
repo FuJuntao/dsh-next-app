@@ -40,7 +40,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { updatePreferences, type SessionViewPreferences } from "../lib/preferences";
+import { updatePreferences } from "../lib/preferences";
 import type { SessionsResult } from "../lib/sessions";
 import {
   DEFAULT_GROUP,
@@ -189,17 +189,15 @@ function RowGroup({
  */
 export function SessionsNav({
   sessions,
-  sessionViewPreferences,
+  sessionGroup,
 }: {
   sessions: SessionsResult;
-  sessionViewPreferences: SessionViewPreferences;
+  sessionGroup: SessionGroupMode | undefined;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
-  const [group, setGroup] = useState<SessionGroupMode>(
-    sessionViewPreferences.group ?? DEFAULT_GROUP,
-  );
+  const [group, setGroup] = useState<SessionGroupMode>(sessionGroup ?? DEFAULT_GROUP);
 
   const groups = useMemo(() => {
     if (sessions.status !== "ok") return [];

@@ -26,17 +26,12 @@
  */
 import type { Session } from "./sessions";
 
-/** How the nav groups sessions (AC 3). */
-export type SessionGroupMode = "workspace" | "none";
-
 /**
- * The persisted half of the view state (the prefs cookie's flat
- * sessionGroup key). Recency needs no stored choice - it is the only order.
+ * How the nav groups sessions (AC 3); also the whole persisted view state
+ * under the cookie's flat sessionGroup key - recency needs no stored
+ * choice, it is the only order.
  */
-export interface SessionViewPreferences {
-  /** Grouping mode; absent = flat ("none"). */
-  group?: SessionGroupMode;
-}
+export type SessionGroupMode = "workspace" | "none";
 
 /** The default behind an absent pref (flat). */
 export const DEFAULT_GROUP: SessionGroupMode = "none";
