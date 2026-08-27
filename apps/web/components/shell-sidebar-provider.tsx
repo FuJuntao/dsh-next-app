@@ -33,7 +33,7 @@ export function ShellSidebarProvider({
   const [open, setOpen] = useState(!initialFolded);
   const handleOpenChange = (open: boolean): void => {
     setOpen(open);
-    void updatePreferences({ layout: { folded: !open } });
+    void updatePreferences({ layoutFolded: !open });
   };
   const style =
     initialWidth === undefined

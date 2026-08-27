@@ -37,7 +37,8 @@
  */
 
 import Schema from "@deepseek-ai/schemastery";
-import type { SessionViewPreferences } from "./session-view";
+import type { SessionGroupMode, SessionSortMode } from "./session-view";
+
 
 /**
  * The preferences schema (schemastery - the same library the bundle's
@@ -46,43 +47,45 @@ import type { SessionViewPreferences } from "./session-view";
  * so a hand-edited or stale cookie keeps its valid fields (the sanitize
  * contract). Unknown keys are dropped by the parser's destructuring.
  *
- * The sessions section carries the nav's view state (story #109): enum
- * unions drop an out-of-vocabulary value wholesale. A stale cookie whose
- * sort names a retired mode (e.g. "manual") therefore sanitizes back to
- * the recency default instead of failing.
+ * The value shape is flat with per-feature prefixes (review of this PR):
+ * layout* keys belong to the shell, session* keys carry the nav's view
+ * state (story #109). Flat keys keep writers one Partial away from a merge
+ * and need no section bookkeeping when features grow. Enum unions drop an
+ * out-of-vocabulary value wholesale, so a stale cookie naming a retired
+ * mode sanitizes back to the recency default instead of failing. Cookies
+ * written before the flattening used nested sections; parsePreferences
+ * maps that legacy shape onto the flat keys once (writes are always flat).
  */
 const PreferencesSchema = Schema.object({
-  layout: Schema.object({
-    width: Schema.number().min(1),
-    folded: Schema.boolean(),
-  }),
-  sessions: Schema.object({
-    group: Schema.union(["workspace", "none"]),
-    sort: Schema.union(["recency", "title"]),
-  }),
+  layoutWidth: Schema.number().min(1),
+  layoutFolded: Schema.boolean(),
+  sessionGroup: Schema.union(["workspace", "none"]),
+  sessionSort: Schema.union(["recency", "title"]),
 });
 
 /** The cookie carrying the preferences object. */
 export const PREFERENCES_COOKIE = "dsh-next-app.prefs";
 
-/** Layout prefs consumed by the shell (AppShell). */
-export interface LayoutPreferences {
-  /** The side nav width in px; absent = the CSS default styles the shell. */
-  width?: number;
-  /** Whether the side nav is folded away; absent = open by default. */
-  folded?: boolean;
-}
-
 /**
  * Sessions-nav view prefs (story #109), re-exported from the pure view
- * module that owns their semantics; the cookie stores them verbatim.
+ * module that owns their semantics; the cookie stores their group/sort
+ * fields under the flat session* keys.
  */
 export type { SessionGroupMode, SessionSortMode, SessionViewPreferences } from "./session-view";
 
-/** The preferences object; add namespaced sections as features need them. */
+/**
+ * The preferences object: one flat record of prefixed keys (see the schema
+ * comment). A feature adds its prefix's keys here as it needs them.
+ */
 export interface Preferences {
-  layout: LayoutPreferences;
-  sessions?: SessionViewPreferences;
+  /** The side nav width in px; absent = the CSS default styles the shell. */
+  layoutWidth?: number;
+  /** Whether the side nav is folded away; absent = open by default. */
+  layoutFolded?: boolean;
+  /** The sessions nav grouping mode; absent = flat ("none"). */
+  sessionGroup?: SessionGroupMode;
+  /** The sessions nav sorting mode; absent = recency. */
+  sessionSort?: SessionSortMode;
 }
 
 /**
@@ -113,25 +116,40 @@ export function parsePreferences(raw: string | undefined): Preferences | undefin
   }
   if (parsed === null || typeof parsed !== "object") return undefined;
   try {
-    // autofix removes invalid object properties; destructuring strips
-    // unknown keys from the sanitized sections. A retired vocabulary value
-    // (e.g. a stale "manual") drops exactly like any other invalid field.
-    const parsedPrefs = PreferencesSchema(parsed as never, { autofix: true });
-    const { width, folded } = parsedPrefs.layout;
-    const { group, sort } = parsedPrefs.sessions ?? {};
-    const sessions = {
-      ...(group === "workspace" || group === "none" ? { group } : {}),
-      ...(sort === "recency" || sort === "title" ? { sort } : {}),
+    // Cookies written before the flat-key migration carry nested sections
+    // ({layout:{width,folded}, sessions:{group,sort,order?}}); map them onto
+    // the flat keys so an existing browser upgrades in place instead of
+    // losing its width/fold on the next write. The retired order array and
+    // any unknown key drop out through the schema's autofix below.
+    const legacy = parsed as {
+      layout?: { width?: unknown; folded?: unknown };
+      sessions?: { group?: unknown; sort?: unknown };
     };
-    return {
-      layout: {
-        ...(width !== undefined && { width }),
-        ...(folded !== undefined && { folded }),
-      },
-      ...((sessions.group !== undefined || sessions.sort !== undefined) && {
-        sessions,
+    const normalized =
+      typeof legacy.layout === "object" && legacy.layout !== null
+        ? {
+            ...parsed,
+            layoutWidth: legacy.layout.width,
+            layoutFolded: legacy.layout.folded,
+            sessionGroup: legacy.sessions?.group,
+            sessionSort: legacy.sessions?.sort,
+          }
+        : parsed;
+    // autofix removes invalid object properties; destructuring strips
+    // unknown keys. A retired vocabulary value drops exactly like any other
+    // invalid field.
+    const parsedPrefs = PreferencesSchema(normalized as never, { autofix: true });
+    const prefs: Preferences = {
+      ...(parsedPrefs.layoutWidth !== undefined && { layoutWidth: parsedPrefs.layoutWidth }),
+      ...(parsedPrefs.layoutFolded !== undefined && { layoutFolded: parsedPrefs.layoutFolded }),
+      ...((parsedPrefs.sessionGroup === "workspace" || parsedPrefs.sessionGroup === "none") && {
+        sessionGroup: parsedPrefs.sessionGroup,
+      }),
+      ...((parsedPrefs.sessionSort === "recency" || parsedPrefs.sessionSort === "title") && {
+        sessionSort: parsedPrefs.sessionSort,
       }),
     };
+    return Object.keys(prefs).length > 0 ? prefs : undefined;
   } catch {
     return undefined;
   }
@@ -148,28 +166,15 @@ function readDocumentCookie(): string | undefined {
 }
 
 /**
- * The patch shape for updatePreferences: any subset of sections, each
- * itself partial, so writers touch only the fields they change.
- */
-export type PreferencesPatch = {
-  [K in keyof Preferences]?: Partial<Preferences[K]>;
-};
-
-/**
  * Merge a patch into the stored preferences and write the cookie (client
- * only). Writers merge section-wise - every top-level section spreads over
- * the stored one independently, so layout fields never clobber sessions
- * fields (and vice versa).
+ * only). With flat keys a writer is just Partial<Preferences>, and the
+ * merge spreads field-wise over the stored record - writers touch only the
+ * fields they name, never each other's.
  */
-export async function updatePreferences(patch: PreferencesPatch): Promise<void> {
+export async function updatePreferences(patch: Partial<Preferences>): Promise<void> {
   try {
     const current = parsePreferences(readDocumentCookie());
-    const prefs: Preferences = {
-      layout: { ...current?.layout, ...patch.layout },
-      ...(patch.sessions !== undefined && {
-        sessions: { ...current?.sessions, ...patch.sessions },
-      }),
-    };
+    const prefs: Preferences = { ...current, ...patch };
     document.cookie =
       PREFERENCES_COOKIE + "=" + encodePreferences(prefs) + ";path=/;max-age=31536000;samesite=lax";
   } catch {
