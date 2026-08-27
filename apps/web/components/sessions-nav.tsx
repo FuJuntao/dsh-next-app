@@ -133,6 +133,38 @@ function RowButton({
   );
 }
 
+/**
+ * One session row at any lineage depth: the row body, then its nested
+ * children rendered as the same node one indent deeper (recursion runs to
+ * full depth - a dropped grandchild would be a silently vanished row).
+ */
+function RowNode({
+  row,
+  activePathname,
+  onNavigate,
+}: {
+  row: SessionRow;
+  activePathname: string;
+  onNavigate: () => void;
+}) {
+  return (
+    <SidebarMenuItem data-session-id={row.session.id}>
+      <RowButton
+        row={row}
+        active={activePathname === "/sessions/" + row.session.id}
+        onNavigate={onNavigate}
+      />
+      {row.children.length > 0 && (
+        <ul className="ml-5 border-l border-sidebar-border pl-1">
+          {row.children.map((child) => (
+            <RowNode key={child.session.id} row={child} activePathname={activePathname} onNavigate={onNavigate} />
+          ))}
+        </ul>
+      )}
+    </SidebarMenuItem>
+  );
+}
+
 /** One arranged group: optional workspace header, parents then nested children. */
 function RowGroup({
   group,
@@ -159,26 +191,7 @@ function RowGroup({
           flush with the rest of the nav). */}
       <SidebarMenu className={group.label !== undefined ? "pl-4" : undefined}>
         {group.rows.map((row) => (
-          <SidebarMenuItem key={row.session.id} data-session-id={row.session.id}>
-            <RowButton
-              row={row}
-              active={activePathname === "/sessions/" + row.session.id}
-              onNavigate={onNavigate}
-            />
-            {row.children.length > 0 && (
-              <ul className="ml-5 border-l border-sidebar-border pl-1">
-                {row.children.map((child) => (
-                  <li key={child.id} data-session-id={child.id}>
-                    <RowButton
-                      row={{ session: child, children: [] }}
-                      active={activePathname === "/sessions/" + child.id}
-                      onNavigate={onNavigate}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SidebarMenuItem>
+          <RowNode key={row.session.id} row={row} activePathname={activePathname} onNavigate={onNavigate} />
         ))}
       </SidebarMenu>
     </div>

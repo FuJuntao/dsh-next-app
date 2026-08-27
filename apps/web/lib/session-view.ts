@@ -9,15 +9,17 @@
  * module therefore stays free of server-only imports; its only coupling is
  * the Session row type, imported as a type.
  *
- * Nesting: subagent sessions render beneath their parent. A row counts as
- * a nested child only when its parent-id chain reaches a real root -
- * orphaned parents (id not in the list) and cyclic chains fall back to
- * top-level rows instead of vanishing or looping (AC 2).
+ * Nesting: subagent sessions render beneath their parent at full depth
+ * (a subagent of a subagent nests two levels down - fork/spawn lineage is
+ * a chain, and every chain member renders). A row counts as a nested child
+ * only when its parent-id chain reaches a real root - orphaned parents
+ * (id not in the list) and cyclic chains fall back to top-level rows
+ * instead of vanishing or looping (AC 2).
  *
  * Ordering decisions, recorded here as the contract (revised scope:
  * grouping is the one user choice - rows always order by last activity):
  *   - rows order by recency, newest first - the session.list wire order -
- *     both across top-level siblings and inside every subtree;
+ *     across top-level siblings and within every sibling set at any depth;
  *   - workspace groups order by their newest member's activity, Ungrouped
  *     last;
  *   - exact updatedAt ties break by id, so server and client render the
@@ -36,10 +38,10 @@ export type SessionGroupMode = "workspace" | "none";
 /** The default behind an absent pref (flat). */
 export const DEFAULT_GROUP: SessionGroupMode = "none";
 
-/** One rendered row: a parent session plus its nested children. */
+/** One rendered row: a session plus its full-depth nested lineage. */
 export interface SessionRow {
   session: Session;
-  children: Session[];
+  children: SessionRow[];
 }
 
 /** One rendered group; an undefined label marks the flat (no-grouping) view. */
@@ -66,18 +68,32 @@ function resolvesToRoot(
   if (memo !== undefined) return memo;
   const seen = new Set<string>([id]);
   let current = id;
+  let result = true;
   for (;;) {
     const parent = byId.get(current)?.parentSessionId;
     // No recorded parent: a root chain.
-    if (parent === undefined) return true;
+    if (parent === undefined) {
+      result = true;
+      break;
+    }
     // Parent not in this listing, or the chain revisits a node (cycle):
     // the chain never terminates at a root.
-    if (!byId.has(parent) || seen.has(parent)) return false;
+    if (!byId.has(parent) || seen.has(parent)) {
+      result = false;
+      break;
+    }
     const memoParent = resolved.get(parent);
-    if (memoParent !== undefined) return memoParent;
+    if (memoParent !== undefined) {
+      result = memoParent;
+      break;
+    }
     seen.add(parent);
     current = parent;
   }
+  // Every node on the walked chain shares the outcome: memoize them all so
+  // each id's chain is computed at most once.
+  for (const node of seen) resolved.set(node, result);
+  return result;
 }
 
 /** Recency comparator: newest first, id breaks exact ties deterministically. */
@@ -114,12 +130,17 @@ function buildForest(sessions: Session[]): {
   return { topLevel, childrenOf };
 }
 
-/** Wrap top-level rows into render rows with their nested children. */
+/**
+ * Wrap top-level rows into render rows carrying their full lineage:
+ * immediate children recursively nest their own children, so chains deeper
+ * than one level still render instead of silently dropping rows.
+ */
 function toRows(topLevel: Session[], childrenOf: Map<string, Session[]>): SessionRow[] {
-  return topLevel.map((session) => ({
+  const rowFor = (session: Session): SessionRow => ({
     session,
-    children: childrenOf.get(session.id) ?? [],
-  }));
+    children: (childrenOf.get(session.id) ?? []).map(rowFor),
+  });
+  return topLevel.map(rowFor);
 }
 
 /**
