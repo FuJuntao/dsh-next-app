@@ -52,8 +52,9 @@ import type { SessionGroupMode } from "./session-view";
  * and need no section bookkeeping when features grow. Enum unions drop an
  * out-of-vocabulary value wholesale, so a stale cookie naming a retired
  * mode sanitizes back to the flat default instead of failing. Cookies
- * written before the flattening used nested sections; parsePreferences
- * maps that legacy shape onto the flat keys once (writes are always flat).
+ * written before the flat-key migration simply sanitize away - their
+ * nested sections fail this flat schema and autofix drops them (owner
+ * call on PR #115: no compatibility shim for the one-off old shape).
  */
 const PreferencesSchema = Schema.object({
   layoutWidth: Schema.number().min(1),
@@ -113,29 +114,10 @@ export function parsePreferences(raw: string | undefined): Preferences | undefin
   }
   if (parsed === null || typeof parsed !== "object") return undefined;
   try {
-    // Cookies written before the flat-key migration carry nested sections
-    // ({layout:{width,folded}, sessions:{group,...}}); map them onto the
-    // flat keys so an existing browser upgrades in place instead of losing
-    // its width/fold on the next write. Retired fields (sort modes, the
-    // manual order array) and any unknown key drop out through the schema's
-    // autofix below.
-    const legacy = parsed as {
-      layout?: { width?: unknown; folded?: unknown };
-      sessions?: { group?: unknown };
-    };
-    const normalized =
-      typeof legacy.layout === "object" && legacy.layout !== null
-        ? {
-            ...parsed,
-            layoutWidth: legacy.layout.width,
-            layoutFolded: legacy.layout.folded,
-            sessionGroup: legacy.sessions?.group,
-          }
-        : parsed;
     // autofix removes invalid object properties; destructuring strips
-    // unknown keys. A retired vocabulary value drops exactly like any other
-    // invalid field.
-    const parsedPrefs = PreferencesSchema(normalized as never, { autofix: true });
+    // unknown keys. A retired vocabulary value or an entire pre-flattening
+    // nested cookie drops exactly like any other invalid field.
+    const parsedPrefs = PreferencesSchema(parsed as never, { autofix: true });
     const prefs: Preferences = {
       ...(parsedPrefs.layoutWidth !== undefined && { layoutWidth: parsedPrefs.layoutWidth }),
       ...(parsedPrefs.layoutFolded !== undefined && { layoutFolded: parsedPrefs.layoutFolded }),
