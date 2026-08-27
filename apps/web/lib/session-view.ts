@@ -3,11 +3,11 @@
  * (story #107 task #109).
  *
  * The root layout runs {@link arrangeSessions} over the bridge rows so the
- * first paint already carries the stored grouping/sorting/ordering (no
- * flash), and the interactive sidebar re-runs the same functions on every
- * control change - identical inputs, identical output, no duplicated
- * logic. This module therefore stays free of server-only imports; its
- * only coupling is the Session row type, imported as a type.
+ * first paint already carries the stored grouping/sorting (no flash), and
+ * the interactive sidebar re-runs the same functions on every control
+ * change - identical inputs, identical output, no duplicated logic. This
+ * module therefore stays free of server-only imports; its only coupling is
+ * the Session row type, imported as a type.
  *
  * Nesting: subagent sessions render beneath their parent. A row counts as
  * a nested child only when its parent-id chain reaches a real root -
@@ -16,11 +16,6 @@
  *
  * Sorting decisions the story leaves open, recorded here as the contract:
  *   - children within a subtree always sort by recency;
- *   - Manual is drag-order over top-level rows (flat view); selecting it
- *     in the grouped view falls back to recency everywhere (AC 4);
- *   - sessions absent from the stored manual order keep their incoming
- *     (updatedAt-descending) sequence after every listed id - "new
- *     sessions append at the end" without rewriting the stored array;
  *   - workspace groups sort by their newest activity, Ungrouped last;
  *   - title comparison is plain lowercased code-unit order, not
  *     localeCompare - locale tables differ between the server runtime and
@@ -33,7 +28,7 @@ import type { Session } from "./sessions";
 export type SessionGroupMode = "workspace" | "none";
 
 /** How the nav sorts sessions (AC 4). */
-export type SessionSortMode = "recency" | "title" | "manual";
+export type SessionSortMode = "recency" | "title";
 
 /** The persisted half of the view state (the prefs cookie's sessions section). */
 export interface SessionViewPreferences {
@@ -41,25 +36,18 @@ export interface SessionViewPreferences {
   group?: SessionGroupMode;
   /** Sorting mode; absent = recency. */
   sort?: SessionSortMode;
-  /**
-   * Manual order: session ids, explicit positions first. New or unknown
-   * ids append after the listed ones until moved.
-   */
-  order?: string[];
 }
 
 /** The fully-resolved view options {@link arrangeSessions} consumes. */
 export interface SessionViewOptions {
   group: SessionGroupMode;
   sort: SessionSortMode;
-  order: string[];
 }
 
-/** The defaults behind an absent prefs section (flat, recency, no moves yet). */
+/** The defaults behind an absent prefs section (flat, recency). */
 export const DEFAULT_SESSION_VIEW: SessionViewOptions = {
   group: "none",
   sort: "recency",
-  order: [],
 };
 
 /** One rendered row: a parent session plus its nested children. */
@@ -118,12 +106,6 @@ function byTitle(a: Session, b: Session): number {
   return ta < tb ? -1 : ta > tb ? 1 : 0;
 }
 
-/** Manual-order rank; unlisted sessions share +Infinity and keep wire order. */
-function manualRank(order: string[]): (a: Session, b: Session) => number {
-  const rank = new Map(order.map((id, index) => [id, index]));
-  return (a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity);
-}
-
 /** Build the nested forest: valid chains nest, broken ones stay top-level. */
 function buildForest(sessions: Session[]): {
   topLevel: Session[];
@@ -167,14 +149,7 @@ function toRows(topLevel: Session[], childrenOf: Map<string, Session[]>): Sessio
  * (interactive changes); see the module comment for the ordering contract.
  */
 export function arrangeSessions(sessions: Session[], options: SessionViewOptions): SessionGroup[] {
-  const effectiveSort =
-    options.group === "workspace" && options.sort === "manual" ? "recency" : options.sort;
-  const compare =
-    effectiveSort === "manual"
-      ? manualRank(options.order)
-      : effectiveSort === "title"
-        ? byTitle
-        : byRecency;
+  const compare = options.sort === "title" ? byTitle : byRecency;
   const { topLevel, childrenOf } = buildForest(sessions);
   topLevel.sort(compare);
   if (options.group === "none") {

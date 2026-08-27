@@ -15,17 +15,14 @@
  * last-activity time, subagent children nested beneath their parent, links
  * to /sessions/<id> with the active row highlighted. Bridge-down keeps
  * task #108's distinct error state with Retry - never stale placeholder
- * rows (AC 6).
- *
- * Drag-to-reorder exists only where it has meaning (AC 4): flat view +
- * Manual sort, operating on top-level rows - a parent moves with its whole
- * subtree, children are not individually draggable.
+ * rows (AC 6). Sorting offers recency and title; manual reorder was
+ * dropped from this scope before review.
  */
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { RiCloudOffLine, RiFolderLine, RiInputCursorMove, RiSortDesc } from "@remixicon/react";
+import { RiCloudOffLine, RiFolderLine, RiSortDesc } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -140,20 +137,10 @@ function RowButton({
 function RowGroup({
   group,
   activePathname,
-  dragging,
-  dragOverId,
-  onDragEnterRow,
-  onDragEndRow,
-  onDropRow,
   onNavigate,
 }: {
   group: SessionGroup;
   activePathname: string;
-  dragging: boolean;
-  dragOverId: string | undefined;
-  onDragEnterRow: (id: string) => void;
-  onDragEndRow: () => void;
-  onDropRow: (sourceId: string) => void;
   onNavigate: () => void;
 }) {
   return (
@@ -169,36 +156,7 @@ function RowGroup({
       )}
       <SidebarMenu>
         {group.rows.map((row) => (
-          <SidebarMenuItem
-            key={row.session.id}
-            data-session-id={row.session.id}
-            draggable={dragging}
-            onDragStart={(event) => {
-              event.dataTransfer.setData("text/plain", row.session.id);
-              event.dataTransfer.effectAllowed = "move";
-            }}
-            onDragOver={(event) => {
-              if (!dragging) return;
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "move";
-              onDragEnterRow(row.session.id);
-            }}
-            // A drag that ends off any row clears its own highlight; a real
-            // drop handles the same through commitDrop.
-            onDragEnd={onDragEndRow}
-            onDrop={(event) => {
-              event.preventDefault();
-              // The source id rides the transfer, so no drag-start state is
-              // needed in the parent - a stale highlight cannot outlive it.
-              const sourceId = event.dataTransfer.getData("text/plain");
-              if (sourceId !== "") onDropRow(sourceId);
-            }}
-            className={
-              dragging && dragOverId === row.session.id
-                ? "*:data-[slot=sidebar-menu-button]:bg-sidebar-accent"
-                : undefined
-            }
-          >
+          <SidebarMenuItem key={row.session.id} data-session-id={row.session.id}>
             <RowButton
               row={row}
               active={activePathname === "/sessions/" + row.session.id}
@@ -241,53 +199,21 @@ export function SessionsNav({
   const { isMobile, setOpenMobile } = useSidebar();
   const [group, setGroup] = useState<SessionGroupMode>(view.group ?? DEFAULT_SESSION_VIEW.group);
   const [sort, setSort] = useState<SessionSortMode>(view.sort ?? DEFAULT_SESSION_VIEW.sort);
-  const [order, setOrder] = useState<string[]>(view.order ?? []);
-  const [dragOverId, setDragOverId] = useState<string | undefined>(undefined);
 
-  const persistView = (next: {
-    group?: SessionGroupMode;
-    sort?: SessionSortMode;
-    order?: string[];
-  }) => {
-    // Persist the full triple so mode switches never lose sibling fields
-    // (e.g. leaving Manual keeps the earned order for the way back).
+  const persistView = (next: { group?: SessionGroupMode; sort?: SessionSortMode }) => {
+    // Persist the full pair so one control change never blanks the other.
     void updatePreferences({
       sessions: {
         group: next.group ?? group,
         sort: next.sort ?? sort,
-        ...(next.order !== undefined ? { order: next.order } : {}),
       },
     });
   };
 
   const groups = useMemo(() => {
     if (sessions.status !== "ok") return [];
-    return arrangeSessions(sessions.sessions, { group, sort, order });
-  }, [sessions, group, sort, order]);
-
-  // Drag-to-reorder exists only in the flat + Manual combination (AC 4):
-  // grouped views render Manual as recency, and subtree children move with
-  // their parent rather than being reorder targets themselves.
-  const dragEnabled = sessions.status === "ok" && group === "none" && sort === "manual";
-
-  /**
-   * Drop commit (AC 4): the dragged source moves before its drop target in
-   * one flat top-level sequence; its subtree travels with it because
-   * ordering applies to parents only. New order goes to state and the
-   * prefs cookie together.
-   */
-  const commitDrop = (sourceId: string): void => {
-    const targetId = dragOverId;
-    setDragOverId(undefined);
-    if (targetId === undefined || targetId === sourceId) return;
-    const sequence = groups.flatMap((g) => g.rows).map((row) => row.session.id);
-    if (!sequence.includes(sourceId)) return;
-    const moved = sequence.filter((id) => id !== sourceId);
-    const index = moved.indexOf(targetId);
-    const next = [...moved.slice(0, index), sourceId, ...moved.slice(index)];
-    setOrder(next);
-    persistView({ order: next });
-  };
+    return arrangeSessions(sessions.sessions, { group, sort });
+  }, [sessions, group, sort]);
 
   if (sessions.status === "unavailable") {
     return (
@@ -346,7 +272,6 @@ export function SessionsNav({
             options={[
               { value: "recency", label: "Recency" },
               { value: "title", label: "Title A-Z" },
-              { value: "manual", label: "Manual" },
             ]}
             onChange={(next) => {
               const mode = next as SessionSortMode;
@@ -354,31 +279,10 @@ export function SessionsNav({
               persistView({ sort: mode });
             }}
           />
-          {/* Presence-only affordance: visible exactly when drags work. */}
-          <span
-            aria-hidden="true"
-            className={
-              dragEnabled
-                ? "flex size-5 items-center justify-center text-sidebar-foreground/60"
-                : "hidden"
-            }
-          >
-            <RiInputCursorMove className="size-3.5" />
-          </span>
         </span>
       </SidebarGroupLabel>
       {groups.map((g) => (
-        <RowGroup
-          key={g.key}
-          group={g}
-          activePathname={pathname}
-          dragging={dragEnabled}
-          dragOverId={dragOverId}
-          onDragEnterRow={(id) => setDragOverId(id)}
-          onDragEndRow={() => setDragOverId(undefined)}
-          onDropRow={commitDrop}
-          onNavigate={navigate}
-        />
+        <RowGroup key={g.key} group={g} activePathname={pathname} onNavigate={navigate} />
       ))}
     </SidebarGroup>
   );

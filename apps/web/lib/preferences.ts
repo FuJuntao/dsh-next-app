@@ -47,10 +47,9 @@ import type { SessionViewPreferences } from "./session-view";
  * contract). Unknown keys are dropped by the parser's destructuring.
  *
  * The sessions section carries the nav's view state (story #109): enum
- * unions drop an out-of-vocabulary value wholesale, and the manual order
- * is id strings. One caveat verified against schemastery's autofix: array
- * items that fail their element schema are nulled, not dropped, so
- * parsePreferences filters non-string entries itself.
+ * unions drop an out-of-vocabulary value wholesale. A stale cookie whose
+ * sort names a retired mode (e.g. "manual") therefore sanitizes back to
+ * the recency default instead of failing.
  */
 const PreferencesSchema = Schema.object({
   layout: Schema.object({
@@ -59,8 +58,7 @@ const PreferencesSchema = Schema.object({
   }),
   sessions: Schema.object({
     group: Schema.union(["workspace", "none"]),
-    sort: Schema.union(["recency", "title", "manual"]),
-    order: Schema.array(String),
+    sort: Schema.union(["recency", "title"]),
   }),
 });
 
@@ -116,28 +114,21 @@ export function parsePreferences(raw: string | undefined): Preferences | undefin
   if (parsed === null || typeof parsed !== "object") return undefined;
   try {
     // autofix removes invalid object properties; destructuring strips
-    // unknown keys from the sanitized sections. The sessions order array
-    // is additionally filtered (see the schema comment): schemastery's
-    // autofix nulls items that fail their element schema instead of
-    // dropping them, and a null id would corrupt the manual order.
+    // unknown keys from the sanitized sections. A retired vocabulary value
+    // (e.g. a stale "manual") drops exactly like any other invalid field.
     const parsedPrefs = PreferencesSchema(parsed as never, { autofix: true });
     const { width, folded } = parsedPrefs.layout;
-    const { group, sort, order } = parsedPrefs.sessions ?? {};
+    const { group, sort } = parsedPrefs.sessions ?? {};
     const sessions = {
       ...(group === "workspace" || group === "none" ? { group } : {}),
-      ...(sort === "recency" || sort === "title" || sort === "manual" ? { sort } : {}),
-      ...(order !== undefined && {
-        order: order.filter((id): id is string => typeof id === "string"),
-      }),
+      ...(sort === "recency" || sort === "title" ? { sort } : {}),
     };
     return {
       layout: {
         ...(width !== undefined && { width }),
         ...(folded !== undefined && { folded }),
       },
-      ...((sessions.group !== undefined ||
-        sessions.sort !== undefined ||
-        sessions.order !== undefined) && {
+      ...((sessions.group !== undefined || sessions.sort !== undefined) && {
         sessions,
       }),
     };
