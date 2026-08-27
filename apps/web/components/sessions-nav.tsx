@@ -189,24 +189,26 @@ function RowGroup({
  */
 export function SessionsNav({
   sessions,
-  view,
+  sessionViewPreferences,
 }: {
   sessions: SessionsResult;
-  view: SessionViewPreferences;
+  sessionViewPreferences: SessionViewPreferences;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
-  const [group, setGroup] = useState<SessionGroupMode>(view.group ?? DEFAULT_SESSION_VIEW.group);
-  const [sort, setSort] = useState<SessionSortMode>(view.sort ?? DEFAULT_SESSION_VIEW.sort);
+  const [group, setGroup] = useState<SessionGroupMode>(
+    sessionViewPreferences.group ?? DEFAULT_SESSION_VIEW.group,
+  );
+  const [sort, setSort] = useState<SessionSortMode>(
+    sessionViewPreferences.sort ?? DEFAULT_SESSION_VIEW.sort,
+  );
 
   const persistView = (next: { group?: SessionGroupMode; sort?: SessionSortMode }) => {
     // Persist the full pair so one control change never blanks the other.
     void updatePreferences({
-      sessions: {
-        group: next.group ?? group,
-        sort: next.sort ?? sort,
-      },
+      sessionGroup: next.group ?? group,
+      sessionSort: next.sort ?? sort,
     });
   };
 

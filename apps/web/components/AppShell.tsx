@@ -133,10 +133,10 @@ function SettingsNav() {
  */
 export function AppSidebar({
   sessions,
-  view,
+  sessionViewPreferences,
 }: {
   sessions: SessionsResult;
-  view: SessionViewPreferences;
+  sessionViewPreferences: SessionViewPreferences;
 }) {
   return (
     <Sidebar collapsible="offcanvas">
@@ -148,7 +148,7 @@ export function AppSidebar({
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <SessionsNav sessions={sessions} view={view} />
+          <SessionsNav sessions={sessions} sessionViewPreferences={sessionViewPreferences} />
         </SidebarContent>
         <SidebarFooter>
           <SettingsNav />
