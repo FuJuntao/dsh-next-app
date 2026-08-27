@@ -25,7 +25,7 @@ test("a wide stored sidebar width cannot overflow a narrow viewport", async ({ p
   await page.context().addCookies([
     {
       name: "dsh-next-app.prefs",
-      value: encodeURIComponent(JSON.stringify({ layout: { width: 2000 } })),
+      value: encodeURIComponent(JSON.stringify({ layoutWidth: 2000 })),
       url: state.baseURL,
     },
   ]);
@@ -62,7 +62,7 @@ test("a stored width preference renders into the first paint, so no flash", asyn
   const res = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
-      cookie: prefsCookie({ layout: { width: 280 } }),
+      cookie: prefsCookie({ layoutWidth: 280 }),
     },
   });
   expect(res.status()).toBe(200);
@@ -87,13 +87,13 @@ test("the fold persists: the shell renders the stored fold state on every load",
     "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify(prefs));
   // Folded: the sidebar renders collapsed (off-screen) from the first paint.
   const foldedRes = await request.get(state.baseURL + "/", {
-    headers: { authorization: auth, cookie: prefsCookie({ layout: { folded: true } }) },
+    headers: { authorization: auth, cookie: prefsCookie({ layoutFolded: true }) },
   });
   expect(foldedRes.status()).toBe(200);
   expect(await foldedRes.text()).toContain('data-state="collapsed"');
   // Open: the default renders expanded.
   const openRes = await request.get(state.baseURL + "/", {
-    headers: { authorization: auth, cookie: prefsCookie({ layout: { folded: false } }) },
+    headers: { authorization: auth, cookie: prefsCookie({ layoutFolded: false }) },
   });
   expect(openRes.status()).toBe(200);
   expect(await openRes.text()).toContain('data-state="expanded"');
@@ -118,7 +118,7 @@ test("a malformed preference field is dropped; valid fields still apply", async 
   const res = await request.get(state.baseURL + "/", {
     headers: {
       authorization: auth,
-      cookie: prefsCookie({ layout: { width: 280, folded: "yes", extra: 1 } }),
+      cookie: prefsCookie({ layoutWidth: 280, layoutFolded: "yes", extra: 1 }),
     },
   });
   expect(res.status()).toBe(200);
@@ -278,7 +278,7 @@ test("dragging starts from the stored width, not the default", async ({ page }) 
   await page.context().addCookies([
     {
       name: "dsh-next-app.prefs",
-      value: encodeURIComponent(JSON.stringify({ layout: { width: 280 } })),
+      value: encodeURIComponent(JSON.stringify({ layoutWidth: 280 })),
       url: state.baseURL,
     },
   ]);
@@ -310,7 +310,7 @@ test("keyboard resize while folded does not clobber the stored width", async ({ 
   await page.context().addCookies([
     {
       name: "dsh-next-app.prefs",
-      value: encodeURIComponent(JSON.stringify({ layout: { width: 920 } })),
+      value: encodeURIComponent(JSON.stringify({ layoutWidth: 920 })),
       url: state.baseURL,
     },
   ]);
