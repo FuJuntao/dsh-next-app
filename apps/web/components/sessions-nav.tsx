@@ -154,7 +154,10 @@ function RowGroup({
           <span className="truncate">{group.label}</span>
         </div>
       )}
-      <SidebarMenu>
+      {/* In the grouped view the rows indent beneath the folder label so
+          the hierarchy reads as folder -> sessions (the flat view stays
+          flush with the rest of the nav). */}
+      <SidebarMenu className={group.label !== undefined ? "pl-4" : undefined}>
         {group.rows.map((row) => (
           <SidebarMenuItem key={row.session.id} data-session-id={row.session.id}>
             <RowButton
