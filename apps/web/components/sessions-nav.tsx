@@ -1,0 +1,290 @@
+"use client";
+
+/**
+ * The side nav sessions list (story #107 task #109).
+ *
+ * Server-computed first paint: the root layout fetches the live rows
+ * through the bridge (ADR-0010) and reads the prefs cookie, passing both
+ * down; this component runs the pure arrangeSessions (lib/session-view.ts)
+ * over them - identical inputs on server and client, so hydration matches.
+ * Interactive control changes re-run the same arrangement in place and
+ * write the prefs cookie through updatePreferences; the server picks the
+ * change up on its next request-render cycle (AC 3-5).
+ *
+ * Rows carry the full AC 2 content: title, running dot, relative
+ * last-activity time, subagent children nested beneath their parent, links
+ * to /sessions/<id> with the active row highlighted. Bridge-down keeps
+ * task #108's distinct error state with Retry - never stale placeholder
+ * rows (AC 6). Rows order by last activity - the session.list wire order;
+ * grouping is the one user choice (revised scope: recency covers what a
+ * sort control added, so it was dropped before review).
+ */
+
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { RiCloudOffLine, RiFolderLine } from "@remixicon/react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@/components/ui/sidebar";
+import { updatePreferences } from "../lib/preferences";
+import type { SessionsResult } from "../lib/sessions";
+import {
+  DEFAULT_GROUP,
+  arrangeSessions,
+  formatRelativeTime,
+  type SessionGroup,
+  type SessionGroupMode,
+  type SessionRow,
+} from "../lib/session-view";
+
+/** One header pick-list: an icon trigger opening a radio group. */
+function HeaderPicker({
+  label,
+  icon,
+  value,
+  options,
+  onChange,
+}: {
+  /** Accessible name for the trigger; the icon alone carries nothing. */
+  label: string;
+  icon: React.ReactNode;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={label}
+        title={label}
+        className="inline-flex size-5 items-center justify-center rounded-sm text-sidebar-foreground/60 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground"
+      >
+        {icon}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuRadioGroup value={value} onValueChange={(next) => onChange(String(next))}>
+          {options.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** The running-state dot (AC 2): filled emerald while attached agents run. */
+function RunningDot({ running }: { running: boolean }) {
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        className={
+          "size-1.5 shrink-0 rounded-full " +
+          (running ? "bg-emerald-500" : "bg-muted-foreground/30")
+        }
+      />
+      <span className="sr-only">{running ? "running" : "idle"}</span>
+    </>
+  );
+}
+
+/** Shared row body: dot, truncated title, relative last-activity time. */
+function RowButton({
+  row,
+  active,
+  onNavigate,
+}: {
+  row: SessionRow;
+  active: boolean;
+  onNavigate: () => void;
+}) {
+  const { session } = row;
+  return (
+    <SidebarMenuButton
+      isActive={active}
+      render={<Link href={"/sessions/" + session.id} onClick={onNavigate} />}
+    >
+      <RunningDot running={session.running} />
+      <span className="truncate">{session.title}</span>
+      <time
+        dateTime={new Date(session.updatedAt).toISOString()}
+        suppressHydrationWarning
+        className="ml-auto shrink-0 text-[10px] tabular-nums text-sidebar-foreground/50"
+      >
+        {formatRelativeTime(session.updatedAt)}
+      </time>
+    </SidebarMenuButton>
+  );
+}
+
+/**
+ * One session row at any lineage depth: the row body, then its nested
+ * children rendered as the same node one indent deeper (recursion runs to
+ * full depth - a dropped grandchild would be a silently vanished row).
+ */
+function RowNode({
+  row,
+  activePathname,
+  onNavigate,
+}: {
+  row: SessionRow;
+  activePathname: string;
+  onNavigate: () => void;
+}) {
+  return (
+    <SidebarMenuItem data-session-id={row.session.id}>
+      <RowButton
+        row={row}
+        active={activePathname === "/sessions/" + row.session.id}
+        onNavigate={onNavigate}
+      />
+      {row.children.length > 0 && (
+        <ul className="ml-5 border-l border-sidebar-border pl-1">
+          {row.children.map((child) => (
+            <RowNode
+              key={child.session.id}
+              row={child}
+              activePathname={activePathname}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </ul>
+      )}
+    </SidebarMenuItem>
+  );
+}
+
+/** One arranged group: optional workspace header, parents then nested children. */
+function RowGroup({
+  group,
+  activePathname,
+  onNavigate,
+}: {
+  group: SessionGroup;
+  activePathname: string;
+  onNavigate: () => void;
+}) {
+  return (
+    <div data-testid={"session-group-" + group.key}>
+      {group.label !== undefined && (
+        <div
+          className="flex items-center gap-1 px-2 pt-2 pb-1 text-[11px] font-medium text-sidebar-foreground/50"
+          title={group.detail}
+        >
+          <RiFolderLine aria-hidden="true" className="size-3 shrink-0" />
+          <span className="truncate">{group.label}</span>
+        </div>
+      )}
+      {/* In the grouped view the rows indent beneath the folder label so
+          the hierarchy reads as folder -> sessions (the flat view stays
+          flush with the rest of the nav). */}
+      <SidebarMenu className={group.label !== undefined ? "pl-4" : undefined}>
+        {group.rows.map((row) => (
+          <RowNode
+            key={row.session.id}
+            row={row}
+            activePathname={activePathname}
+            onNavigate={onNavigate}
+          />
+        ))}
+      </SidebarMenu>
+    </div>
+  );
+}
+
+/**
+ * The whole nav section. Props arrive pre-parsed from the prefs channel,
+ * so state can trust them as the hydration seed; the flat default lives in
+ * lib/session-view (DEFAULT_GROUP).
+ */
+export function SessionsNav({
+  sessions,
+  sessionGroup,
+}: {
+  sessions: SessionsResult;
+  sessionGroup: SessionGroupMode | undefined;
+}) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const [group, setGroup] = useState<SessionGroupMode>(sessionGroup ?? DEFAULT_GROUP);
+
+  const groups = useMemo(() => {
+    if (sessions.status !== "ok") return [];
+    return arrangeSessions(sessions.sessions, group);
+  }, [sessions, group]);
+
+  if (sessions.status === "unavailable") {
+    return (
+      <SidebarGroup data-testid="sessions-unavailable">
+        <SidebarGroupLabel>Sessions</SidebarGroupLabel>
+        <SidebarMenu>
+          <SidebarMenuItem className="flex h-8 w-full items-center gap-2 px-2 text-xs">
+            {/* The destructive tone is scoped to the status content; the
+                outline button keeps its neutral foreground. */}
+            <RiCloudOffLine aria-hidden="true" className="size-4 shrink-0 text-destructive/80" />
+            <span className="min-w-0 flex-1 truncate text-destructive/80">
+              Sessions unavailable
+            </span>
+            <Button
+              variant="outline"
+              size="xs"
+              aria-label="Retry loading sessions"
+              onClick={() => router.refresh()}
+            >
+              Retry
+            </Button>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarGroup>
+    );
+  }
+  const navigate = (): void => {
+    if (isMobile) setOpenMobile(false);
+  };
+
+  return (
+    <SidebarGroup data-testid="sessions-nav">
+      <SidebarGroupLabel className="flex items-center justify-between gap-1 pr-1">
+        <span>Sessions</span>
+        {/* The one header control (revised AC): a radio pick-list that
+            writes straight through to the prefs cookie. */}
+        <span className="flex items-center gap-0.5">
+          <HeaderPicker
+            label="Session grouping"
+            icon={<RiFolderLine className="size-3.5" />}
+            value={group}
+            options={[
+              { value: "workspace", label: "By workspace" },
+              { value: "none", label: "No grouping" },
+            ]}
+            onChange={(next) => {
+              const mode = next as SessionGroupMode;
+              setGroup(mode);
+              void updatePreferences({ sessionGroup: mode });
+            }}
+          />
+        </span>
+      </SidebarGroupLabel>
+      {groups.map((g) => (
+        <RowGroup key={g.key} group={g} activePathname={pathname} onNavigate={navigate} />
+      ))}
+    </SidebarGroup>
+  );
+}

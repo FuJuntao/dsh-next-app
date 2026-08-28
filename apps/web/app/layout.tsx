@@ -23,16 +23,18 @@ export default async function RootLayout({
   // The live sessions list (ADR-0003): fetched through the bridge at
   // request time, so the first paint already carries the profile's real
   // sessions (the bridge-down state is a distinct render, never stale rows).
+  // The stored view prefs ride along; arranging with them happens in the
+  // shared pure model, server-side for this very paint (no flash).
   const sessions = await fetchSessions();
   return (
     <html lang="en" className={notoSans.variable}>
       <body>
         <TooltipProvider delay={0}>
           <ShellSidebarProvider
-            initialFolded={prefs?.layout.folded ?? false}
-            initialWidth={prefs?.layout.width}
+            initialFolded={prefs?.layoutFolded ?? false}
+            initialWidth={prefs?.layoutWidth}
           >
-            <AppSidebar sessions={sessions} />
+            <AppSidebar sessions={sessions} sessionGroup={prefs?.sessionGroup} />
             <AppShell>{children}</AppShell>
           </ShellSidebarProvider>
         </TooltipProvider>
