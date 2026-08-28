@@ -18,11 +18,23 @@
  * DSH_NEXT_APP_BRIDGE_SOCKET; without it (dev without a profile, a stale
  * build) every call fails with {@link BridgeUnavailableError}.
  */
-import { request as httpRequest } from "node:http";
+import { Agent, request as httpRequest } from "node:http";
 import { AbstractApiClient } from "@deepseek-ai/dsh-host-apiproxy/client";
 
 /** The socket path the runtime row forwards to this process. */
 const SOCKET_PATH = process.env["DSH_NEXT_APP_BRIDGE_SOCKET"];
+
+/**
+ * The transport agent, keep-alive disabled on purpose. The class contract
+ * below says every call opens its own connection and shares no connection
+ * state - but node's default global agent pools sockets since node 19, and
+ * a pooled socket keeps a torn-down bridge reachable through its inode: a
+ * stopped or replaced bridge would keep answering from the dead listener
+ * instead of failing fast into the bridge-down state (AC 6). Disabling
+ * keep-alive makes every call re-resolve the socket path, so the failure
+ * the contract promises is the failure the transport delivers.
+ */
+const noKeepAliveAgent = new Agent({ keepAlive: false });
 
 /**
  * Deadline for the nav's bounded calls. The root layout awaits the fetch
@@ -91,6 +103,7 @@ export class BridgeApiClient extends AbstractApiClient {
           socketPath: this.socketPath,
           path: input.pathname + input.search,
           method: init?.method ?? "GET",
+          agent: noKeepAliveAgent,
           // exactOptionalPropertyTypes: optional RequestOptions keys are
           // omitted, never set to undefined.
           ...(init?.headers !== undefined && {
