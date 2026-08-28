@@ -157,7 +157,12 @@ function RowNode({
       {row.children.length > 0 && (
         <ul className="ml-5 border-l border-sidebar-border pl-1">
           {row.children.map((child) => (
-            <RowNode key={child.session.id} row={child} activePathname={activePathname} onNavigate={onNavigate} />
+            <RowNode
+              key={child.session.id}
+              row={child}
+              activePathname={activePathname}
+              onNavigate={onNavigate}
+            />
           ))}
         </ul>
       )}
@@ -191,7 +196,12 @@ function RowGroup({
           flush with the rest of the nav). */}
       <SidebarMenu className={group.label !== undefined ? "pl-4" : undefined}>
         {group.rows.map((row) => (
-          <RowNode key={row.session.id} row={row} activePathname={activePathname} onNavigate={onNavigate} />
+          <RowNode
+            key={row.session.id}
+            row={row}
+            activePathname={activePathname}
+            onNavigate={onNavigate}
+          />
         ))}
       </SidebarMenu>
     </div>
