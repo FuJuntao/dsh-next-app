@@ -94,6 +94,7 @@ export default async function globalSetup(): Promise<void> {
       baseURL: booted.baseURL,
       announceLine: booted.announceLine,
       dshPid: booted.dshPid,
+      tarballPath: tarball,
       auth: { user: AUTH_USER, password: AUTH_PASSWORD },
     };
     writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
