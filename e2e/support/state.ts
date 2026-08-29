@@ -17,6 +17,8 @@ export interface E2EState {
   announceLine: string;
   /** The dsh process id; its process group is the teardown target. */
   dshPid: number;
+  /** The packed tarball the profile was installed from; dedicated boots reinstall it. */
+  tarballPath: string;
   /** Basic-auth test credentials configured on the shared boot (ADR-0008). */
   auth: {
     /** The username the fence allows. */

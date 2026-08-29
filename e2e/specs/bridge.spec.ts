@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
-import { request as httpRequest } from "node:http";
 import { join } from "node:path";
 import { test, expect } from "@playwright/test";
+import { httpPost } from "../support/bridge-client";
 import { readState } from "../support/state";
 
 const state = readState();
@@ -30,35 +30,6 @@ interface ResponseFrame {
   result: { ok: boolean; value?: { items?: unknown[] }; error?: { code?: string } };
 }
 
-/** One HTTP round-trip over the bridge socket. */
-function httpPost(path: string, body: string): Promise<{ status: number; body: string }> {
-  return new Promise((resolve, reject) => {
-    const req = httpRequest(
-      {
-        socketPath: SOCKET_PATH,
-        path,
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "content-length": Buffer.byteLength(body),
-        },
-      },
-      (res) => {
-        let data = "";
-        res.setEncoding("utf8");
-        res.on("data", (chunk: string) => {
-          data += chunk;
-        });
-        res.on("end", () => {
-          resolve({ status: res.statusCode ?? 0, body: data });
-        });
-      },
-    );
-    req.on("error", reject);
-    req.end(body);
-  });
-}
-
 test("the runtime row serves the bridge socket with mode 0600", () => {
   // The socket's filesystem permissions are its access control (ADR-0003):
   // no other user on the machine may address the profile's gateway.
@@ -70,6 +41,7 @@ test("the runtime row serves the bridge socket with mode 0600", () => {
 test("session.list answers with a server-response frame echoing the rpcId", async () => {
   const rpcId = "e2e-list-" + randomUUID();
   const response = await httpPost(
+    SOCKET_PATH,
     "/api/session.list",
     JSON.stringify({ type: "client-request", rpcId, method: "session.list", payload: {} }),
   );
@@ -87,6 +59,7 @@ test("an unknown method is a transport-level 404", async () => {
   // The shipped handler serves only the methods the gateway contract knows;
   // an unknown path is the carrier's "not found", exactly as over HTTP.
   const response = await httpPost(
+    SOCKET_PATH,
     "/api/session.nope",
     JSON.stringify({
       type: "client-request",
@@ -105,6 +78,7 @@ test("a payload failing the method's schema is answered with a bad-request error
   // status - the envelope carries them).
   const rpcId = "e2e-payload-" + randomUUID();
   const response = await httpPost(
+    SOCKET_PATH,
     "/api/session.list",
     JSON.stringify({
       type: "client-request",
@@ -122,7 +96,7 @@ test("a payload failing the method's schema is answered with a bad-request error
 });
 
 test("a non-JSON body is a carrier-level 400", async () => {
-  const response = await httpPost("/api/session.list", "this is not json");
+  const response = await httpPost(SOCKET_PATH, "/api/session.list", "this is not json");
   expect(response.status).toBe(400);
 });
 
@@ -132,6 +106,7 @@ test("a malformed envelope is answered with a bad-request error on the salvaged 
   // reply stays correlatable - the sentinel invalid-request applies only
   // when no id is readable.
   const response = await httpPost(
+    SOCKET_PATH,
     "/api/session.list",
     JSON.stringify({ type: "client-request", rpcId: "e2e-malformed", method: 42 }),
   );

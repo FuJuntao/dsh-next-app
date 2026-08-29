@@ -45,6 +45,8 @@ export interface BootedProfile {
   baseURL: string;
   /** The exact announce line the instance printed on stdout. */
   announceLine: string;
+  /** The instance's profile directory (dshHome/profiles/next-app). */
+  profileDir: string;
   /** Teed dsh stdout file; present only when the boot was given a logsDir. */
   stdoutPath?: string;
   /** Teed dsh stderr file; present only when the boot was given a logsDir. */
@@ -215,6 +217,7 @@ ${stderr}`,
         port,
         baseURL,
         announceLine,
+        profileDir: join(dshHome, "profiles", PROFILE),
         ...(stdoutPath !== undefined && { stdoutPath }),
         ...(stderrPath !== undefined && { stderrPath }),
         stop: () => stopProfile(dshPid),

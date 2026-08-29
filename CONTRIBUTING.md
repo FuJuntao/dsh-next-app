@@ -24,11 +24,14 @@ The tarball's contents follow the `files` whitelist plus whatever `prepack` stag
 
 The staged `web/` and the emitted `lib/` are gitignored build artifacts.
 
-### Running the e2e regression suite
+### Running the test suites
 
-`pnpm test` drives the end-to-end regression suite (ADR-0006): it packs the
-bundle, installs it into a throwaway profile under a scratch `DSH_HOME`, boots
-the profile on a free port, and asserts the served page in headless Chromium
+`pnpm test` runs the workspace members' unit suites (vitest; currently the
+pure session-view model in `apps/web`, covering the branches real profile
+data cannot produce) and then the end-to-end regression suite (ADR-0006): it
+packs the bundle, installs it into a throwaway profile under a scratch
+`DSH_HOME`, boots the profile on a free port, and asserts the served page in
+headless Chromium
 behind the basic-auth fence (the suite writes a credential pair into the
 profile's patch layer — ADR-0008 — and asserts 401s without it, including
 the fail-closed behavior), plus the ready-marker pin and the supervision
@@ -53,6 +56,7 @@ the suite stays off the fast path (ADR-0006). The job installs the
 catalog-pinned `dsh` host from npm - the version is read from
 `pnpm-workspace.yaml`, never hand-synced - and the Chromium browser with
 system dependencies (`playwright install --with-deps chromium`), then runs
-`pnpm test`, which packs the bundle itself: nothing runs from the repo tree.
+`pnpm test` - the unit suites first, then the e2e suite, which packs the
+bundle itself: nothing runs from the repo tree.
 The job gates every PR and push to main, so a regression - e.g. a Next catalog
 bump that changes the child's ready line - fails the build.

@@ -1,10 +1,18 @@
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { test as base, expect } from "@playwright/test";
-import { bootProfile, type BootedProfile } from "./profile";
+import { bootProfile, scryptValue, writeRuntimePatch, type BootedProfile } from "./profile";
+import { run } from "./process";
 import { readState } from "./state";
 
 const state = readState();
+
+/** The repo root, as the global setup anchors its invocations. */
+const REPO_ROOT = resolve(__dirname, "../..");
+/** The profile name every dedicated boot installs (the shared setup's profile). */
+const PROFILE = "next-app";
+/** Budget for one dedicated profile install (mirrors the global setup's). */
+const INSTALL_TIMEOUT_MS = 300_000;
 
 /**
  * The supervision suite's own profile instance: booted once per worker
@@ -13,7 +21,10 @@ const state = readState();
  * is affected regardless of run order. Registered with the global teardown
  * so a hard-killed worker cannot leave the instance behind.
  */
-export const test = base.extend<{}, { supervisionProfile: BootedProfile }>({
+export const test = base.extend<
+  {},
+  { supervisionProfile: BootedProfile; sessionsProfile: BootedProfile }
+>({
   supervisionProfile: [
     // eslint-disable-next-line no-empty-pattern -- the fixture needs no other worker fixtures; Playwright requires the destructuring form.
     async ({}, use) => {
@@ -23,6 +34,40 @@ export const test = base.extend<{}, { supervisionProfile: BootedProfile }>({
       const profile = await bootProfile(state.dshHome, join(state.scratchDir, "supervision"));
       writeFileSync(
         join(state.scratchDir, "supervision-profile.json"),
+        JSON.stringify({ dshPid: profile.dshPid }),
+      );
+      try {
+        await use(profile);
+      } finally {
+        await profile.stop();
+      }
+    },
+    { scope: "worker" },
+  ],
+  sessionsProfile: [
+    // eslint-disable-next-line no-empty-pattern -- the fixture needs no other worker fixtures; Playwright requires the destructuring form.
+    async ({}, use) => {
+      // The sessions specs boot their own instance from their own DSH_HOME -
+      // a fresh install of the packed tarball, not a copy or the shared
+      // profile - so the sessions seeded there exist only for this instance
+      // and can never leak into the shared instance's session.list. Nothing
+      // depends on spec file order.
+      const sessionsHome = join(state.scratchDir, "sessions-dsh-home");
+      mkdirSync(sessionsHome);
+      await run(["dsh", "plugin", "--profile", PROFILE, "add", state.tarballPath], {
+        cwd: REPO_ROOT,
+        env: { DSH_HOME: sessionsHome },
+        timeoutMs: INSTALL_TIMEOUT_MS,
+      });
+      // The same fence as the shared boot (ADR-0008): the browser answers
+      // the 401 challenge with the suite's credential pair.
+      writeRuntimePatch(join(sessionsHome, "profiles", PROFILE), {
+        user: state.auth.user,
+        passwordHash: scryptValue(state.auth.password),
+      });
+      const profile = await bootProfile(sessionsHome, join(state.scratchDir, "sessions"));
+      writeFileSync(
+        join(state.scratchDir, "sessions-profile.json"),
         JSON.stringify({ dshPid: profile.dshPid }),
       );
       try {

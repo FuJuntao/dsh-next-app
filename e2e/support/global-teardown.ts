@@ -39,18 +39,21 @@ export default async function globalTeardown(): Promise<void> {
       // process group already gone
     }
 
-    // The supervision specs boot their own dedicated instance; sweep it too
-    // when the spec process died before its afterAll could stop it.
-    const registryPath = join(state.scratchDir, "supervision-profile.json");
-    try {
-      if (existsSync(registryPath)) {
-        const registered = JSON.parse(readFileSync(registryPath, "utf8")) as { dshPid?: number };
-        if (typeof registered.dshPid === "number" && registered.dshPid !== state.dshPid) {
-          await stopProfile(registered.dshPid);
+    // The dedicated-instance specs (supervision, sessions) register their
+    // boots; sweep any of them when the spec process died before its
+    // fixture teardown could stop it.
+    for (const registryName of ["supervision-profile.json", "sessions-profile.json"]) {
+      const registryPath = join(state.scratchDir, registryName);
+      try {
+        if (existsSync(registryPath)) {
+          const registered = JSON.parse(readFileSync(registryPath, "utf8")) as { dshPid?: number };
+          if (typeof registered.dshPid === "number" && registered.dshPid !== state.dshPid) {
+            await stopProfile(registered.dshPid);
+          }
         }
+      } catch {
+        // unreadable registry: nothing to sweep
       }
-    } catch {
-      // unreadable registry: nothing to sweep
     }
 
     rmSync(state.scratchDir, { recursive: true, force: true });
