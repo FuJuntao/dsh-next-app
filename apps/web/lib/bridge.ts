@@ -164,12 +164,24 @@ export class BridgeApiClient extends AbstractApiClient {
   }
 }
 
-/** The shared client for the server's lifetime (the class holds no connection state). */
+/** The shared clients for the server's lifetime (the class holds no connection state). */
 let shared: BridgeApiClient | undefined;
+let sharedAction: BridgeApiClient | undefined;
 
 /** The bridge client; calls fail with BridgeUnavailableError when the bridge is down. */
 export function getBridgeClient(): BridgeApiClient {
   // The nav fetch must never stall the first paint (see NAV_FETCH_TIMEOUT_MS).
   shared ??= new BridgeApiClient(SOCKET_PATH, NAV_FETCH_TIMEOUT_MS);
   return shared;
+}
+
+/**
+ * The bridge client for user-paced calls (server actions like startSession):
+ * the shipped 30s default, not the nav's first-paint budget - a cold
+ * session.create must not be failed by a timeout tuned for the layout fetch.
+ * Calls fail with BridgeUnavailableError when the bridge is down.
+ */
+export function getActionBridgeClient(): BridgeApiClient {
+  sharedAction ??= new BridgeApiClient(SOCKET_PATH);
+  return sharedAction;
 }
