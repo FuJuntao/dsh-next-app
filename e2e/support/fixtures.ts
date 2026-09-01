@@ -15,6 +15,37 @@ const PROFILE = "next-app";
 const INSTALL_TIMEOUT_MS = 300_000;
 
 /**
+ * Install the packed tarball into its own DSH_HOME and boot a dedicated
+ * instance named for the suite that owns it. Each suite gets a distinct
+ * `instanceName`, so its sessions (created by seeding, or by the UI under
+ * test) exist only for that instance and can never skew another suite's
+ * listing counts - even when the serial run reuses one worker. The caller
+ * stops the instance; the registration file lets the global teardown sweep
+ * it if the worker dies first.
+ */
+async function installScratchInstance(instanceName: string): Promise<BootedProfile> {
+  const home = join(state.scratchDir, instanceName + "-dsh-home");
+  mkdirSync(home);
+  await run(["dsh", "plugin", "--profile", PROFILE, "add", state.tarballPath], {
+    cwd: REPO_ROOT,
+    env: { DSH_HOME: home },
+    timeoutMs: INSTALL_TIMEOUT_MS,
+  });
+  // The same fence as the shared boot (ADR-0008): the browser answers
+  // the 401 challenge with the suite's credential pair.
+  writeRuntimePatch(join(home, "profiles", PROFILE), {
+    user: state.auth.user,
+    passwordHash: scryptValue(state.auth.password),
+  });
+  const profile = await bootProfile(home, join(state.scratchDir, instanceName));
+  writeFileSync(
+    join(state.scratchDir, instanceName + "-profile.json"),
+    JSON.stringify({ dshPid: profile.dshPid }),
+  );
+  return profile;
+}
+
+/**
  * The supervision suite's own profile instance: booted once per worker
  * (per-suite isolation) on the installed scratch profile, stopped by the
  * fixture teardown. The stop test ends this instance, so no other spec file
@@ -23,7 +54,11 @@ const INSTALL_TIMEOUT_MS = 300_000;
  */
 export const test = base.extend<
   {},
-  { supervisionProfile: BootedProfile; sessionsProfile: BootedProfile }
+  {
+    supervisionProfile: BootedProfile;
+    sessionsProfile: BootedProfile;
+    homeProfile: BootedProfile;
+  }
 >({
   supervisionProfile: [
     // eslint-disable-next-line no-empty-pattern -- the fixture needs no other worker fixtures; Playwright requires the destructuring form.
@@ -52,24 +87,22 @@ export const test = base.extend<
       // profile - so the sessions seeded there exist only for this instance
       // and can never leak into the shared instance's session.list. Nothing
       // depends on spec file order.
-      const sessionsHome = join(state.scratchDir, "sessions-dsh-home");
-      mkdirSync(sessionsHome);
-      await run(["dsh", "plugin", "--profile", PROFILE, "add", state.tarballPath], {
-        cwd: REPO_ROOT,
-        env: { DSH_HOME: sessionsHome },
-        timeoutMs: INSTALL_TIMEOUT_MS,
-      });
-      // The same fence as the shared boot (ADR-0008): the browser answers
-      // the 401 challenge with the suite's credential pair.
-      writeRuntimePatch(join(sessionsHome, "profiles", PROFILE), {
-        user: state.auth.user,
-        passwordHash: scryptValue(state.auth.password),
-      });
-      const profile = await bootProfile(sessionsHome, join(state.scratchDir, "sessions"));
-      writeFileSync(
-        join(state.scratchDir, "sessions-profile.json"),
-        JSON.stringify({ dshPid: profile.dshPid }),
-      );
+      const profile = await installScratchInstance("sessions");
+      try {
+        await use(profile);
+      } finally {
+        await profile.stop();
+      }
+    },
+    { scope: "worker" },
+  ],
+  homeProfile: [
+    // eslint-disable-next-line no-empty-pattern -- the fixture needs no other worker fixtures; Playwright requires the destructuring form.
+    async ({}, use) => {
+      // The home composer specs own this instance: the home send creates a
+      // real session through the UI, and that row must not skew the
+      // sessions suite's seeded-listing counts (or vice versa).
+      const profile = await installScratchInstance("home");
       try {
         await use(profile);
       } finally {

@@ -39,10 +39,14 @@ export default async function globalTeardown(): Promise<void> {
       // process group already gone
     }
 
-    // The dedicated-instance specs (supervision, sessions) register their
-    // boots; sweep any of them when the spec process died before its
-    // fixture teardown could stop it.
-    for (const registryName of ["supervision-profile.json", "sessions-profile.json"]) {
+    // The dedicated-instance specs (supervision, sessions, home composer)
+    // register their boots; sweep any of them when the spec process died
+    // before its fixture teardown could stop it.
+    for (const registryName of [
+      "supervision-profile.json",
+      "sessions-profile.json",
+      "home-profile.json",
+    ]) {
       const registryPath = join(state.scratchDir, registryName);
       try {
         if (existsSync(registryPath)) {

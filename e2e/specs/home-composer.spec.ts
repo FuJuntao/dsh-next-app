@@ -14,18 +14,18 @@ test.use({ viewport: DESKTOP });
  * The home composer's real send (story #117 task #120): typing text and
  * pressing send calls the startSession action, which creates a real session
  * over the bridge and prompts it - the browser lands on /sessions/[newId],
- * and the sidebar lists the new row. Asserted against the sessions suite's
- * dedicated instance (the sessionsProfile fixture installs the packed
- * tarball into its own DSH_HOME), so the created session exists only for
- * this instance and cannot skew any shared-instance listing counts.
+ * and the sidebar lists the new row. Asserted against the suite's own
+ * dedicated instance (the homeProfile fixture installs the packed tarball
+ * into its own DSH_HOME), so the session created here exists only for this
+ * instance and cannot skew the shared or sessions instances' counts.
  *
  * Task #126 grows this file into the full home flow (preset, cwd, model,
  * leading-slash commands); this spec pins exactly what #120 delivered.
  */
 let profile: BootedProfile;
 
-test.beforeAll(async ({ sessionsProfile }) => {
-  profile = sessionsProfile;
+test.beforeAll(async ({ homeProfile }) => {
+  profile = homeProfile;
 });
 
 test("a home send starts a real session and lands in it", async ({ page }) => {
