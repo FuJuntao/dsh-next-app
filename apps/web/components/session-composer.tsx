@@ -30,7 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-const PLACEHOLDER = "Message the session";
+const DEFAULT_PLACEHOLDER = "Message the session";
 
 // --- Injected trigger sources -------------------------------------------------
 //
@@ -54,6 +54,8 @@ export type SessionComposerProps = {
    * surface renders the error and the composer preserves the draft for retry.
    */
   onSubmit: (text: string) => Promise<unknown>;
+  /** Empty-state text and accessible name; defaults to the session wording. */
+  placeholder?: string;
   /** Injected `@` source. */
   references: ComposerEntry[];
 };
@@ -402,6 +404,7 @@ function ComposerInner({
   menuOpenRef,
   onSubmit,
   pendingRef,
+  placeholder,
   references,
   setIsPending,
 }: {
@@ -411,10 +414,21 @@ function ComposerInner({
   menuOpenRef: RefObject<boolean>;
   onSubmit: (text: string) => Promise<unknown>;
   pendingRef: RefObject<boolean>;
+  placeholder: string;
   references: ComposerEntry[];
   setIsPending: (pending: boolean) => void;
 }) {
   const submit = useComposerSubmit({ onSubmit, pendingRef, setIsPending });
+  // The hint advertises only the triggers this surface actually injected: an
+  // empty source mounts no menu, so advertising it would be a lie.
+  const hint = [
+    "Enter send",
+    "Shift+Enter newline",
+    commands.length > 0 && "/ commands",
+    references.length > 0 && "@ files",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <>
@@ -422,21 +436,19 @@ function ComposerInner({
         <PlainTextPlugin
           contentEditable={
             <ContentEditable
-              aria-label="Message the session"
+              aria-label={placeholder}
               className="block max-h-48 min-h-12 overflow-y-auto px-2.5 py-2 text-xs outline-none"
             />
           }
           placeholder={
             <div className="pointer-events-none absolute inset-x-0 top-0 px-2.5 py-2 text-xs text-muted-foreground">
-              {PLACEHOLDER}
+              {placeholder}
             </div>
           }
           ErrorBoundary={LexicalErrorBoundary}
         />
         <div className="flex items-center justify-between gap-2 border-t border-input px-2.5 py-1.5">
-          <p className="text-xs text-muted-foreground">
-            Enter send · Shift+Enter newline · / commands · @ files
-          </p>
+          <p className="text-xs text-muted-foreground">{hint}</p>
           <SendButton hasText={hasText} isPending={isPending} submit={submit} />
         </div>
       </div>
@@ -446,7 +458,12 @@ function ComposerInner({
   );
 }
 
-export function SessionComposer({ onSubmit, commands, references }: SessionComposerProps) {
+export function SessionComposer({
+  onSubmit,
+  commands,
+  references,
+  placeholder = DEFAULT_PLACEHOLDER,
+}: SessionComposerProps) {
   const [hasText, setHasText] = useState(false);
   const [isPending, setIsPending] = useState(false);
   // Whether a typeahead menu is open; the Enter handler defers to the menu's
@@ -473,6 +490,7 @@ export function SessionComposer({ onSubmit, commands, references }: SessionCompo
         menuOpenRef={menuOpenRef}
         onSubmit={onSubmit}
         pendingRef={pendingRef}
+        placeholder={placeholder}
         references={references}
         setIsPending={setIsPending}
       />

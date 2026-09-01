@@ -73,15 +73,15 @@ test("a crashed Next child is restarted with backoff and the page is served agai
     .toMatch(/next-app-runtime: Next child exited unexpectedly .*restarting in \d+ms/);
 
   // The restarted child serves the page again (first backoff delay is 1s,
-  // then Next boots): / renders the home page - the shell and the home
-  // placeholder (story #104: side nav brand and sessions list).
+  // then Next boots): / renders the home page - the shell and the composer
+  // as the primary element (story #117).
   await expect(async () => {
     await page.goto(supervisionProfile.baseURL, { timeout: 5_000 });
   }).toPass({ timeout: 90_000 });
   await expect(page).toHaveTitle("Home");
   await expect(page.getByRole("banner")).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Into the Unknown");
   await expect(page.getByRole("main")).toBeVisible();
 });
 

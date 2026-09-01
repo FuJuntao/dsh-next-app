@@ -359,7 +359,7 @@ test("the side nav brand links to the home page", async ({ page }) => {
   await expect(brand).toBeVisible();
   await brand.click();
   await expect(page).toHaveURL(state.baseURL + "/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Into the Unknown");
 });
 
 test("the side nav shows the real sessions list, empty in a fresh profile", async ({ page }) => {
