@@ -32,7 +32,7 @@ import {
   MenuOption,
   type MenuTextMatch,
 } from "@lexical/react/LexicalTypeaheadMenuPlugin";
-import { RiFileLine, RiSendPlane2Fill, RiTerminalBoxLine } from "@remixicon/react";
+import { RiChat3Line, RiFileLine, RiSendPlane2Fill, RiTerminalBoxLine } from "@remixicon/react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -50,7 +50,14 @@ const DEFAULT_PLACEHOLDER = "Message the session";
 export type ComposerEntry = {
   label: string;
   description: string;
-  kind: "command" | "file";
+  kind: "command" | "file" | "session";
+  /**
+   * Text inserted when the entry is picked, when it differs from the label
+   * (session references insert their mention token, not the display label).
+   */
+  insertText?: string;
+  /** Stable option key; labels may repeat (untitled sessions all say "New Session"). */
+  key?: string;
 };
 
 export type SessionComposerProps = {
@@ -64,8 +71,16 @@ export type SessionComposerProps = {
   onSubmit: (text: string) => Promise<unknown>;
   /** Empty-state text and accessible name; defaults to the session wording. */
   placeholder?: string;
-  /** Injected `@` source. */
+  /** Injected `@` source (static list; filtered locally against the query). */
   references: ComposerEntry[];
+  /**
+   * Optional async `@` source (session search). When present it replaces the
+   * static `references` list as the `@` menu's options, queried per keystroke
+   * with the current `@` text; results render as-is (the plugin does no
+   * further filtering). Presence also mounts the `@` trigger even with an
+   * empty static list.
+   */
+  referenceSearch?: (query: string) => Promise<ComposerEntry[]>;
   /**
    * Surface controls (the story's picker chips) rendered in the footer's
    * left slot; with chips present the trigger hint drops below the card.
@@ -74,24 +89,36 @@ export type SessionComposerProps = {
 };
 
 class ComposerOption extends MenuOption {
-  kind: "command" | "file";
+  kind: "command" | "file" | "session";
   label: string;
   description: string;
+  insertText: string | undefined;
 
-  constructor(kind: "command" | "file", label: string, description: string) {
-    super(label);
+  constructor(
+    kind: "command" | "file" | "session",
+    label: string,
+    description: string,
+    insertText?: string,
+    key?: string,
+  ) {
+    super(key ?? label);
     this.kind = kind;
     this.label = label;
     this.description = description;
+    this.insertText = insertText;
   }
 }
 
 // --- Trigger matching ---------------------------------------------------------
 // Custom trigger fns (not useBasicTypeaheadTriggerMatch): the default
 // punctuation set terminates queries at "." and "/" - poison for file paths.
+// The `@` query is "anything up to whitespace or a new @" so non-ASCII
+// session titles reach the search source (`\w` is ASCII-only and would cut
+// a CJK query at zero characters); the `@` itself is excluded so a second
+// `@` starts a fresh reference instead of extending the first.
 
 const SLASH_TRIGGER_REGEX = /(^|\n)\/([\w-]*)$/;
-const AT_TRIGGER_REGEX = /(^|\s|\n)@([\w.\-/]*)$/;
+const AT_TRIGGER_REGEX = /(^|\s|\n)@([^\s@]*)$/u;
 
 function checkForSlashTrigger(text: string): MenuTextMatch | null {
   const match = SLASH_TRIGGER_REGEX.exec(text);
@@ -161,6 +188,8 @@ function renderMenu(
           >
             {option.kind === "command" ? (
               <RiTerminalBoxLine className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            ) : option.kind === "session" ? (
+              <RiChat3Line className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             ) : (
               <RiFileLine className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             )}
@@ -324,14 +353,24 @@ function TypeaheadMenus({
   menuOpenRef,
   commands,
   references,
+  referenceSearch,
 }: {
   menuOpenRef: RefObject<boolean>;
   commands: ComposerEntry[];
   references: ComposerEntry[];
+  referenceSearch: ((query: string) => Promise<ComposerEntry[]>) | undefined;
 }) {
   const [editor] = useLexicalComposerContext();
   const [slashQuery, setSlashQuery] = useState<string | null>(null);
   const [atQuery, setAtQuery] = useState<string | null>(null);
+  // The async `@` source's live results (session search), keyed to the query
+  // that produced them; only the newest response may publish (a slow early
+  // query must not overwrite a fast later one).
+  const [searchedRefs, setSearchedRefs] = useState<{
+    query: string;
+    entries: ComposerEntry[];
+  }>({ query: "", entries: [] });
+  const searchSeq = useRef(0);
 
   const slashOptions = useMemo(
     () =>
@@ -340,24 +379,54 @@ function TypeaheadMenus({
       ),
     [commands, slashQuery],
   );
-  const atOptions = useMemo(
-    () =>
-      filterOptions(references, atQuery).map(
-        (entry) => new ComposerOption(entry.kind, entry.label, entry.description),
-      ),
-    [references, atQuery],
+  const atOptions = useMemo(() => {
+    const source =
+      referenceSearch === undefined
+        ? filterOptions(references, atQuery)
+        : atQuery !== null && atQuery !== "" && searchedRefs.query === atQuery
+          ? searchedRefs.entries
+          : [];
+    return source.map(
+      (entry) =>
+        new ComposerOption(entry.kind, entry.label, entry.description, entry.insertText, entry.key),
+    );
+  }, [referenceSearch, references, atQuery, searchedRefs]);
+
+  const handleAtQueryChange = useCallback(
+    (query: string | null) => {
+      setAtQuery(query);
+      if (referenceSearch === undefined) return;
+      if (query === null || query === "") {
+        // Invalidate any in-flight response too: it no longer belongs to an open query.
+        searchSeq.current += 1;
+        setSearchedRefs({ query: "", entries: [] });
+        return;
+      }
+      const seq = ++searchSeq.current;
+      void referenceSearch(query).then(
+        (entries) => {
+          if (seq === searchSeq.current) setSearchedRefs({ query, entries });
+        },
+        () => {
+          // Failed search: show nothing; the draft and Enter-to-send are unaffected.
+          if (seq === searchSeq.current) setSearchedRefs({ query, entries: [] });
+        },
+      );
+    },
+    [referenceSearch],
   );
 
   const selectOption = useCallback(
     (option: ComposerOption, textNodeContainingQuery: TextNode | null, closeMenu: () => void) => {
       editor.update(() => {
-        const replacement = $createTextNode(option.label + " ");
+        const text = option.insertText ?? option.label;
+        const replacement = $createTextNode(text + " ");
         if (textNodeContainingQuery !== null) {
           textNodeContainingQuery.replace(replacement);
         } else {
           const selection = $getSelection();
           if (!$isRangeSelection(selection)) return;
-          selection.insertText(option.label + " ");
+          selection.insertText(text + " ");
         }
         const end = replacement.getTextContent().length;
         replacement.select(end, end);
@@ -390,9 +459,9 @@ function TypeaheadMenus({
           preselectFirstItem
         />
       )}
-      {references.length > 0 && (
+      {(references.length > 0 || referenceSearch !== undefined) && (
         <LexicalTypeaheadMenuPlugin
-          onQueryChange={setAtQuery}
+          onQueryChange={handleAtQueryChange}
           onSelectOption={selectOption}
           options={atOptions}
           triggerFn={checkForAtTrigger}
@@ -420,6 +489,7 @@ function ComposerInner({
   pendingRef,
   placeholder,
   references,
+  referenceSearch,
   setIsPending,
 }: {
   chips: ReactNode;
@@ -431,6 +501,7 @@ function ComposerInner({
   pendingRef: RefObject<boolean>;
   placeholder: string;
   references: ComposerEntry[];
+  referenceSearch: ((query: string) => Promise<ComposerEntry[]>) | undefined;
   setIsPending: (pending: boolean) => void;
 }) {
   const submit = useComposerSubmit({ onSubmit, pendingRef, setIsPending });
@@ -440,7 +511,7 @@ function ComposerInner({
     "Enter send",
     "Shift+Enter newline",
     commands.length > 0 && "/ commands",
-    references.length > 0 && "@ files",
+    referenceSearch !== undefined ? "@ sessions" : references.length > 0 && "@ files",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -470,7 +541,12 @@ function ComposerInner({
       {/* With chips in the footer, the trigger hint moves below the card. */}
       {chips !== undefined && <p className="text-xs text-muted-foreground">{hint}</p>}
       <EnterToSendPlugin menuOpenRef={menuOpenRef} pendingRef={pendingRef} submit={submit} />
-      <TypeaheadMenus menuOpenRef={menuOpenRef} commands={commands} references={references} />
+      <TypeaheadMenus
+        menuOpenRef={menuOpenRef}
+        commands={commands}
+        references={references}
+        referenceSearch={referenceSearch}
+      />
     </>
   );
 }
@@ -480,6 +556,7 @@ export function SessionComposer({
   commands,
   references,
   placeholder = DEFAULT_PLACEHOLDER,
+  referenceSearch,
   chips,
 }: SessionComposerProps) {
   const [hasText, setHasText] = useState(false);
@@ -511,6 +588,7 @@ export function SessionComposer({
         pendingRef={pendingRef}
         placeholder={placeholder}
         references={references}
+        referenceSearch={referenceSearch}
         setIsPending={setIsPending}
       />
       <OnChangePlugin

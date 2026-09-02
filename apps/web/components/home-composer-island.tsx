@@ -1,13 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { AgentPresetEntry } from "@deepseek-ai/dsh-host-apiproxy/api";
 
 import { ComposerCwdChip } from "@/components/composer-cwd-chip";
 import { ComposerPresetChip } from "@/components/composer-preset-chip";
-import { SessionComposer } from "@/components/session-composer";
+import { type ComposerEntry, SessionComposer } from "@/components/session-composer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { searchSessionReferences } from "@/lib/session-references";
 import { SLASH_MENU_ENTRIES } from "@/lib/slash-commands";
 import { startSession } from "@/lib/start-session";
 
@@ -24,11 +25,28 @@ export function HomeComposerIsland({ presets }: { presets: AgentPresetEntry[] })
   const [presetId, setPresetId] = useState<string | null>(null);
   // The cwd selection (story AC 7); null means the host default.
   const [cwd, setCwd] = useState<string | null>(null);
+  // The `@` source (story AC 9): session references via session.search.
+  // A failed search yields no options (never an empty-Enter trap: with an
+  // empty list the menu simply does not open).
+  const queryReferences = useCallback(async (query: string): Promise<ComposerEntry[]> => {
+    const result = await searchSessionReferences(query);
+    if (!result.ok) {
+      return [];
+    }
+    return result.items.map((hit) => ({
+      key: hit.sessionId,
+      kind: "session" as const,
+      label: hit.label,
+      description: hit.snippet,
+      insertText: hit.mention,
+    }));
+  }, []);
   return (
     <div className="flex w-full flex-col gap-2">
       <SessionComposer
         commands={SLASH_MENU_ENTRIES}
         references={[]}
+        referenceSearch={queryReferences}
         placeholder="Describe what you want to build"
         chips={
           <div className="flex min-w-0 items-center gap-1">
