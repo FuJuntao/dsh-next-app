@@ -25,6 +25,21 @@ const DEFAULT_EFFORT = "__adapter_default__";
 /** NUL joins provider and model in the outer group's values. */
 const SEP = "\u0000";
 
+/** The display text for a provider/model/effort triple, from the catalog. */
+function describeModel(
+  groups: ModelProviderGroup[],
+  target: { provider: string; model: string; reasoningEffort?: string | undefined },
+): { name: string; effort: string | undefined } | null {
+  const group = groups.find((g) => g.id === target.provider);
+  const model = group?.models.find((m) => m.id === target.model);
+  if (model === undefined) return null;
+  const effort =
+    target.reasoningEffort === undefined
+      ? undefined
+      : model.reasoning?.efforts.find((e) => e.id === target.reasoningEffort);
+  return { name: model.name, effort: effort?.name };
+}
+
 /**
  * The model picker chip (story #117 task #125): the session-independent
  * catalog from `llm.models` (fetched server-side by the home page), grouped
@@ -32,13 +47,20 @@ const SEP = "\u0000";
  * one. The selection rides `startSession` into `session.selectModel`
  * (best-effort per story AC 4); omitting it keeps the deployment default.
  * Switching models resets the effort to the adapter default.
+ *
+ * The default entry names the real model and effort it resolves to (from
+ * `host.describe` cross-referenced against the catalog), so "no selection"
+ * reads as a concrete target rather than an abstract phrase.
  */
 export function ComposerModelChip({
   groups,
+  hostDefault,
   value,
   onChange,
 }: {
   groups: ModelProviderGroup[];
+  /** The deployment's default provider/model (host.describe); null when unknown. */
+  hostDefault: { provider: string; model: string } | null;
   /** The chosen selection; null means the deployment default. */
   value: StartSessionModel | null;
   onChange: (value: StartSessionModel | null) => void;
@@ -53,12 +75,39 @@ export function ComposerModelChip({
     value?.reasoningEffort === undefined
       ? undefined
       : selectedModel?.reasoning?.efforts.find((effort) => effort.id === value.reasoningEffort);
-  const label =
-    value === null || selectedModel === undefined
+
+  // The default entry's resolved target: the model itself plus the adapter's
+  // default effort (host.describe names no effort, so read the catalog's).
+  const defaultCatalogModel =
+    hostDefault === null
+      ? undefined
+      : groups
+          .find((g) => g.id === hostDefault.provider)
+          ?.models.find((m) => m.id === hostDefault.model);
+  const defaultDescription =
+    hostDefault === null
+      ? null
+      : describeModel(groups, {
+          ...hostDefault,
+          ...(defaultCatalogModel?.reasoning?.defaultEffort !== undefined && {
+            reasoningEffort: defaultCatalogModel.reasoning.defaultEffort,
+          }),
+        });
+  const defaultText =
+    defaultDescription === null
       ? "Default model"
-      : selectedEffort === undefined
-        ? selectedModel.name
-        : `${selectedModel.name} · ${selectedEffort.name}`;
+      : defaultDescription.effort === undefined
+        ? defaultDescription.name
+        : `${defaultDescription.name} · ${defaultDescription.effort}`;
+
+  const label =
+    value === null
+      ? defaultText
+      : selectedModel === undefined
+        ? "Default model"
+        : selectedEffort === undefined
+          ? selectedModel.name
+          : `${selectedModel.name} · ${selectedEffort.name}`;
   // Controlled root: a top-level pick closes the menu on its own, but an
   // effort picked from a submenu only closes the submenu - the chip owns
   // the dialog-level close so the page is never left under the menu's
@@ -92,9 +141,11 @@ export function ComposerModelChip({
         >
           <DropdownMenuRadioItem value={DEFAULT_VALUE}>
             <span className="flex min-w-0 flex-col">
-              <span>Default model</span>
+              <span>{defaultText}</span>
               <span className="text-muted-foreground">
-                The deployment default answers the session
+                {hostDefault === null
+                  ? "The provider default answers the session"
+                  : "Deployment default"}
               </span>
             </span>
           </DropdownMenuRadioItem>

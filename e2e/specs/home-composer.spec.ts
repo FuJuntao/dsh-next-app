@@ -137,8 +137,11 @@ test("the model picker selection is applied before the first prompt", async ({ p
   const composer = await gotoHome(page);
   await page.getByRole("button", { name: "Model" }).click();
   if (effort === undefined) {
+    // The default entry can now carry the same model name (it names the
+    // real default), so exclude it by its "Deployment default" marker.
     await page
       .getByRole("menuitemradio", { name: new RegExp("^" + model.name) })
+      .filter({ hasNotText: "Deployment default" })
       .first()
       .click();
   } else {

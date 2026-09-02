@@ -56,3 +56,29 @@ export async function fetchModelCatalog(): Promise<ModelProviderGroup[]> {
     return [];
   }
 }
+
+/**
+ * The deployment's default model target for the picker's default entry
+ * (task #125 follow-up): host.describe answers the provider/model applied
+ * when a session names none. null when the bridge is down or the host
+ * configures no explicit default - the UI falls back to generic wording.
+ */
+export async function fetchHostModelDefault(): Promise<{ provider: string; model: string } | null> {
+  try {
+    const response = await getBridgeClient().host.describe({});
+    if (!response.result.ok) {
+      console.error(
+        `[home-composer-data] host.describe failed: ${response.result.error.code} ${response.result.error.message}`,
+      );
+      return null;
+    }
+    const { provider, model } = response.result.value;
+    if (provider === undefined || model === undefined) {
+      return null;
+    }
+    return { provider, model };
+  } catch (error) {
+    console.error("[home-composer-data] host.describe failed:", error);
+    return null;
+  }
+}

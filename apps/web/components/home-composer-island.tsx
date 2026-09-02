@@ -21,9 +21,12 @@ import { startSession, type StartSessionModel } from "@/lib/start-session";
 export function HomeComposerIsland({
   presets,
   models,
+  hostDefault,
 }: {
   presets: AgentPresetEntry[];
   models: ModelProviderGroup[];
+  /** The deployment default model target (host.describe); null when unknown. */
+  hostDefault: { provider: string; model: string } | null;
 }) {
   const router = useRouter();
   // The inline destructive Alert's text (story AC 4); null renders nothing.
@@ -58,13 +61,18 @@ export function HomeComposerIsland({
         referenceSearch={queryReferences}
         placeholder="Describe what you want to build"
         chips={
-          <div className="flex min-w-0 items-center gap-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-1">
             {presets.length > 0 && (
               <ComposerPresetChip presets={presets} value={presetId} onChange={setPresetId} />
             )}
             <ComposerCwdChip value={cwd} onChange={setCwd} />
             {models.length > 0 && (
-              <ComposerModelChip groups={models} value={model} onChange={setModel} />
+              <ComposerModelChip
+                groups={models}
+                hostDefault={hostDefault}
+                value={model}
+                onChange={setModel}
+              />
             )}
           </div>
         }
