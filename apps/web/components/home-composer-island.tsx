@@ -6,9 +6,9 @@ import type { AgentPresetEntry } from "@deepseek-ai/dsh-host-apiproxy/api";
 
 import { ComposerCwdChip } from "@/components/composer-cwd-chip";
 import { ComposerPresetChip } from "@/components/composer-preset-chip";
-import { STAND_IN_COMMANDS } from "@/components/composer-fixtures";
 import { SessionComposer } from "@/components/session-composer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { SLASH_MENU_ENTRIES } from "@/lib/slash-commands";
 import { startSession } from "@/lib/start-session";
 
 // The composer is a client boundary (ADR-0001 island) that server-renders its
@@ -27,7 +27,7 @@ export function HomeComposerIsland({ presets }: { presets: AgentPresetEntry[] })
   return (
     <div className="flex w-full flex-col gap-2">
       <SessionComposer
-        commands={STAND_IN_COMMANDS}
+        commands={SLASH_MENU_ENTRIES}
         references={[]}
         placeholder="Describe what you want to build"
         chips={
