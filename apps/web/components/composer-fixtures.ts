@@ -1,10 +1,9 @@
 import type { ComposerEntry } from "@/components/session-composer";
 
-// Stand-in trigger sources shared by the surface islands until the real ones
-// land: slash commands become a vendored, version-pinned list (#123) and
-// references become session references via session.search (#124). Home
-// suppresses references entirely (#124: file/directory references are
-// suppressed there - an empty source mounts no @ menu at all).
+// Stand-in trigger sources for the SESSION page until the chat story lands
+// its real ones. Home has shipped to the real sources: the vendored,
+// version-pinned command list (#123) and session references via
+// session.search (#124 - file/directory references stay suppressed there).
 export const STAND_IN_COMMANDS: ComposerEntry[] = [
   { label: "/compact", description: "Summarize the transcript to free context", kind: "command" },
   { label: "/clear", description: "Clear the session transcript", kind: "command" },

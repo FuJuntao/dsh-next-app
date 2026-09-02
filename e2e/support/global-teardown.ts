@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { stopProfile } from "./profile";
 import { sleep } from "./process";
@@ -39,15 +39,18 @@ export default async function globalTeardown(): Promise<void> {
       // process group already gone
     }
 
-    // The dedicated-instance specs (supervision, sessions, home composer)
-    // register their boots; sweep any of them when the spec process died
-    // before its fixture teardown could stop it.
-    for (const registryName of [
-      "supervision-profile.json",
-      "sessions-profile.json",
-      "home-profile.json",
-    ]) {
-      const registryPath = join(state.scratchDir, registryName);
+    // The dedicated-instance specs register their boots: supervision writes
+    // one fixed registry (no install involved), and every installed scratch
+    // instance lands in the instances/ directory. Sweep them all for the
+    // case where the spec process died before its fixture teardown.
+    const registryPaths = [join(state.scratchDir, "supervision-profile.json")];
+    const instancesDir = join(state.scratchDir, "instances");
+    if (existsSync(instancesDir)) {
+      for (const name of readdirSync(instancesDir)) {
+        registryPaths.push(join(instancesDir, name));
+      }
+    }
+    for (const registryPath of registryPaths) {
       try {
         if (existsSync(registryPath)) {
           const registered = JSON.parse(readFileSync(registryPath, "utf8")) as { dshPid?: number };

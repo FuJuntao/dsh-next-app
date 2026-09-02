@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import { test as base, expect } from "@playwright/test";
 import { bootProfile, scryptValue, writeRuntimePatch, type BootedProfile } from "./profile";
@@ -24,8 +25,14 @@ const INSTALL_TIMEOUT_MS = 300_000;
  * it if the worker dies first.
  */
 async function installScratchInstance(instanceName: string): Promise<BootedProfile> {
-  const home = join(state.scratchDir, instanceName + "-dsh-home");
-  mkdirSync(home);
+  // Unique per installation attempt: a worker restarted mid-suite after a
+  // hard failure must not collide with the crashed attempt's directories
+  // (same scratch dir for the whole run). The registration rides the
+  // instances/ directory the global teardown sweeps exhaustively.
+  const instance = instanceName + "-" + randomUUID().slice(0, 8);
+  const home = join(state.scratchDir, instance + "-dsh-home");
+  mkdirSync(home, { recursive: true });
+  mkdirSync(join(state.scratchDir, "instances"), { recursive: true });
   await run(["dsh", "plugin", "--profile", PROFILE, "add", state.tarballPath], {
     cwd: REPO_ROOT,
     env: { DSH_HOME: home },
@@ -37,9 +44,9 @@ async function installScratchInstance(instanceName: string): Promise<BootedProfi
     user: state.auth.user,
     passwordHash: scryptValue(state.auth.password),
   });
-  const profile = await bootProfile(home, join(state.scratchDir, instanceName));
+  const profile = await bootProfile(home, join(state.scratchDir, instance));
   writeFileSync(
-    join(state.scratchDir, instanceName + "-profile.json"),
+    join(state.scratchDir, "instances", instance + ".json"),
     JSON.stringify({ dshPid: profile.dshPid }),
   );
   return profile;
