@@ -75,3 +75,17 @@
     # fence fails closed, and --host/--port override the config.
     - id: next-app-runtime
       name: "@scope/dsh-next-app/runtime"
+
+# The base layer mounts the full-text session index with `openAt: never`
+# (content search off; the row is restated by later layers to opt in). This
+# deployment consumes session.search - the home composer's `@` session
+# references (story #117 task #124) - so it opts in with a durable derived
+# index. `first-search` defers the node:sqlite import and handle to the
+# first search, keeping the bridge's boot as quiet as a disabled one; the
+# index is rebuildable data, not user data, and rides the home root beside
+# the other derived stores. The override replaces the targeted row's whole
+# config, so `path` is restated with `openAt`.
+- id: session-query-sqlite
+  config:
+    path: !!js dshHomePath('session-query/index.sqlite')
+    openAt: first-search
