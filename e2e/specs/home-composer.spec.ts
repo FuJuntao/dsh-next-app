@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { renameSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { httpPost } from "../support/bridge-client";
@@ -176,6 +177,31 @@ test("sending is gated on a chosen folder, then starts a real session", async ({
   await expect(page.locator('[data-session-id="' + landedSessionId(page) + '"]')).toBeVisible();
 });
 
+test("a failed send shows the Alert, keeps the draft, and succeeds on retry", async ({ page }) => {
+  const composer = await gotoHome(page);
+  await pickSubfolder(page);
+  await composer.pressSequentially("retry after failure");
+  // Sever the bridge (socket moved aside - the sessions suite's trick):
+  // the send must fail LOUDLY - Alert, no navigation, draft preserved.
+  const moved = socket + ".e2e-moved";
+  renameSync(socket, moved);
+  try {
+    await page.getByRole("button", { name: "Send message" }).click();
+    const alert = page.getByTestId("send-error");
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText("Could not start the session");
+    await expect(page).toHaveURL(/\/$/);
+    await expect(composer).toContainText("retry after failure");
+  } finally {
+    renameSync(moved, socket);
+  }
+  // The retry: same draft, same button - the second send lands.
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page).toHaveURL(/\/sessions\/[^/]+$/);
+  await expect(page.getByTestId("send-error")).toHaveCount(0);
+  await expect(page.locator('[data-session-id="' + landedSessionId(page) + '"]')).toBeVisible();
+});
+
 test("the chosen subfolder reaches session.create", async ({ page }) => {
   const composer = await gotoHome(page);
   const chosen = await pickSubfolder(page);
@@ -273,7 +299,7 @@ test("a leading-/ first message executes host-side", async ({ page }) => {
     .poll(
       async () => {
         if (page.url().includes("/sessions/")) return "navigated";
-        const alertText = await page.getByRole("alert").textContent();
+        const alertText = await page.getByTestId("send-error").textContent();
         return alertText === null ? "pending" : "alert:" + alertText;
       },
       { timeout: 30_000 },
