@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AgentPresetEntry } from "@deepseek-ai/dsh-host-apiproxy/api";
 
+import { ComposerCwdChip } from "@/components/composer-cwd-chip";
 import { ComposerPresetChip } from "@/components/composer-preset-chip";
 import { STAND_IN_COMMANDS } from "@/components/composer-fixtures";
 import { SessionComposer } from "@/components/session-composer";
@@ -21,6 +22,8 @@ export function HomeComposerIsland({ presets }: { presets: AgentPresetEntry[] })
   const [error, setError] = useState<string | null>(null);
   // The agentPreset selection (story AC 6); null means the deployment default.
   const [presetId, setPresetId] = useState<string | null>(null);
+  // The cwd selection (story AC 7); null means the host default.
+  const [cwd, setCwd] = useState<string | null>(null);
   return (
     <div className="flex w-full flex-col gap-2">
       <SessionComposer
@@ -28,9 +31,12 @@ export function HomeComposerIsland({ presets }: { presets: AgentPresetEntry[] })
         references={[]}
         placeholder="Describe what you want to build"
         chips={
-          presets.length > 0 ? (
-            <ComposerPresetChip presets={presets} value={presetId} onChange={setPresetId} />
-          ) : undefined
+          <div className="flex min-w-0 items-center gap-1">
+            {presets.length > 0 && (
+              <ComposerPresetChip presets={presets} value={presetId} onChange={setPresetId} />
+            )}
+            <ComposerCwdChip value={cwd} onChange={setCwd} />
+          </div>
         }
         onSubmit={async (text) => {
           setError(null);
@@ -38,6 +44,7 @@ export function HomeComposerIsland({ presets }: { presets: AgentPresetEntry[] })
           const result = await startSession({
             text,
             ...(presetId !== null && { agentPreset: presetId }),
+            ...(cwd !== null && { cwd }),
             // The prompt contract: browser callers attach their IANA zone;
             // the host validates and records it.
             ...(timeZone !== "" && { clientTimeZone: timeZone }),
