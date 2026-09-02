@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import ReactDOM from "react-dom";
 import {
   $createTextNode,
@@ -58,6 +66,11 @@ export type SessionComposerProps = {
   placeholder?: string;
   /** Injected `@` source. */
   references: ComposerEntry[];
+  /**
+   * Surface controls (the story's picker chips) rendered in the footer's
+   * left slot; with chips present the trigger hint drops below the card.
+   */
+  chips?: ReactNode;
 };
 
 class ComposerOption extends MenuOption {
@@ -398,6 +411,7 @@ function TypeaheadMenus({
 // Inner component so the submit callback can read the editor context while
 // SessionComposer itself stays the context provider.
 function ComposerInner({
+  chips,
   commands,
   hasText,
   isPending,
@@ -408,6 +422,7 @@ function ComposerInner({
   references,
   setIsPending,
 }: {
+  chips: ReactNode;
   commands: ComposerEntry[];
   hasText: boolean;
   isPending: boolean;
@@ -448,10 +463,12 @@ function ComposerInner({
           ErrorBoundary={LexicalErrorBoundary}
         />
         <div className="flex items-center justify-between gap-2 border-t border-input px-2.5 py-1.5">
-          <p className="text-xs text-muted-foreground">{hint}</p>
+          {chips ?? <p className="text-xs text-muted-foreground">{hint}</p>}
           <SendButton hasText={hasText} isPending={isPending} submit={submit} />
         </div>
       </div>
+      {/* With chips in the footer, the trigger hint moves below the card. */}
+      {chips !== undefined && <p className="text-xs text-muted-foreground">{hint}</p>}
       <EnterToSendPlugin menuOpenRef={menuOpenRef} pendingRef={pendingRef} submit={submit} />
       <TypeaheadMenus menuOpenRef={menuOpenRef} commands={commands} references={references} />
     </>
@@ -463,6 +480,7 @@ export function SessionComposer({
   commands,
   references,
   placeholder = DEFAULT_PLACEHOLDER,
+  chips,
 }: SessionComposerProps) {
   const [hasText, setHasText] = useState(false);
   const [isPending, setIsPending] = useState(false);
@@ -484,6 +502,7 @@ export function SessionComposer({
   return (
     <LexicalComposer initialConfig={initialConfig}>
       <ComposerInner
+        chips={chips}
         commands={commands}
         hasText={hasText}
         isPending={isPending}

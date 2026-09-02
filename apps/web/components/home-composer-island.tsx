@@ -2,7 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { AgentPresetEntry } from "@deepseek-ai/dsh-host-apiproxy/api";
 
+import { ComposerPresetChip } from "@/components/composer-preset-chip";
 import { STAND_IN_COMMANDS } from "@/components/composer-fixtures";
 import { SessionComposer } from "@/components/session-composer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -13,21 +15,29 @@ import { startSession } from "@/lib/start-session";
 // full editor. Lexical owns the editable DOM imperatively after hydration, so
 // there is no server/client markup to reconcile inside it; the typeahead
 // portals render client-side only (their anchors do not exist on the server).
-export function HomeComposerIsland() {
+export function HomeComposerIsland({ presets }: { presets: AgentPresetEntry[] }) {
   const router = useRouter();
   // The inline destructive Alert's text (story AC 4); null renders nothing.
   const [error, setError] = useState<string | null>(null);
+  // The agentPreset selection (story AC 6); null means the deployment default.
+  const [presetId, setPresetId] = useState<string | null>(null);
   return (
     <div className="flex w-full flex-col gap-2">
       <SessionComposer
         commands={STAND_IN_COMMANDS}
         references={[]}
         placeholder="Describe what you want to build"
+        chips={
+          presets.length > 0 ? (
+            <ComposerPresetChip presets={presets} value={presetId} onChange={setPresetId} />
+          ) : undefined
+        }
         onSubmit={async (text) => {
           setError(null);
           const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
           const result = await startSession({
             text,
+            ...(presetId !== null && { agentPreset: presetId }),
             // The prompt contract: browser callers attach their IANA zone;
             // the host validates and records it.
             ...(timeZone !== "" && { clientTimeZone: timeZone }),

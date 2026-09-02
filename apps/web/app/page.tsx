@@ -3,13 +3,17 @@ import type { Metadata } from "next";
 import { DshLogo } from "@/components/dsh-logo";
 import { HomeComposerIsland } from "@/components/home-composer-island";
 import { Badge } from "@/components/ui/badge";
+import { fetchAgentPresets } from "@/lib/home-composer-data";
 
 export const metadata: Metadata = {
   title: "Home",
   description: "The dsh home surface",
 };
 
-export default function HomePage() {
+export default async function HomePage() {
+  // The preset roster is home data for the composer chip (story AC 6);
+  // an unavailable bridge yields [], which hides the picker (task #121).
+  const presets = await fetchAgentPresets();
   return (
     <section className="flex flex-1 flex-col items-center justify-center gap-6 p-6">
       {/* The slogan never breaks mid-phrase: it steps down a size on small
@@ -21,7 +25,7 @@ export default function HomePage() {
         <h1 className="text-xl font-medium whitespace-nowrap sm:text-2xl">Into the Unknown</h1>
         <Badge variant="secondary">Preview</Badge>
       </div>
-      <HomeComposerIsland />
+      <HomeComposerIsland presets={presets} />
     </section>
   );
 }
