@@ -31,7 +31,8 @@ function Row({
   selected: boolean;
   onSelect: () => void;
   primary: string;
-  secondary?: string;
+  /** One small line, or several - each item gets its own line (no "·" joins). */
+  secondary?: string | string[];
   leading?: "check" | "back" | "chevron" | undefined;
   chevron?: boolean;
 }) {
@@ -52,7 +53,13 @@ function Row({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block break-all">{primary}</span>
-        {secondary !== undefined && <span className={SECONDARY}>{secondary}</span>}
+        {Array.isArray(secondary)
+          ? secondary.map((line) => (
+              <span key={line} className={SECONDARY}>
+                {line}
+              </span>
+            ))
+          : secondary !== undefined && <span className={SECONDARY}>{secondary}</span>}
       </span>
       {chevron === true && (
         <RiArrowRightSLine className="size-3.5 shrink-0 text-muted-foreground" />
@@ -67,15 +74,15 @@ function Row({
  * `llm.models` catalog fetched server-side, grouped by provider.
  *
  * The default entry leads with "Default" on the first line and the
- * concrete target - provider · model · thinking effort - in the smaller
- * second line. The effort resolves through the truth the host itself
- * applies: the configured agent-default-model value first, then the
- * adapter's declared default, then the model alone.
+ * concrete target on the smaller lines below - provider on one line,
+ * model · thinking effort on the next (a "·"-joined single line read as
+ * one unbroken phrase at phone widths). The effort resolves through the
+ * truth the host itself applies: the configured agent-default-model
+ * value first, then the adapter's declared default, then the model alone.
  *
- * The collapsed chip is two-tier for the same reason (review: "put things
- * in 2 lines if one is not enough"): provider on the small top line,
- * model · effort as the primary - a joined single line wrapped mid-phrase
- * at phone widths.
+ * The collapsed chip renders MINIMAL text: model and effort, nothing
+ * else - the provider is context the picker shows, not a label the
+ * action row needs.
  *
  * Effort-bearing models DRILL: tapping swaps the popover content to that
  * model's effort list (adapter-default entry first) with a back row -
@@ -101,7 +108,8 @@ export function ComposerModelChip({
   // The drilled model (provider+id), or null on the list view.
   const [drill, setDrill] = useState<{ provider: string; model: string } | null>(null);
 
-  // The default entry's concrete target: provider · name · effort.
+  // The default entry's concrete target: provider on one small line,
+  // model · effort on the next - two lines, not a joined single one.
   const defaultGroup =
     hostDefault === null ? undefined : groups.find((g) => g.id === hostDefault.provider);
   const defaultModel = defaultGroup?.models.find((m) => m.id === hostDefault?.model);
@@ -115,29 +123,36 @@ export function ComposerModelChip({
     hostDefault === null
       ? undefined
       : defaultModel === undefined
-        ? `${hostDefault.provider}/${hostDefault.model}`
-        : [defaultProviderName, defaultModel.name, defaultEffortName]
-            .filter((part): part is string => part !== undefined)
-            .join(" · ");
+        ? [`${hostDefault.provider}/${hostDefault.model}`]
+        : [
+            defaultProviderName ?? hostDefault.provider,
+            defaultEffortName === undefined
+              ? defaultModel.name
+              : `${defaultModel.name} · ${defaultEffortName}`,
+          ];
 
-  // The chip's two-tier label.
+  // The chip's minimal label: model and effort only - no provider line.
   const selectedGroup = value === null ? undefined : groups.find((g) => g.id === value.provider);
   const selectedModel = selectedGroup?.models.find((m) => m.id === value?.model);
   const selectedEffortName =
     value?.reasoningEffort === undefined
       ? undefined
       : selectedModel?.reasoning?.efforts.find((e) => e.id === value.reasoningEffort)?.name;
-  const providerLine =
-    value === null ? defaultProviderName : (selectedGroup?.name ?? value?.provider);
-  const mainLine =
+  const chipTarget =
     value === null
-      ? (defaultModel?.name ??
-        (hostDefault === null ? "Default model" : `${hostDefault.provider}/${hostDefault.model}`))
-      : selectedModel === undefined
-        ? "Default model"
-        : selectedEffortName === undefined
-          ? selectedModel.name
-          : `${selectedModel.name} · ${selectedEffortName}`;
+      ? {
+          model:
+            defaultModel?.name ??
+            (hostDefault === null ? undefined : `${hostDefault.provider}/${hostDefault.model}`),
+          effort: defaultEffortName,
+        }
+      : { model: selectedModel?.name, effort: selectedEffortName };
+  const label =
+    chipTarget.model === undefined
+      ? "Default model"
+      : chipTarget.effort === undefined
+        ? chipTarget.model
+        : `${chipTarget.model} · ${chipTarget.effort}`;
 
   const pick = (next: StartSessionModel | null) => {
     onChange(next);
@@ -161,14 +176,7 @@ export function ComposerModelChip({
         className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground aria-expanded:bg-accent aria-expanded:text-accent-foreground"
       >
         <RiSparklingLine className="size-3.5 shrink-0" />
-        <span className="flex min-w-0 flex-col items-start leading-tight">
-          {providerLine !== undefined && (
-            <span className="max-w-full break-words text-[11px] text-muted-foreground">
-              {providerLine}
-            </span>
-          )}
-          <span className="max-w-full break-words text-left">{mainLine}</span>
-        </span>
+        <span className="max-w-full break-words">{label}</span>
         <RiArrowRightSLine className="size-3.5 shrink-0 -rotate-90" />
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="max-h-72 w-60 overflow-y-auto sm:w-64">
