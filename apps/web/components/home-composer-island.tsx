@@ -2,22 +2,29 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
-import type { AgentPresetEntry } from "@deepseek-ai/dsh-host-apiproxy/api";
+import type { AgentPresetEntry, ModelProviderGroup } from "@deepseek-ai/dsh-host-apiproxy/api";
 
 import { ComposerCwdChip } from "@/components/composer-cwd-chip";
+import { ComposerModelChip } from "@/components/composer-model-chip";
 import { ComposerPresetChip } from "@/components/composer-preset-chip";
 import { type ComposerEntry, SessionComposer } from "@/components/session-composer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { searchSessionReferences } from "@/lib/session-references";
 import { SLASH_MENU_ENTRIES } from "@/lib/slash-commands";
-import { startSession } from "@/lib/start-session";
+import { startSession, type StartSessionModel } from "@/lib/start-session";
 
 // The composer is a client boundary (ADR-0001 island) that server-renders its
 // static surface - shell, placeholder, send button - and hydrates into the
 // full editor. Lexical owns the editable DOM imperatively after hydration, so
 // there is no server/client markup to reconcile inside it; the typeahead
 // portals render client-side only (their anchors do not exist on the server).
-export function HomeComposerIsland({ presets }: { presets: AgentPresetEntry[] }) {
+export function HomeComposerIsland({
+  presets,
+  models,
+}: {
+  presets: AgentPresetEntry[];
+  models: ModelProviderGroup[];
+}) {
   const router = useRouter();
   // The inline destructive Alert's text (story AC 4); null renders nothing.
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +32,8 @@ export function HomeComposerIsland({ presets }: { presets: AgentPresetEntry[] })
   const [presetId, setPresetId] = useState<string | null>(null);
   // The cwd selection (story AC 7); null means the host default.
   const [cwd, setCwd] = useState<string | null>(null);
+  // The model selection (story AC 10); null means the deployment default.
+  const [model, setModel] = useState<StartSessionModel | null>(null);
   // The `@` source (story AC 9): session references via session.search.
   // A failed search yields no options (never an empty-Enter trap: with an
   // empty list the menu simply does not open).
@@ -54,6 +63,9 @@ export function HomeComposerIsland({ presets }: { presets: AgentPresetEntry[] })
               <ComposerPresetChip presets={presets} value={presetId} onChange={setPresetId} />
             )}
             <ComposerCwdChip value={cwd} onChange={setCwd} />
+            {models.length > 0 && (
+              <ComposerModelChip groups={models} value={model} onChange={setModel} />
+            )}
           </div>
         }
         onSubmit={async (text) => {
@@ -63,6 +75,7 @@ export function HomeComposerIsland({ presets }: { presets: AgentPresetEntry[] })
             text,
             ...(presetId !== null && { agentPreset: presetId }),
             ...(cwd !== null && { cwd }),
+            ...(model !== null && { model }),
             // The prompt contract: browser callers attach their IANA zone;
             // the host validates and records it.
             ...(timeZone !== "" && { clientTimeZone: timeZone }),
