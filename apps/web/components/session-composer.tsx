@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
   type RefObject,
 } from "react";
 import ReactDOM from "react-dom";
@@ -81,11 +80,6 @@ export type SessionComposerProps = {
    * empty static list.
    */
   referenceSearch?: (query: string) => Promise<ComposerEntry[]>;
-  /**
-   * Surface controls (the story's picker chips) rendered in the footer's
-   * left slot; with chips present the trigger hint drops below the card.
-   */
-  chips?: ReactNode;
   /**
    * Whether the surface accepts interaction at all (default true). Home
    * requires a chosen working folder first: while false the editor stays
@@ -505,7 +499,6 @@ function TypeaheadMenus({
 // Inner component so the submit callback can read the editor context while
 // SessionComposer itself stays the context provider.
 function ComposerInner({
-  chips,
   commands,
   hasText,
   isPending,
@@ -519,7 +512,6 @@ function ComposerInner({
   onLockedActivate,
   setIsPending,
 }: {
-  chips: ReactNode;
   commands: ComposerEntry[];
   hasText: boolean;
   isPending: boolean;
@@ -588,7 +580,7 @@ function ComposerInner({
           />
         </div>
         <div className="flex items-center justify-between gap-2 border-t border-input px-2.5 py-1.5">
-          {chips ?? <p className="text-xs text-muted-foreground">{hint}</p>}
+          <p className="min-w-0 flex-1 text-xs text-muted-foreground">{hint}</p>
           <SendButton
             hasText={hasText}
             isPending={isPending}
@@ -597,8 +589,6 @@ function ComposerInner({
           />
         </div>
       </div>
-      {/* With chips in the footer, the trigger hint moves below the card. */}
-      {chips !== undefined && <p className="text-xs text-muted-foreground">{hint}</p>}
       <EnterToSendPlugin menuOpenRef={menuOpenRef} pendingRef={pendingRef} submit={submit} />
       <TypeaheadMenus
         menuOpenRef={menuOpenRef}
@@ -616,7 +606,6 @@ export function SessionComposer({
   references,
   placeholder = DEFAULT_PLACEHOLDER,
   referenceSearch,
-  chips,
   enabled = true,
   onLockedActivate,
 }: SessionComposerProps) {
@@ -640,7 +629,6 @@ export function SessionComposer({
   return (
     <LexicalComposer initialConfig={initialConfig}>
       <ComposerInner
-        chips={chips}
         commands={commands}
         hasText={hasText}
         isPending={isPending}

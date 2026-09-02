@@ -58,6 +58,28 @@ export function HomeComposerIsland({
   }, []);
   return (
     <div className="flex w-full flex-col gap-2">
+      {/* The actions live OUTSIDE the card, on top (dsh web's composer
+          layout), and wrap onto more lines when they run out of width -
+          mobile first: a phone gets one row per chip if it must. */}
+      <div className="flex flex-wrap items-center gap-1">
+        {presets.length > 0 && (
+          <ComposerPresetChip presets={presets} value={presetId} onChange={setPresetId} />
+        )}
+        <ComposerCwdChip
+          value={cwd}
+          onChange={setCwd}
+          open={folderOpen}
+          onOpenChange={setFolderOpen}
+        />
+        {models.length > 0 && (
+          <ComposerModelChip
+            groups={models}
+            hostDefault={hostDefault}
+            value={model}
+            onChange={setModel}
+          />
+        )}
+      </div>
       <SessionComposer
         commands={SLASH_MENU_ENTRIES}
         references={[]}
@@ -65,39 +87,29 @@ export function HomeComposerIsland({
         placeholder="Describe what you want to build"
         enabled={cwd !== null}
         onLockedActivate={() => setFolderOpen(true)}
-        chips={
-          <div className="flex min-w-0 flex-wrap items-center gap-1">
-            {presets.length > 0 && (
-              <ComposerPresetChip presets={presets} value={presetId} onChange={setPresetId} />
-            )}
-            <ComposerCwdChip
-              value={cwd}
-              onChange={setCwd}
-              open={folderOpen}
-              onOpenChange={setFolderOpen}
-            />
-            {models.length > 0 && (
-              <ComposerModelChip
-                groups={models}
-                hostDefault={hostDefault}
-                value={model}
-                onChange={setModel}
-              />
-            )}
-          </div>
-        }
         onSubmit={async (text) => {
           setError(null);
           const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-          const result = await startSession({
-            text,
-            ...(presetId !== null && { agentPreset: presetId }),
-            ...(cwd !== null && { cwd }),
-            ...(model !== null && { model }),
-            // The prompt contract: browser callers attach their IANA zone;
-            // the host validates and records it.
-            ...(timeZone !== "" && { clientTimeZone: timeZone }),
-          });
+          let result;
+          try {
+            result = await startSession({
+              text,
+              ...(presetId !== null && { agentPreset: presetId }),
+              ...(cwd !== null && { cwd }),
+              ...(model !== null && { model }),
+              // The prompt contract: browser callers attach their IANA zone;
+              // the host validates and records it.
+              ...(timeZone !== "" && { clientTimeZone: timeZone }),
+            });
+          } catch (cause) {
+            // The action call itself failed (transport/HMR staleness): the
+            // result fold cannot report it, so surface it here - a send
+            // that vanishes without a word is how "retry" becomes a
+            // question. Rethrow to keep the draft (AC 4).
+            const message = cause instanceof Error ? cause.message : String(cause);
+            setError(message);
+            throw cause;
+          }
           if (!result.ok) {
             setError(result.error);
             // Reject so the composer preserves the draft for retry (AC 4);
@@ -111,7 +123,7 @@ export function HomeComposerIsland({
         }}
       />
       {error !== null && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" data-testid="send-error">
           <AlertTitle>Could not start the session</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
