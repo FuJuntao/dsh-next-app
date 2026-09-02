@@ -57,26 +57,54 @@ export async function fetchModelCatalog(): Promise<ModelProviderGroup[]> {
   }
 }
 
+/** The default model target: provider, model, and configured effort. */
+export type HostModelDefault = {
+  provider: string;
+  model: string;
+  /** The effort the deployment configured, when it named one. */
+  reasoningEffort?: string;
+};
+
 /**
  * The deployment's default model target for the picker's default entry
- * (task #125 follow-up): host.describe answers the provider/model applied
- * when a session names none. null when the bridge is down or the host
- * configures no explicit default - the UI falls back to generic wording.
+ * (task #125 follow-ups). `host.describe` answers the provider/model a
+ * session with no explicit selection gets; the thinking effort lives one
+ * layer up: the `agent-default-model` settings namespace carries the
+ * configured value (settings.describe returns the redacted RESOLVED value,
+ * and no secret field lives in that namespace). reasoningEffort stays
+ * absent when neither source names one - the UI then shows the model
+ * alone, which is the honest answer (the adapter defers to provider
+ * behavior). null when the bridge is down or the host has no default.
  */
-export async function fetchHostModelDefault(): Promise<{ provider: string; model: string } | null> {
+export async function fetchHostModelDefault(): Promise<HostModelDefault | null> {
   try {
-    const response = await getBridgeClient().host.describe({});
-    if (!response.result.ok) {
+    const [described, settings] = await Promise.all([
+      getBridgeClient().host.describe({}),
+      getBridgeClient().settings.describe({}),
+    ]);
+    if (!described.result.ok) {
       console.error(
-        `[home-composer-data] host.describe failed: ${response.result.error.code} ${response.result.error.message}`,
+        `[home-composer-data] host.describe failed: ${described.result.error.code} ${described.result.error.message}`,
       );
       return null;
     }
-    const { provider, model } = response.result.value;
+    const { provider, model } = described.result.value;
     if (provider === undefined || model === undefined) {
       return null;
     }
-    return { provider, model };
+    const target: HostModelDefault = { provider, model };
+    if (settings.result.ok) {
+      const ns = settings.result.value.namespaces.find((row) => row.ns === "agent-default-model");
+      const value = ns?.value as { reasoningEffort?: unknown } | undefined;
+      if (typeof value?.reasoningEffort === "string" && value.reasoningEffort !== "") {
+        target.reasoningEffort = value.reasoningEffort;
+      }
+    } else {
+      console.error(
+        `[home-composer-data] settings.describe failed: ${settings.result.error.code} ${settings.result.error.message}`,
+      );
+    }
+    return target;
   } catch (error) {
     console.error("[home-composer-data] host.describe failed:", error);
     return null;

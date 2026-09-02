@@ -93,12 +93,33 @@ function landedSessionId(page: Page): string {
   return new URL(page.url()).pathname.split("/").pop() as string;
 }
 
-/** The composer surface shared by the send specs (home starts LOCKED:
- * no folder chosen, so the editor is non-editable - the lock is asserted
- * where a spec cares, and pickSubfolder is what lifts it). */
+/** The composer surface shared by the send specs (home starts LOCKED: no
+ * folder chosen, so the editor is non-editable - hydration is proven by
+ * the first dialog that opens, not by an editable attribute). */
 async function gotoHome(page: Page) {
   await page.goto(profile.baseURL + "/");
   return page.getByRole("textbox", { name: "Describe what you want to build" });
+}
+
+/**
+ * Open the folder dialog, re-driving the trigger until it answers - the
+ * trigger only works once hydrated, and a locked composer routes the
+ * editor-area tap to it as well.
+ */
+async function openFolderDialog(page: Page, via: "chip" | "editor" = "chip") {
+  const trigger =
+    via === "editor"
+      ? page.getByRole("button", { name: "Choose a working folder to start" })
+      : page.getByRole("button", { name: "Working folder", exact: true });
+  await expect
+    .poll(
+      async () => {
+        await trigger.click();
+        return page.getByRole("dialog").isVisible();
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
 }
 
 /**
@@ -108,21 +129,11 @@ async function gotoHome(page: Page) {
  * rail has no ancestor escape hatch.
  */
 async function pickSubfolder(page: Page): Promise<string> {
-  // The chip only reacts once hydrated (it opens a client dialog) -
-  // re-drive the click until the dialog answers, then run linearly.
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole("button", { name: "Working folder" }).click();
-        return page.getByRole("dialog").isVisible();
-      },
-      { timeout: 15_000 },
-    )
-    .toBe(true);
+  await openFolderDialog(page);
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText(hostRoot, { exact: true }).first()).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Choose" })).toHaveCount(0);
-  await expect(dialog.getByText("Open a subfolder to choose it")).toBeVisible();
+  // The default folder itself is a choice - "Choose default" at the root.
+  await expect(dialog.getByRole("button", { name: "Choose default" })).toBeVisible();
   const base = hostRoot.split("/").pop() as string;
   // No escape hatch: no filesystem-root crumb, and the rail's first entry
   // is the default folder itself (the current location renders as text).
@@ -132,7 +143,9 @@ async function pickSubfolder(page: Page): Promise<string> {
   const chosen = hostRoot + "/docs";
   await expect(dialog.getByText(chosen, { exact: true }).first()).toBeVisible();
   await dialog.getByRole("button", { name: "Choose" }).click();
-  await expect(page.getByRole("button", { name: "Working folder" })).toContainText("docs");
+  await expect(page.getByRole("button", { name: "Working folder", exact: true })).toContainText(
+    "docs",
+  );
   // Chosen: the home lock lifts - the editor becomes editable (and focused).
   await expect(
     page.getByRole("textbox", { name: "Describe what you want to build" }),
@@ -144,11 +157,13 @@ test("sending is gated on a chosen folder, then starts a real session", async ({
   const composer = await gotoHome(page);
   // The empty-roster rule (task #121): no presets offered -> no picker.
   await expect(page.getByRole("button", { name: "Agent preset" })).toHaveCount(0);
-  // The gate (review): without a chosen folder the input itself is locked
-  // - non-editable, send disabled, visible reason.
+  // The gate (review): without a chosen folder the input is locked -
+  // non-editable, send disabled - and tapping it opens the folder dialog.
   await expect(composer).toHaveAttribute("contenteditable", "false");
   await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
-  await expect(page.getByText("Choose a working folder")).toBeVisible();
+  await openFolderDialog(page, "editor");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   // Chosen: the lock lifts, typing lands, the round-trip runs.
   await pickSubfolder(page);
   await composer.pressSequentially("home flow send");
@@ -175,6 +190,25 @@ test("the chosen subfolder reaches session.create", async ({ page }) => {
   expect(row?.cwd).toBe(chosen);
 });
 
+test("the folder dialog fits a phone viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await gotoHome(page);
+  const fits = () =>
+    page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    );
+  await expect(fits).toPass();
+  // Tap the locked editor: the dialog opens at phone width...
+  await openFolderDialog(page, "editor");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(fits).toPass();
+  // ...and a deep path (long single token, must truncate not overflow).
+  await dialog.getByRole("button", { name: "apps", exact: true }).click();
+  await expect(dialog.getByText(/\/apps$/, { exact: false }).first()).toBeVisible();
+  await expect(fits).toPass();
+});
+
 test("the model picker selection is applied before the first prompt", async ({ page }) => {
   // Drive the UI from the host's own catalog, not a fixture (AC 10).
   const catalog = (await envelopeCall("llm.models", {})) as {
@@ -198,23 +232,16 @@ test("the model picker selection is applied before the first prompt", async ({ p
   const composer = await gotoHome(page);
   await pickSubfolder(page);
   await page.getByRole("button", { name: "Model" }).click();
+  // The popover's first row is the Default entry (concrete default +
+  // effort on its smaller second line).
+  await expect(page.getByRole("button", { name: /^Default/ }).first()).toBeVisible();
   if (effort === undefined) {
-    // The default entry can now carry the same model name (it names the
-    // real default), so exclude it by its "Deployment default" marker.
-    await page
-      .getByRole("menuitemradio", { name: new RegExp("^" + model.name) })
-      .filter({ hasNotText: "Deployment default" })
-      .first()
-      .click();
+    await page.getByRole("button", { name: model.name, exact: true }).click();
   } else {
-    await page
-      .getByRole("menuitem", { name: new RegExp("^" + model.name) })
-      .first()
-      .click();
-    await page
-      .getByRole("menuitemradio", { name: new RegExp("^" + effort.name) })
-      .first()
-      .click();
+    // Effort-bearing models drill: tapping swaps in the effort list.
+    await page.getByRole("button", { name: model.name, exact: true }).click();
+    await expect(page.getByRole("button", { name: "Adapter default" })).toBeVisible();
+    await page.getByRole("button", { name: effort.name, exact: true }).click();
   }
   await expect(page.getByRole("button", { name: "Model" })).toContainText(model.name);
   await composer.pressSequentially("model picker send");

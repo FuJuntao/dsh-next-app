@@ -25,16 +25,19 @@ export function HomeComposerIsland({
 }: {
   presets: AgentPresetEntry[];
   models: ModelProviderGroup[];
-  /** The deployment default model target (host.describe); null when unknown. */
-  hostDefault: { provider: string; model: string } | null;
+  /** The deployment default model target (host.describe + settings); null when unknown. */
+  hostDefault: { provider: string; model: string; reasoningEffort?: string } | null;
 }) {
   const router = useRouter();
   // The inline destructive Alert's text (story AC 4); null renders nothing.
   const [error, setError] = useState<string | null>(null);
   // The agentPreset selection (story AC 6); null means the deployment default.
   const [presetId, setPresetId] = useState<string | null>(null);
-  // The cwd selection (story AC 7); null means the host default.
+  // The cwd selection (story AC 7); null means no choice yet - the composer
+  // stays locked until one is made (the default itself is a choice).
   const [cwd, setCwd] = useState<string | null>(null);
+  // The folder dialog is controlled: tapping the locked editor opens it.
+  const [folderOpen, setFolderOpen] = useState(false);
   // The model selection (story AC 10); null means the deployment default.
   const [model, setModel] = useState<StartSessionModel | null>(null);
   // The `@` source (story AC 9): session references via session.search.
@@ -61,12 +64,18 @@ export function HomeComposerIsland({
         referenceSearch={queryReferences}
         placeholder="Describe what you want to build"
         enabled={cwd !== null}
+        onLockedActivate={() => setFolderOpen(true)}
         chips={
           <div className="flex min-w-0 flex-wrap items-center gap-1">
             {presets.length > 0 && (
               <ComposerPresetChip presets={presets} value={presetId} onChange={setPresetId} />
             )}
-            <ComposerCwdChip value={cwd} onChange={setCwd} />
+            <ComposerCwdChip
+              value={cwd}
+              onChange={setCwd}
+              open={folderOpen}
+              onOpenChange={setFolderOpen}
+            />
             {models.length > 0 && (
               <ComposerModelChip
                 groups={models}
@@ -101,13 +110,6 @@ export function HomeComposerIsland({
           router.refresh();
         }}
       />
-      {cwd === null && (
-        // The send gate's visible reason: the folder is the one choice the
-        // home surface requires before a session may start.
-        <p className="text-xs text-muted-foreground">
-          Choose a working folder (folder chip below the editor) to start the session.
-        </p>
-      )}
       {error !== null && (
         <Alert variant="destructive">
           <AlertTitle>Could not start the session</AlertTitle>

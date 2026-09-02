@@ -33,11 +33,11 @@ function folderName(path: string): string {
  * trims the crumb chain to the subtree, so the rail's first crumb IS the
  * default folder and the UI has no escape hatch to render (a raw path
  * outside the subtree is refused in the action regardless). At the
- * default folder itself the Choose button is absent: naming no folder
- * already means it - a choice is a subfolder. Hidden entries (host flags
- * them by platform convention; the client owns the display choice) stay
- * out of the list. A browse failure renders inline and keeps the last
- * listing on screen.
+ * default folder itself is chosen with a "Choose default" button: the
+ * choice is explicit even when it matches the host default. Hidden
+ * entries (host flags them by platform convention; the client owns the
+ * display choice) stay out of the list. A browse failure renders inline
+ * and keeps the last listing on screen.
  */
 function DirectoryBrowser({ onPick }: { onPick: (path: string) => void }) {
   const [listing, setListing] = useState<DirectoryListing | null>(null);
@@ -70,7 +70,9 @@ function DirectoryBrowser({ onPick }: { onPick: (path: string) => void }) {
     <div className="flex flex-col gap-2">
       {error !== null && (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          {/* break-all: the error names paths - one unbreakable token
+              would overflow a phone-width dialog. */}
+          <AlertDescription className="break-all">{error}</AlertDescription>
         </Alert>
       )}
       {listing === null && error === null ? (
@@ -126,22 +128,16 @@ function DirectoryBrowser({ onPick }: { onPick: (path: string) => void }) {
                 </li>
               ))}
             </ul>
-            <div className="flex items-center justify-between gap-2">
-              <p className="truncate text-xs text-muted-foreground" title={listing.path}>
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              {/* min-w-0 lets the path truncate instead of pushing the row -
+                  paths are one long token that no wrap would break. */}
+              <p className="min-w-0 truncate text-xs text-muted-foreground" title={listing.path}>
                 {listing.path}
                 {listing.truncated ? " (partial list)" : ""}
               </p>
-              {atRoot ? (
-                // The default folder itself is not a choice - naming no
-                // folder already means it. A choice is a subfolder.
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  Open a subfolder to choose it
-                </span>
-              ) : (
-                <Button type="button" size="xs" onClick={() => onPick(listing.path)}>
-                  Choose
-                </Button>
-              )}
+              <Button type="button" size="xs" onClick={() => onPick(listing.path)}>
+                {atRoot ? "Choose default" : "Choose"}
+              </Button>
             </div>
           </>
         )
@@ -158,11 +154,16 @@ function DirectoryBrowser({ onPick }: { onPick: (path: string) => void }) {
 export function ComposerCwdChip({
   value,
   onChange,
+  open,
+  onOpenChange,
 }: {
   value: string | null;
   onChange: (value: string | null) => void;
+  /** Controlled so the locked composer's editor tap can open it too. */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const setOpen = onOpenChange;
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
@@ -177,8 +178,8 @@ export function ComposerCwdChip({
         <DialogHeader>
           <DialogTitle>Choose a folder</DialogTitle>
           <DialogDescription>
-            The new session&apos;s working directory - a subfolder of the host&apos;s default
-            working folder.
+            The new session&apos;s working directory - the host&apos;s default working folder or a
+            folder inside it.
           </DialogDescription>
         </DialogHeader>
         <DirectoryBrowser

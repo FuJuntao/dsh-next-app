@@ -90,10 +90,16 @@ export type SessionComposerProps = {
    * Whether the surface accepts interaction at all (default true). Home
    * requires a chosen working folder first: while false the editor stays
    * non-editable (the SSR gate is never lifted), the send control is
-   * disabled, and Enter is swallowed. The surface states the reason next
-   * to the card; the session page never passes false.
+   * disabled, and Enter is swallowed. The session page never passes false.
    */
   enabled?: boolean;
+  /**
+   * Invoked when a LOCKED composer's editor area is clicked or activated
+   * by keyboard. Home points this at the folder dialog, so tapping the
+   * input while no working folder is chosen goes straight to the choice
+   * the lock is asking for. Only ever fires while `enabled` is false.
+   */
+  onLockedActivate?: () => void;
 };
 
 class ComposerOption extends MenuOption {
@@ -510,6 +516,7 @@ function ComposerInner({
   references,
   referenceSearch,
   enabled,
+  onLockedActivate,
   setIsPending,
 }: {
   chips: ReactNode;
@@ -523,6 +530,7 @@ function ComposerInner({
   references: ComposerEntry[];
   referenceSearch: ((query: string) => Promise<ComposerEntry[]>) | undefined;
   enabled: boolean;
+  onLockedActivate: (() => void) | undefined;
   setIsPending: (pending: boolean) => void;
 }) {
   // Sync twin of the enabled prop for the submit paths (same reason
@@ -545,21 +553,40 @@ function ComposerInner({
 
   return (
     <>
-      <div className="relative rounded-none border border-input bg-transparent transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50 dark:bg-input/30">
-        <PlainTextPlugin
-          contentEditable={
-            <ContentEditable
-              aria-label={placeholder}
-              className="block max-h-48 min-h-12 overflow-y-auto px-2.5 py-2 text-xs outline-none"
+      <div className="rounded-none border border-input bg-transparent transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50 dark:bg-input/30">
+        <div className="relative">
+          {!enabled && (
+            // The locked affordance: the editor area becomes the trigger
+            // for the surface's unlock action (home: the folder dialog).
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label="Choose a working folder to start"
+              onClick={onLockedActivate}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onLockedActivate?.();
+                }
+              }}
+              className="absolute inset-0 z-10 cursor-text"
             />
-          }
-          placeholder={
-            <div className="pointer-events-none absolute inset-x-0 top-0 px-2.5 py-2 text-xs text-muted-foreground">
-              {placeholder}
-            </div>
-          }
-          ErrorBoundary={LexicalErrorBoundary}
-        />
+          )}
+          <PlainTextPlugin
+            contentEditable={
+              <ContentEditable
+                aria-label={placeholder}
+                className="block max-h-48 min-h-12 overflow-y-auto px-2.5 py-2 text-xs outline-none"
+              />
+            }
+            placeholder={
+              <div className="pointer-events-none absolute inset-x-0 top-0 px-2.5 py-2 text-xs text-muted-foreground">
+                {placeholder}
+              </div>
+            }
+            ErrorBoundary={LexicalErrorBoundary}
+          />
+        </div>
         <div className="flex items-center justify-between gap-2 border-t border-input px-2.5 py-1.5">
           {chips ?? <p className="text-xs text-muted-foreground">{hint}</p>}
           <SendButton
@@ -591,6 +618,7 @@ export function SessionComposer({
   referenceSearch,
   chips,
   enabled = true,
+  onLockedActivate,
 }: SessionComposerProps) {
   const [hasText, setHasText] = useState(false);
   const [isPending, setIsPending] = useState(false);
@@ -623,6 +651,7 @@ export function SessionComposer({
         references={references}
         referenceSearch={referenceSearch}
         enabled={enabled}
+        onLockedActivate={onLockedActivate}
         setIsPending={setIsPending}
       />
       <OnChangePlugin
