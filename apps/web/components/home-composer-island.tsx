@@ -60,6 +60,7 @@ export function HomeComposerIsland({
         references={[]}
         referenceSearch={queryReferences}
         placeholder="Describe what you want to build"
+        enabled={cwd !== null}
         chips={
           <div className="flex min-w-0 flex-wrap items-center gap-1">
             {presets.length > 0 && (
@@ -100,6 +101,13 @@ export function HomeComposerIsland({
           router.refresh();
         }}
       />
+      {cwd === null && (
+        // The send gate's visible reason: the folder is the one choice the
+        // home surface requires before a session may start.
+        <p className="text-xs text-muted-foreground">
+          Choose a working folder (folder chip below the editor) to start the session.
+        </p>
+      )}
       {error !== null && (
         <Alert variant="destructive">
           <AlertTitle>Could not start the session</AlertTitle>

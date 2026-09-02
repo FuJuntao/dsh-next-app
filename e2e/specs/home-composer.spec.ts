@@ -24,18 +24,21 @@ test.use({ viewport: DESKTOP });
  * into its own DSH_HOME) and cross-checked over the bridge socket where
  * the assertion is about what reached the host, not what the DOM shows.
  *
- * Presets: this scratch deployment offers no preset roster (no preset
- * roots are configured), so the picker is expected to stay hidden (task
- * #121's empty-roster rule); the preset field's reach into session.create
- * is pinned by start-session's unit tests instead.
+ * The review rules these specs pin: a send requires a chosen working
+ * folder (typing works, sending is gated), and the folder picker offers
+ * only SUBFOLDERS of the host's default working folder - the dialog's
+ * browse opens at the default itself with no choice offered there, and
+ * the crumb rail carries no escape above the root (the server-side
+ * enforcement behind this is unit-tested in host-browse.test.ts).
+ *
+ * Presets: this scratch deployment offers no preset roster, so the picker
+ * stays hidden (task #121's empty-roster rule); the preset field's reach
+ * into session.create is pinned by start-session's unit tests instead.
  */
 let profile: BootedProfile;
 let socket: string;
-
-test.beforeAll(async ({ homeProfile }) => {
-  profile = homeProfile;
-  socket = join(profile.profileDir, "run", "next-app-" + profile.port + ".sock");
-});
+/** The instance's host default folder (host.describe.cwd) - browse root. */
+let hostRoot: string;
 
 /** One envelope call over the bridge; business errors are a hard failure. */
 async function envelopeCall(method: string, payload: unknown): Promise<unknown> {
@@ -60,26 +63,96 @@ async function envelopeCall(method: string, payload: unknown): Promise<unknown> 
   return frame.result.value;
 }
 
+/** One envelope call reported, business errors included. */
+async function envelopeOutcome(
+  method: string,
+  payload: unknown,
+): Promise<{ ok: true } | { ok: false; code: string }> {
+  const rpcId = "e2e-home-" + randomUUID();
+  const res = await httpPost(
+    socket,
+    "/api/" + method,
+    JSON.stringify({ type: "client-request", rpcId, method, payload }),
+  );
+  const frame = JSON.parse(res.body) as {
+    result: { ok: boolean; error?: { code: string } };
+  };
+  if (res.status === 200 && frame.result.ok) return { ok: true };
+  return { ok: false, code: frame.result.error?.code ?? "http-" + res.status };
+}
+
+test.beforeAll(async ({ homeProfile }) => {
+  profile = homeProfile;
+  socket = join(profile.profileDir, "run", "next-app-" + profile.port + ".sock");
+  const described = (await envelopeCall("host.describe", {})) as { cwd: string };
+  hostRoot = described.cwd;
+});
+
 /** The new session's id from the route the composer must have landed on. */
 function landedSessionId(page: Page): string {
   return new URL(page.url()).pathname.split("/").pop() as string;
 }
 
-/** The composer surface shared by the send specs. */
+/** The composer surface shared by the send specs (home starts LOCKED:
+ * no folder chosen, so the editor is non-editable - the lock is asserted
+ * where a spec cares, and pickSubfolder is what lifts it). */
 async function gotoHome(page: Page) {
   await page.goto(profile.baseURL + "/");
-  const composer = page.getByRole("textbox", { name: "Describe what you want to build" });
-  // The SSR gate: contenteditable flips true only after hydration.
-  await expect(composer).toBeEditable();
-  return composer;
+  return page.getByRole("textbox", { name: "Describe what you want to build" });
 }
 
-test("a home send starts a real session and lands in it", async ({ page }) => {
+/**
+ * Choose the "docs" SUBFOLDER through the dialog and return its absolute
+ * path, pinning the containment UI on the way: the browse opens AT the
+ * host default folder, the root itself offers no choice, and the crumb
+ * rail has no ancestor escape hatch.
+ */
+async function pickSubfolder(page: Page): Promise<string> {
+  // The chip only reacts once hydrated (it opens a client dialog) -
+  // re-drive the click until the dialog answers, then run linearly.
+  await expect
+    .poll(
+      async () => {
+        await page.getByRole("button", { name: "Working folder" }).click();
+        return page.getByRole("dialog").isVisible();
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText(hostRoot, { exact: true }).first()).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Choose" })).toHaveCount(0);
+  await expect(dialog.getByText("Open a subfolder to choose it")).toBeVisible();
+  const base = hostRoot.split("/").pop() as string;
+  // No escape hatch: no filesystem-root crumb, and the rail's first entry
+  // is the default folder itself (the current location renders as text).
+  await expect(dialog.getByRole("button", { name: "/", exact: true })).toHaveCount(0);
+  await expect(dialog.getByText(base + " (default)", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "docs", exact: true }).click();
+  const chosen = hostRoot + "/docs";
+  await expect(dialog.getByText(chosen, { exact: true }).first()).toBeVisible();
+  await dialog.getByRole("button", { name: "Choose" }).click();
+  await expect(page.getByRole("button", { name: "Working folder" })).toContainText("docs");
+  // Chosen: the home lock lifts - the editor becomes editable (and focused).
+  await expect(
+    page.getByRole("textbox", { name: "Describe what you want to build" }),
+  ).toBeEditable();
+  return chosen;
+}
+
+test("sending is gated on a chosen folder, then starts a real session", async ({ page }) => {
   const composer = await gotoHome(page);
-  // The empty-roster rule (task #121): this deployment offers no presets,
-  // so the picker must not render an empty menu.
+  // The empty-roster rule (task #121): no presets offered -> no picker.
   await expect(page.getByRole("button", { name: "Agent preset" })).toHaveCount(0);
+  // The gate (review): without a chosen folder the input itself is locked
+  // - non-editable, send disabled, visible reason.
+  await expect(composer).toHaveAttribute("contenteditable", "false");
+  await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
+  await expect(page.getByText("Choose a working folder")).toBeVisible();
+  // Chosen: the lock lifts, typing lands, the round-trip runs.
+  await pickSubfolder(page);
   await composer.pressSequentially("home flow send");
+  await expect(page.getByRole("button", { name: "Send message" })).toBeEnabled();
   await page.getByRole("button", { name: "Send message" }).click();
   // Story AC 2: navigation to the new session's route.
   await expect(page).toHaveURL(/\/sessions\/[^/]+$/);
@@ -88,21 +161,9 @@ test("a home send starts a real session and lands in it", async ({ page }) => {
   await expect(page.locator('[data-session-id="' + landedSessionId(page) + '"]')).toBeVisible();
 });
 
-test("the cwd picker browses to a folder and the choice reaches create", async ({ page }) => {
+test("the chosen subfolder reaches session.create", async ({ page }) => {
   const composer = await gotoHome(page);
-  await page.getByRole("button", { name: "Working folder" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-  // The browse lands rooted at the host account home (absent path default).
-  await expect(dialog.getByRole("button", { name: "Host home" })).toBeVisible();
-  // The breadcrumb rail reaches the filesystem root; /tmp lives there.
-  await dialog.getByRole("button", { name: "/", exact: true }).click();
-  await dialog.getByRole("button", { name: "tmp", exact: true }).click();
-  // Sync on the browse completing (the path line shows /tmp) - clicking
-  // Choose against a stale listing would pick the previous directory.
-  await expect(dialog.getByText("/tmp", { exact: true })).toBeVisible();
-  await dialog.getByRole("button", { name: "Choose" }).click();
-  await expect(page.getByRole("button", { name: "Working folder" })).toContainText("tmp");
+  const chosen = await pickSubfolder(page);
   await composer.pressSequentially("cwd picker send");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page).toHaveURL(/\/sessions\/[^/]+$/);
@@ -111,7 +172,7 @@ test("the cwd picker browses to a folder and the choice reaches create", async (
     items: { sessionId: string; cwd?: string }[];
   };
   const row = listed.items.find((item) => item.sessionId === landedSessionId(page));
-  expect(row?.cwd).toBe("/tmp");
+  expect(row?.cwd).toBe(chosen);
 });
 
 test("the model picker selection is applied before the first prompt", async ({ page }) => {
@@ -135,6 +196,7 @@ test("the model picker selection is applied before the first prompt", async ({ p
   // what the session must end up with.
   const effort = model.reasoning?.efforts?.find((e) => e.id !== "off");
   const composer = await gotoHome(page);
+  await pickSubfolder(page);
   await page.getByRole("button", { name: "Model" }).click();
   if (effort === undefined) {
     // The default entry can now carry the same model name (it names the
@@ -172,6 +234,7 @@ test("the model picker selection is applied before the first prompt", async ({ p
 
 test("a leading-/ first message executes host-side", async ({ page }) => {
   const composer = await gotoHome(page);
+  await pickSubfolder(page);
   await composer.pressSequentially("/goal");
   await page.getByRole("button", { name: "Send message" }).click();
   // The command runs at prompt admission (AC 8): ok lands on the new
@@ -211,24 +274,6 @@ test("every vendored / command is recognized by the host (drift guard)", async (
   }
 });
 
-/** One envelope call reported, business errors included. */
-async function envelopeOutcome(
-  method: string,
-  payload: unknown,
-): Promise<{ ok: true } | { ok: false; code: string }> {
-  const rpcId = "e2e-home-" + randomUUID();
-  const res = await httpPost(
-    socket,
-    "/api/" + method,
-    JSON.stringify({ type: "client-request", rpcId, method, payload }),
-  );
-  const frame = JSON.parse(res.body) as {
-    result: { ok: boolean; error?: { code: string } };
-  };
-  if (res.status === 200 && frame.result.ok) return { ok: true };
-  return { ok: false, code: frame.result.error?.code ?? "http-" + res.status };
-}
-
 test("the @ source offers seeded sessions and the mention reaches the host", async ({ page }) => {
   // Seed a searchable session: user-message content is what the FTS index
   // covers, and the first search builds it (warming the first-search
@@ -242,6 +287,7 @@ test("the @ source offers seeded sessions and the mention reaches the host", asy
     content: [{ type: "text", text: "recalibrate the zephyr widget sensors" }],
   });
   const composer = await gotoHome(page);
+  await pickSubfolder(page);
   await composer.pressSequentially("ask about @zephyr");
   // The menu offers the seeded session (AC 9); picking it replaces the
   // @query with the raw mention token (reference pills are a story
@@ -253,7 +299,7 @@ test("the @ source offers seeded sessions and the mention reaches the host", asy
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page).toHaveURL(/\/sessions\/[^/]+$/, { timeout: 30_000 });
   // The reference must have reached the host: the new session's log carries
-  // either the raw mention or its normalized rendering.
+  // either the raw mention or its normalized @label rendering.
   const newId = landedSessionId(page);
   const deadline = Date.now() + 30_000;
   let reached = false;

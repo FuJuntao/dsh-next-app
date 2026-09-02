@@ -86,6 +86,14 @@ export type SessionComposerProps = {
    * left slot; with chips present the trigger hint drops below the card.
    */
   chips?: ReactNode;
+  /**
+   * Whether the surface accepts interaction at all (default true). Home
+   * requires a chosen working folder first: while false the editor stays
+   * non-editable (the SSR gate is never lifted), the send control is
+   * disabled, and Enter is swallowed. The surface states the reason next
+   * to the card; the session page never passes false.
+   */
+  enabled?: boolean;
 };
 
 class ComposerOption extends MenuOption {
@@ -216,10 +224,13 @@ function renderMenu(
 function useComposerSubmit({
   onSubmit,
   pendingRef,
+  enabledRef,
   setIsPending,
 }: {
   onSubmit: (text: string) => Promise<unknown>;
   pendingRef: RefObject<boolean>;
+  /** Sync gate from the surface (e.g. "no working folder chosen yet"). */
+  enabledRef: RefObject<boolean>;
   setIsPending: (pending: boolean) => void;
 }) {
   const [editor] = useLexicalComposerContext();
@@ -233,6 +244,9 @@ function useComposerSubmit({
 
   return useCallback(() => {
     if (pendingRef.current) return;
+    // Surface refused the send (disabled state): swallow it on every path,
+    // button and Enter alike.
+    if (!enabledRef.current) return;
     let text = "";
     editor.getEditorState().read(() => {
       text = $getRoot().getTextContent().trim();
@@ -314,23 +328,28 @@ function EnterToSendPlugin({
 // The editor ships editable:false (the SSR attribute is contenteditable=false,
 // so the browser drops pre-hydration typing instead of feeding text that
 // hydration would discard); effects only run once hydrated, where this gate
-// flips editability on and takes the focus.
-function EditableGatePlugin() {
+// lifts the SSR lock when the surface allows interaction (default yes) and
+// takes the focus the moment it does. Home keeps the lock until a working
+// folder is chosen, so the first real click-to-type lands on an enabled
+// editor instead of dead text.
+function EditableGatePlugin({ enabled }: { enabled: boolean }) {
   const [editor] = useLexicalComposerContext();
   useEffect(() => {
-    editor.setEditable(true);
-    editor.focus();
-  }, [editor]);
+    editor.setEditable(enabled);
+    if (enabled) editor.focus();
+  }, [editor, enabled]);
   return null;
 }
 
 function SendButton({
   hasText,
   isPending,
+  sendEnabled,
   submit,
 }: {
   hasText: boolean;
   isPending: boolean;
+  sendEnabled: boolean;
   submit: () => void;
 }) {
   return (
@@ -339,7 +358,7 @@ function SendButton({
       variant="default"
       size="icon-sm"
       aria-label="Send message"
-      disabled={!hasText || isPending}
+      disabled={!hasText || isPending || !sendEnabled}
       onClick={submit}
     >
       {isPending ? <Spinner /> : <RiSendPlane2Fill />}
@@ -490,6 +509,7 @@ function ComposerInner({
   placeholder,
   references,
   referenceSearch,
+  enabled,
   setIsPending,
 }: {
   chips: ReactNode;
@@ -502,9 +522,16 @@ function ComposerInner({
   placeholder: string;
   references: ComposerEntry[];
   referenceSearch: ((query: string) => Promise<ComposerEntry[]>) | undefined;
+  enabled: boolean;
   setIsPending: (pending: boolean) => void;
 }) {
-  const submit = useComposerSubmit({ onSubmit, pendingRef, setIsPending });
+  // Sync twin of the enabled prop for the submit paths (same reason
+  // pendingRef exists: a click/Enter can arrive before the re-render).
+  const enabledRef = useRef(enabled);
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
+  const submit = useComposerSubmit({ onSubmit, pendingRef, enabledRef, setIsPending });
   // The hint advertises only the triggers this surface actually injected: an
   // empty source mounts no menu, so advertising it would be a lie.
   const hint = [
@@ -535,7 +562,12 @@ function ComposerInner({
         />
         <div className="flex items-center justify-between gap-2 border-t border-input px-2.5 py-1.5">
           {chips ?? <p className="text-xs text-muted-foreground">{hint}</p>}
-          <SendButton hasText={hasText} isPending={isPending} submit={submit} />
+          <SendButton
+            hasText={hasText}
+            isPending={isPending}
+            sendEnabled={enabled}
+            submit={submit}
+          />
         </div>
       </div>
       {/* With chips in the footer, the trigger hint moves below the card. */}
@@ -558,6 +590,7 @@ export function SessionComposer({
   placeholder = DEFAULT_PLACEHOLDER,
   referenceSearch,
   chips,
+  enabled = true,
 }: SessionComposerProps) {
   const [hasText, setHasText] = useState(false);
   const [isPending, setIsPending] = useState(false);
@@ -589,6 +622,7 @@ export function SessionComposer({
         placeholder={placeholder}
         references={references}
         referenceSearch={referenceSearch}
+        enabled={enabled}
         setIsPending={setIsPending}
       />
       <OnChangePlugin
@@ -599,7 +633,7 @@ export function SessionComposer({
         }}
       />
       <HistoryPlugin />
-      <EditableGatePlugin />
+      <EditableGatePlugin enabled={enabled} />
     </LexicalComposer>
   );
 }
