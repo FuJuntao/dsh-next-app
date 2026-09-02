@@ -13,8 +13,11 @@ import type { StartSessionModel } from "@/lib/start-session";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-/** The small type for secondary lines (effort hints, resolved defaults). */
-const SECONDARY = "block truncate text-[11px] leading-tight text-muted-foreground";
+/**
+ * Secondary lines: small, and WRAPPED (break-words) - on a phone the
+ * review asked for two honest lines over one ellipsized.
+ */
+const SECONDARY = "block break-words text-[11px] leading-tight text-muted-foreground";
 
 /** One selectable row of the popover list. */
 function Row({
@@ -48,7 +51,7 @@ function Row({
         {leading === "chevron" && <RiArrowRightSLine className="size-3.5 shrink-0" />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate">{primary}</span>
+        <span className="block break-all">{primary}</span>
         {secondary !== undefined && <span className={SECONDARY}>{secondary}</span>}
       </span>
       {chevron === true && (
@@ -61,16 +64,23 @@ function Row({
 /**
  * The model picker chip (story #117 task #125, review rounds): a POPOVER
  * (a picker, not a command menu) over the session-independent
- * `llm.models` catalog fetched server-side, grouped by provider. The
- * default entry leads with "Default" on the first line and the concrete
- * model + thinking effort it resolves to (host.describe cross-referenced
- * with the catalog) in the smaller secondary line.
+ * `llm.models` catalog fetched server-side, grouped by provider.
  *
- * Effort-bearing models DRILL: tapping one swaps the popover's content to
- * that model's effort list (adapter-default entry first) with a back row -
- * never an inline expansion, which on a phone's short screen pushed the
- * list past the popup's edges. The popover keeps one fixed, scrollable
- * size in both views. The committed selection rides `startSession` into
+ * The default entry leads with "Default" on the first line and the
+ * concrete target - provider · model · thinking effort - in the smaller
+ * second line. The effort resolves through the truth the host itself
+ * applies: the configured agent-default-model value first, then the
+ * adapter's declared default, then the model alone.
+ *
+ * The collapsed chip is two-tier for the same reason (review: "put things
+ * in 2 lines if one is not enough"): provider on the small top line,
+ * model · effort as the primary - a joined single line wrapped mid-phrase
+ * at phone widths.
+ *
+ * Effort-bearing models DRILL: tapping swaps the popover content to that
+ * model's effort list (adapter-default entry first) with a back row -
+ * never an inline expansion, which pushed past the popup's edges on a
+ * phone. The committed selection rides `startSession` into
  * `session.selectModel` (best-effort per story AC 4).
  */
 export function ComposerModelChip({
@@ -91,13 +101,12 @@ export function ComposerModelChip({
   // The drilled model (provider+id), or null on the list view.
   const [drill, setDrill] = useState<{ provider: string; model: string } | null>(null);
 
-  // The default entry's concrete target: name + effort. The effort source
-  // order is the truth the host itself applies: the configured
-  // agent-default-model value first, then the adapter's declared default;
-  // neither -> the model alone (provider-internal default, not a secret).
+  // The default entry's concrete target: provider · name · effort.
   const defaultGroup =
     hostDefault === null ? undefined : groups.find((g) => g.id === hostDefault.provider);
   const defaultModel = defaultGroup?.models.find((m) => m.id === hostDefault?.model);
+  const defaultProviderName =
+    hostDefault === null ? undefined : (defaultGroup?.name ?? hostDefault.provider);
   const defaultEffortId = hostDefault?.reasoningEffort ?? defaultModel?.reasoning?.defaultEffort;
   const defaultEffortName =
     defaultModel?.reasoning?.efforts.find((e) => e.id === defaultEffortId)?.name ??
@@ -107,21 +116,23 @@ export function ComposerModelChip({
       ? undefined
       : defaultModel === undefined
         ? `${hostDefault.provider}/${hostDefault.model}`
-        : defaultEffortName === undefined
-          ? defaultModel.name
-          : `${defaultModel.name} · ${defaultEffortName}`;
+        : [defaultProviderName, defaultModel.name, defaultEffortName]
+            .filter((part): part is string => part !== undefined)
+            .join(" · ");
 
-  const selectedModel =
-    value === null
-      ? undefined
-      : groups.find((g) => g.id === value.provider)?.models.find((m) => m.id === value.model);
+  // The chip's two-tier label.
+  const selectedGroup = value === null ? undefined : groups.find((g) => g.id === value.provider);
+  const selectedModel = selectedGroup?.models.find((m) => m.id === value?.model);
   const selectedEffortName =
     value?.reasoningEffort === undefined
       ? undefined
       : selectedModel?.reasoning?.efforts.find((e) => e.id === value.reasoningEffort)?.name;
-  const label =
+  const providerLine =
+    value === null ? defaultProviderName : (selectedGroup?.name ?? value?.provider);
+  const mainLine =
     value === null
-      ? (defaultSecondary ?? "Default model")
+      ? (defaultModel?.name ??
+        (hostDefault === null ? "Default model" : `${hostDefault.provider}/${hostDefault.model}`))
       : selectedModel === undefined
         ? "Default model"
         : selectedEffortName === undefined
@@ -150,7 +161,14 @@ export function ComposerModelChip({
         className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground aria-expanded:bg-accent aria-expanded:text-accent-foreground"
       >
         <RiSparklingLine className="size-3.5 shrink-0" />
-        <span className="max-w-40 truncate">{label}</span>
+        <span className="flex min-w-0 flex-col items-start leading-tight">
+          {providerLine !== undefined && (
+            <span className="max-w-full break-words text-[11px] text-muted-foreground">
+              {providerLine}
+            </span>
+          )}
+          <span className="max-w-full break-words text-left">{mainLine}</span>
+        </span>
         <RiArrowRightSLine className="size-3.5 shrink-0 -rotate-90" />
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="max-h-72 w-60 overflow-y-auto sm:w-64">

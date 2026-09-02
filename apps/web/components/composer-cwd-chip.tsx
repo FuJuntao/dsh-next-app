@@ -67,7 +67,12 @@ function DirectoryBrowser({ onPick }: { onPick: (path: string) => void }) {
   const visible = listing?.entries.filter((entry) => !entry.hidden) ?? [];
 
   return (
-    <div className="flex flex-col gap-2">
+    // min-w-0: as a DialogContent grid child, the default min-width:auto
+    // would size the track to the longest unbreakable token (a deep path, a
+    // long folder name) and push the popup past the viewport - the crumb
+    // rail's scroll and the row truncation only work once this chain is
+    // width-constrained.
+    <div className="flex min-w-0 flex-col gap-2">
       {error !== null && (
         <Alert variant="destructive">
           {/* break-all: the error names paths - one unbreakable token
@@ -92,7 +97,10 @@ function DirectoryBrowser({ onPick }: { onPick: (path: string) => void }) {
                     <RiArrowRightSLine className="size-3.5 shrink-0 text-muted-foreground/60" />
                   )}
                   {crumb.path === listing.path ? (
-                    <span className="px-1 py-0.5 font-medium" aria-current="location">
+                    <span
+                      className="min-w-0 break-all px-1 py-0.5 font-medium"
+                      aria-current="location"
+                    >
                       {crumb.name}
                       {index === 0 ? " (default)" : ""}
                     </span>
@@ -100,7 +108,7 @@ function DirectoryBrowser({ onPick }: { onPick: (path: string) => void }) {
                     <button
                       type="button"
                       onClick={() => browse(crumb.path)}
-                      className="rounded-sm px-1 py-0.5 text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground"
+                      className="min-w-0 break-all rounded-sm px-1 py-0.5 text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground"
                     >
                       {crumb.name}
                       {index === 0 ? " (default)" : ""}
@@ -109,7 +117,7 @@ function DirectoryBrowser({ onPick }: { onPick: (path: string) => void }) {
                 </span>
               ))}
             </nav>
-            <ul className="max-h-64 overflow-y-auto border border-input">
+            <ul className="max-h-64 min-w-0 overflow-y-auto border border-input">
               {visible.length === 0 && (
                 <li className="px-2 py-1.5 text-xs text-muted-foreground">
                   No visible subfolders.
@@ -120,22 +128,28 @@ function DirectoryBrowser({ onPick }: { onPick: (path: string) => void }) {
                   <button
                     type="button"
                     onClick={() => browse(entry.path)}
-                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs outline-none hover:bg-accent focus-visible:bg-accent"
+                    className="flex w-full min-w-0 items-center gap-2 overflow-hidden px-2 py-1.5 text-left text-xs outline-none hover:bg-accent focus-visible:bg-accent"
                   >
                     <RiFolder5Line className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="truncate">{entry.name}</span>
+                    <span className="min-w-0 flex-1 break-all">{entry.name}</span>
                   </button>
                 </li>
               ))}
             </ul>
             <div className="flex min-w-0 items-center justify-between gap-2">
-              {/* min-w-0 lets the path truncate instead of pushing the row -
-                  paths are one long token that no wrap would break. */}
-              <p className="min-w-0 truncate text-xs text-muted-foreground" title={listing.path}>
+              {/* The path is the dialog's answer - show it whole, wrapped
+                  across lines when narrow (break-all: it is one token with
+                  no spaces to fold at), never an ellipsis over the target. */}
+              <p className="min-w-0 break-all text-xs text-muted-foreground">
                 {listing.path}
                 {listing.truncated ? " (partial list)" : ""}
               </p>
-              <Button type="button" size="xs" onClick={() => onPick(listing.path)}>
+              <Button
+                type="button"
+                size="xs"
+                className="shrink-0"
+                onClick={() => onPick(listing.path)}
+              >
                 {atRoot ? "Choose default" : "Choose"}
               </Button>
             </div>
@@ -172,7 +186,9 @@ export function ComposerCwdChip({
         className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground aria-expanded:bg-accent aria-expanded:text-accent-foreground"
       >
         <RiFolder5Line className="size-3.5 shrink-0" />
-        <span className="max-w-32 truncate">{value === null ? "Folder" : folderName(value)}</span>
+        <span className="min-w-0 break-all text-left">
+          {value === null ? "Folder" : folderName(value)}
+        </span>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>

@@ -49,7 +49,7 @@ export function ComposerPresetChip({
         className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground aria-expanded:bg-accent aria-expanded:text-accent-foreground"
       >
         <RiRocketLine className="size-3.5 shrink-0" />
-        <span className="max-w-32 truncate">{label}</span>
+        <span className="min-w-0 break-words text-left">{label}</span>
         <RiArrowDownSLine className="size-3.5 shrink-0" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-64">
@@ -81,7 +81,7 @@ export function ComposerPresetChip({
                   {presetLabel(preset)}
                   {preset.trust === "user" ? " · local" : ""}
                 </span>
-                <span className="truncate text-muted-foreground">
+                <span className="break-all text-muted-foreground">
                   {preset.broken ?? preset.description ?? preset.id}
                 </span>
               </span>
