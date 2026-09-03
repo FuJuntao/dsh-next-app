@@ -10,26 +10,39 @@ import {
 } from "@remixicon/react";
 
 import type { StartSessionModel } from "@/lib/start-session";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 /**
- * Secondary lines: small, and WRAPPED (break-words) - on a phone the
- * review asked for two honest lines over one ellipsized.
+ * The picker's type ladder - three roles, each with ONE style used
+ * identically everywhere (the previous rounds mixed sizes/weights per
+ * line and the rows read as noise):
+ *
+ * - PRIMARY: the tappable answer (model name, effort name, "Default").
+ *   The dialog's own text-xs; a selected row's primary goes medium.
+ * - LABEL: a provider's name - the group headers AND the Default row's
+ *   provider line. Same role, same font: 11px medium muted.
+ * - META: every other supporting line (the Default row's resolved
+ *   target, effort descriptions, "Back to models"). 11px muted, and
+ *   never heavier than the primary it sits under.
  */
-const SECONDARY = "block break-words text-[11px] leading-tight text-muted-foreground";
+const PRIMARY_SELECTED = "bg-accent/60 font-medium";
+const LABEL = "block break-words text-[11px] leading-tight font-medium text-muted-foreground";
+const META = "block break-words text-[11px] leading-tight text-muted-foreground";
 
-/** One secondary line: text, and whether it carries emphasis (model over provider). */
-interface SecondaryLine {
-  text: string;
-  strong?: boolean;
-}
-
-/** One selectable row of the popover list. */
+/** One selectable row of the dialog list. */
 function Row({
   selected,
   onSelect,
   primary,
+  label,
   secondary,
   leading,
   chevron,
@@ -37,8 +50,10 @@ function Row({
   selected: boolean;
   onSelect: () => void;
   primary: string;
-  /** One small line, or several - each item gets its own line (no "·" joins). */
-  secondary?: string | SecondaryLine[];
+  /** The provider line (LABEL role) - only the Default row carries one. */
+  label?: string;
+  /** The meta line under the primary (META role). */
+  secondary?: string;
   leading?: "check" | "back" | "chevron" | undefined;
   chevron?: boolean;
 }) {
@@ -49,7 +64,7 @@ function Row({
       aria-pressed={selected}
       className={cn(
         "flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 text-left text-xs outline-none hover:bg-accent focus-visible:bg-accent",
-        selected && "bg-accent/60 font-medium",
+        selected && PRIMARY_SELECTED,
       )}
     >
       <span className="flex w-4 shrink-0 items-center justify-center">
@@ -59,20 +74,8 @@ function Row({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block break-all">{primary}</span>
-        {Array.isArray(secondary)
-          ? secondary.map((line) => (
-              <span
-                key={line.text}
-                className={
-                  line.strong === true
-                    ? "block break-words text-xs leading-tight font-medium text-foreground"
-                    : SECONDARY
-                }
-              >
-                {line.text}
-              </span>
-            ))
-          : secondary !== undefined && <span className={SECONDARY}>{secondary}</span>}
+        {label !== undefined && <span className={LABEL}>{label}</span>}
+        {secondary !== undefined && <span className={META}>{secondary}</span>}
       </span>
       {chevron === true && (
         <RiArrowRightSLine className="size-3.5 shrink-0 text-muted-foreground" />
@@ -82,26 +85,27 @@ function Row({
 }
 
 /**
- * The model picker chip (story #117 task #125, review rounds): a POPOVER
- * (a picker, not a command menu) over the session-independent
- * `llm.models` catalog fetched server-side, grouped by provider.
+ * The model picker chip (story #117 task #125, review rounds): a DIALOG
+ * like the folder chip (the whole action row opens dialogs - pickers
+ * deserve the room, and a phone's popover kept clipping), over the
+ * session-independent `llm.models` catalog fetched server-side, grouped
+ * by provider.
  *
- * The default entry leads with "Default" on the first line and the
- * concrete target on the smaller lines below - provider on one line,
- * model · thinking effort on the next (a "·"-joined single line read as
- * one unbroken phrase at phone widths). The effort resolves through the
- * truth the host itself applies: the configured agent-default-model
- * value first, then the adapter's declared default, then the model alone.
+ * The Default entry leads with "Default", then the provider (the same
+ * LABEL font the group headers use) and the resolved target - model ·
+ * thinking effort (META) - on their own lines. The effort resolves
+ * through the truth the host itself applies: the configured
+ * agent-default-model value first, then the adapter's declared default,
+ * then the model alone.
  *
  * The collapsed chip renders MINIMAL text: model and effort, nothing
  * else - the provider is context the picker shows, not a label the
  * action row needs.
  *
- * Effort-bearing models DRILL: tapping swaps the popover content to that
- * model's effort list (adapter-default entry first) with a back row -
- * never an inline expansion, which pushed past the popup's edges on a
- * phone. The committed selection rides `startSession` into
- * `session.selectModel` (best-effort per story AC 4).
+ * Effort-bearing models DRILL: tapping swaps the dialog's content to
+ * that model's effort list (adapter-default entry first) with a back
+ * row - never an inline expansion. The committed selection rides
+ * `startSession` into `session.selectModel` (best-effort per story AC 4).
  */
 export function ComposerModelChip({
   groups,
@@ -121,10 +125,8 @@ export function ComposerModelChip({
   // The drilled model (provider+id), or null on the list view.
   const [drill, setDrill] = useState<{ provider: string; model: string } | null>(null);
 
-  // The default entry's concrete target: provider on one small line,
-  // model · effort on the next - two lines, not a joined single one, and
-  // NOT the same font: the provider stays the muted footnote, the model
-  // line carries the weight.
+  // The Default entry's concrete target: provider (LABEL) and resolved
+  // model · effort (META) on their own lines.
   const defaultGroup =
     hostDefault === null ? undefined : groups.find((g) => g.id === hostDefault.provider);
   const defaultModel = defaultGroup?.models.find((m) => m.id === hostDefault?.model);
@@ -134,21 +136,12 @@ export function ComposerModelChip({
   const defaultEffortName =
     defaultModel?.reasoning?.efforts.find((e) => e.id === defaultEffortId)?.name ??
     (defaultEffortId !== undefined ? defaultEffortId : undefined);
-  const defaultSecondary: SecondaryLine[] | undefined =
-    hostDefault === null
+  const defaultTarget =
+    hostDefault === null || defaultModel === undefined
       ? undefined
-      : defaultModel === undefined
-        ? [{ text: `${hostDefault.provider}/${hostDefault.model}` }]
-        : [
-            { text: defaultProviderName ?? hostDefault.provider },
-            {
-              text:
-                defaultEffortName === undefined
-                  ? defaultModel.name
-                  : `${defaultModel.name} · ${defaultEffortName}`,
-              strong: true,
-            },
-          ];
+      : defaultEffortName === undefined
+        ? defaultModel.name
+        : `${defaultModel.name} · ${defaultEffortName}`;
 
   // The chip's minimal label: model and effort only - no provider line.
   const selectedGroup = value === null ? undefined : groups.find((g) => g.id === value.provider);
@@ -183,112 +176,121 @@ export function ComposerModelChip({
   const drilledModel = drilledGroup?.models.find((m) => m.id === drill?.model);
 
   return (
-    <Popover
+    <Dialog
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
         if (!next) setDrill(null);
       }}
     >
-      <PopoverTrigger
+      <DialogTrigger
         aria-label="Model"
         className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground aria-expanded:bg-accent aria-expanded:text-accent-foreground"
       >
         <RiSparklingLine className="size-3.5 shrink-0" />
-        <span className="max-w-full break-words">{label}</span>
-        <RiArrowRightSLine className="size-3.5 shrink-0 -rotate-90" />
-      </PopoverTrigger>
-      <PopoverContent align="start" side="top" className="max-h-72 w-60 overflow-y-auto sm:w-64">
-        {drilledModel !== undefined && drilledGroup !== undefined && drill !== null ? (
-          // Effort view: back row, the adapter-default choice, then the list.
-          <div className="flex flex-col">
-            <Row
-              selected={false}
-              onSelect={() => setDrill(null)}
-              primary={drilledModel.name}
-              secondary="Back to models"
-              leading="back"
-            />
-            <Row
-              selected={
-                value?.provider === drilledGroup.id &&
-                value.model === drilledModel.id &&
-                value.reasoningEffort === undefined
-              }
-              onSelect={() => pick({ provider: drilledGroup.id, model: drilledModel.id })}
-              primary="Adapter default"
-              {...(drilledModel.reasoning?.defaultEffort !== undefined && {
-                secondary: `default effort: ${drilledModel.reasoning.defaultEffort}`,
-              })}
-              leading="check"
-            />
-            <div className="my-1 h-px bg-input" />
-            {(drilledModel.reasoning?.efforts ?? []).map((effort) => (
+        <span className="min-w-0 break-words text-left">{label}</span>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Choose a model</DialogTitle>
+          <DialogDescription>
+            The model the new session runs on - the deployment default or any catalog entry.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-72 overflow-y-auto">
+          {drilledModel !== undefined && drilledGroup !== undefined && drill !== null ? (
+            // Effort view: back row, the adapter-default choice, then the list.
+            <div className="flex flex-col">
               <Row
-                key={effort.id}
+                selected={false}
+                onSelect={() => setDrill(null)}
+                primary={drilledModel.name}
+                secondary="Back to models"
+                leading="back"
+              />
+              <Row
                 selected={
                   value?.provider === drilledGroup.id &&
                   value.model === drilledModel.id &&
-                  value.reasoningEffort === effort.id
+                  value.reasoningEffort === undefined
                 }
-                onSelect={() =>
-                  pick({
-                    provider: drilledGroup.id,
-                    model: drilledModel.id,
-                    reasoningEffort: effort.id,
-                  })
-                }
-                primary={effort.name}
-                {...(effort.description !== undefined && { secondary: effort.description })}
+                onSelect={() => pick({ provider: drilledGroup.id, model: drilledModel.id })}
+                primary="Adapter default"
+                {...(drilledModel.reasoning?.defaultEffort !== undefined && {
+                  secondary: `default effort: ${drilledModel.reasoning.defaultEffort}`,
+                })}
                 leading="check"
               />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-col">
-            <Row
-              selected={value === null}
-              onSelect={() => pick(null)}
-              primary="Default"
-              {...(defaultSecondary !== undefined && { secondary: defaultSecondary })}
-              leading="check"
-            />
-            {groups.map((group) => (
-              <div key={group.id} className="flex flex-col">
-                <p className="px-1.5 pt-2 pb-0.5 font-medium text-muted-foreground">{group.name}</p>
-                {group.models.map((model) => {
-                  const efforts = model.reasoning?.efforts ?? [];
-                  const isSelected = value?.provider === group.id && value.model === model.id;
-                  const selectedEffort =
-                    value?.reasoningEffort === undefined
-                      ? undefined
-                      : model.reasoning?.efforts.find((e) => e.id === value.reasoningEffort)?.name;
-                  return (
-                    <Row
-                      key={model.id}
-                      selected={isSelected && efforts.length === 0}
-                      onSelect={() => {
-                        if (efforts.length === 0) {
-                          pick({ provider: group.id, model: model.id });
-                          return;
-                        }
-                        setDrill({ provider: group.id, model: model.id });
-                      }}
-                      primary={model.name}
-                      {...(isSelected &&
-                        selectedEffort !== undefined && {
-                          secondary: `effort: ${selectedEffort}`,
-                        })}
-                      leading={efforts.length === 0 ? "check" : undefined}
-                      chevron={efforts.length > 0}
-                    />
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
+              <div className="my-1 h-px bg-input" />
+              {(drilledModel.reasoning?.efforts ?? []).map((effort) => (
+                <Row
+                  key={effort.id}
+                  selected={
+                    value?.provider === drilledGroup.id &&
+                    value.model === drilledModel.id &&
+                    value.reasoningEffort === effort.id
+                  }
+                  onSelect={() =>
+                    pick({
+                      provider: drilledGroup.id,
+                      model: drilledModel.id,
+                      reasoningEffort: effort.id,
+                    })
+                  }
+                  primary={effort.name}
+                  {...(effort.description !== undefined && { secondary: effort.description })}
+                  leading="check"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              <Row
+                selected={value === null}
+                onSelect={() => pick(null)}
+                primary="Default"
+                {...(defaultProviderName !== undefined && { label: defaultProviderName })}
+                {...(defaultTarget !== undefined && { secondary: defaultTarget })}
+                leading="check"
+              />
+              {groups.map((group) => (
+                <div key={group.id} className="flex flex-col">
+                  <p className={cn("px-1.5 pt-2 pb-0.5", LABEL)}>{group.name}</p>
+                  {group.models.map((model) => {
+                    const efforts = model.reasoning?.efforts ?? [];
+                    const isSelected = value?.provider === group.id && value.model === model.id;
+                    const selectedEffort =
+                      value?.reasoningEffort === undefined
+                        ? undefined
+                        : model.reasoning?.efforts.find((e) => e.id === value.reasoningEffort)
+                            ?.name;
+                    return (
+                      <Row
+                        key={model.id}
+                        selected={isSelected && efforts.length === 0}
+                        onSelect={() => {
+                          if (efforts.length === 0) {
+                            pick({ provider: group.id, model: model.id });
+                            return;
+                          }
+                          setDrill({ provider: group.id, model: model.id });
+                        }}
+                        primary={model.name}
+                        {...(isSelected &&
+                          selectedEffort !== undefined && {
+                            secondary: `effort: ${selectedEffort}`,
+                          })}
+                        leading={efforts.length === 0 ? "check" : undefined}
+                        chevron={efforts.length > 0}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
