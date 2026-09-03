@@ -274,10 +274,7 @@ export function ComposerCwdChip({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Choose a folder</DialogTitle>
-          <DialogDescription>
-            The new session&apos;s working directory - the host&apos;s default working folder or a
-            folder inside it.
-          </DialogDescription>
+          <DialogDescription>The new session&apos;s working directory.</DialogDescription>
         </DialogHeader>
         <FolderTree
           value={value}

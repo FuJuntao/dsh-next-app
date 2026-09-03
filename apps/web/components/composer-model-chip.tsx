@@ -193,9 +193,7 @@ export function ComposerModelChip({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Choose a model</DialogTitle>
-          <DialogDescription>
-            The model the new session runs on - the deployment default or any catalog entry.
-          </DialogDescription>
+          <DialogDescription>The model the new session runs on.</DialogDescription>
         </DialogHeader>
         <div className="max-h-72 overflow-y-auto">
           {drilledModel !== undefined && drilledGroup !== undefined && drill !== null ? (
