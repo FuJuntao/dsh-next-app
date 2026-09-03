@@ -189,8 +189,24 @@ function renderMenu(
   { selectedIndex, options, selectOptionAndCleanUp, setHighlightedIndex }: MenuItemProps,
 ) {
   if (anchorElementRef.current === null || options.length === 0) return null;
+  // Viewport-safe placement (the caret-anchored 288px-min menu walked off
+  // a 390px phone): ride just above the editor box, width capped to the
+  // viewport, left edge clamped inside it. The caret anchor div lives on
+  // document.body, so the box itself is the stable reference.
+  const editorBox = document.querySelector('[contenteditable="true"]');
+  const anchorRect = (editorBox ?? anchorElementRef.current).getBoundingClientRect();
+  const width = Math.min(384, window.innerWidth - 16);
+  const left = Math.max(8, Math.min(anchorRect.left, window.innerWidth - width - 8));
   return ReactDOM.createPortal(
-    <div className="absolute top-0 left-0 z-50 max-w-96 min-w-72 overflow-hidden rounded-none bg-popover/70 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
+    <div
+      className="z-50 overflow-hidden rounded-none bg-popover/70 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150"
+      style={{
+        position: "fixed",
+        left,
+        width,
+        bottom: window.innerHeight - anchorRect.top + 4,
+      }}
+    >
       <ul className="max-h-60 overflow-y-auto">
         {options.map((option, index) => (
           <li
