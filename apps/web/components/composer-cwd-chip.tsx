@@ -175,12 +175,13 @@ function FolderTree({
         {open && (
           <div>
             {state === undefined || state.loading ? (
-              <p
-                className="py-1 text-xs text-muted-foreground"
-                style={{ paddingLeft: (depth + 1) * INDENT }}
-              >
-                Loading…
-              </p>
+              // Skeleton rows, not a "Loading…" label - the same loading
+              // language as the seed, so an expansion previews its rows.
+              <div className="flex flex-col gap-1.5 py-1" style={{ paddingLeft: (depth + 1) * INDENT }}>
+                {Array.from({ length: 3 }, (_, index) => (
+                  <Skeleton key={index} className="h-4 w-32" />
+                ))}
+              </div>
             ) : state.error !== undefined ? (
               <p
                 className="py-1 text-xs break-all text-destructive"
