@@ -2,12 +2,7 @@
 
 import { useState } from "react";
 import type { ModelProviderGroup } from "@deepseek-ai/dsh-host-apiproxy/api";
-import {
-  RiArrowLeftSLine,
-  RiArrowRightSLine,
-  RiCheckLine,
-  RiSparklingLine,
-} from "@remixicon/react";
+import { RiSparklingLine } from "@remixicon/react";
 
 import type { StartSessionModel } from "@/lib/start-session";
 import {
@@ -18,71 +13,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { LABEL, PickerRow } from "@/components/picker-row";
 import { cn } from "@/lib/utils";
-
-/**
- * The picker's type ladder - three roles, each with ONE style used
- * identically everywhere (the previous rounds mixed sizes/weights per
- * line and the rows read as noise):
- *
- * - PRIMARY: the tappable answer (model name, effort name, "Default").
- *   The dialog's own text-xs; a selected row's primary goes medium.
- * - LABEL: a provider's name - the group headers AND the Default row's
- *   provider line. Same role, same font: 11px medium muted.
- * - META: every other supporting line (the Default row's resolved
- *   target, effort descriptions, "Back to models"). 11px muted, and
- *   never heavier than the primary it sits under.
- */
-const PRIMARY_SELECTED = "bg-accent/60 font-medium";
-const LABEL = "block break-words text-[11px] leading-tight font-medium text-muted-foreground";
-const META = "block break-words text-[11px] leading-tight text-muted-foreground";
-
-/** One selectable row of the dialog list. */
-function Row({
-  selected,
-  onSelect,
-  primary,
-  label,
-  secondary,
-  leading,
-  chevron,
-}: {
-  selected: boolean;
-  onSelect: () => void;
-  primary: string;
-  /** The provider line (LABEL role) - only the Default row carries one. */
-  label?: string;
-  /** The meta line under the primary (META role). */
-  secondary?: string;
-  leading?: "check" | "back" | "chevron" | undefined;
-  chevron?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 text-left text-xs outline-none hover:bg-accent focus-visible:bg-accent",
-        selected && PRIMARY_SELECTED,
-      )}
-    >
-      <span className="flex w-4 shrink-0 items-center justify-center">
-        {leading === "check" && selected && <RiCheckLine className="size-3.5 shrink-0" />}
-        {leading === "back" && <RiArrowLeftSLine className="size-3.5 shrink-0" />}
-        {leading === "chevron" && <RiArrowRightSLine className="size-3.5 shrink-0" />}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block break-all">{primary}</span>
-        {label !== undefined && <span className={LABEL}>{label}</span>}
-        {secondary !== undefined && <span className={META}>{secondary}</span>}
-      </span>
-      {chevron === true && (
-        <RiArrowRightSLine className="size-3.5 shrink-0 text-muted-foreground" />
-      )}
-    </button>
-  );
-}
 
 /**
  * The model picker chip (story #117 task #125, review rounds): a DIALOG
@@ -199,14 +131,14 @@ export function ComposerModelChip({
           {drilledModel !== undefined && drilledGroup !== undefined && drill !== null ? (
             // Effort view: back row, the adapter-default choice, then the list.
             <div className="flex flex-col">
-              <Row
+              <PickerRow
                 selected={false}
                 onSelect={() => setDrill(null)}
                 primary={drilledModel.name}
                 secondary="Back to models"
                 leading="back"
               />
-              <Row
+              <PickerRow
                 selected={
                   value?.provider === drilledGroup.id &&
                   value.model === drilledModel.id &&
@@ -221,7 +153,7 @@ export function ComposerModelChip({
               />
               <div className="my-1 h-px bg-input" />
               {(drilledModel.reasoning?.efforts ?? []).map((effort) => (
-                <Row
+                <PickerRow
                   key={effort.id}
                   selected={
                     value?.provider === drilledGroup.id &&
@@ -243,7 +175,7 @@ export function ComposerModelChip({
             </div>
           ) : (
             <div className="flex flex-col">
-              <Row
+              <PickerRow
                 selected={value === null}
                 onSelect={() => pick(null)}
                 primary="Default"
@@ -263,7 +195,7 @@ export function ComposerModelChip({
                         : model.reasoning?.efforts.find((e) => e.id === value.reasoningEffort)
                             ?.name;
                     return (
-                      <Row
+                      <PickerRow
                         key={model.id}
                         selected={isSelected && efforts.length === 0}
                         onSelect={() => {
