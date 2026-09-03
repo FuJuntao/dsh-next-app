@@ -54,4 +54,4 @@ Every round, show the complete plan - the story (title, story sentence, acceptan
 - Use whatever GitHub access this environment provides; never print secrets.
 
 ## 7. Report
-Summarize: the parent issue URL and number, each task's issue URL and number, and any failures. GitHub issues are the source of truth for the story and the plan; nothing was committed or pushed.
+Summarize: the parent issue URL and number, each task's issue URL and number, and any failures. GitHub issues are the source of truth for the story and the plan; nothing was committed or pushed. If any acceptance criterion touches the user interface, point the user to `/design <parent>` as the next stage before implementation.

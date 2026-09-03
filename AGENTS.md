@@ -14,9 +14,10 @@ Guidance for contributors - human and AI agents - working in this repo.
 Planning and delivery run through the skill family, one stage per skill:
 
 1. `story` (`/story`) - create and plan one story in one step: interview the story and its task breakdown, then create the GitHub parent issue with `task`-labeled sub-issues. Stories and plans live in GitHub issues only (ADR-0005).
-2. `implement-a-task` (`/implement-a-task`) - carry one task issue to a reviewable pull request.
-3. `review` (`/review`) - axis-based PR review (spec, system design, repo standards, UI, security, docs discipline, verification claims, commit hygiene) with a gated merge.
-4. `bookkeeping` (`/bookkeeping`) - the post-merge tail: close completed parents, keep checklists truthful, sweep drift.
+2. `design` (`/design`) - design the experience of one UI-touching story: settle intent, flow, state coverage, copy, and visual direction, then write the `## Design` packet into the parent issue. There is no product designer here; this stage is the designer.
+3. `implement-a-task` (`/implement-a-task`) - carry one task issue to a reviewable pull request, building to the parent's packet when present.
+4. `review` (`/review`) - axis-based PR review (spec, system design, repo standards, UI, security, docs discipline, verification claims, commit hygiene) with a gated merge; the UI axis checks against the packet.
+5. `bookkeeping` (`/bookkeeping`) - the post-merge tail: close completed parents, keep checklists truthful, sweep drift.
 
 The story lifecycle is tracked by the issues: **planned** - the parent issue exists with its Tasks checklist; **in flight** - task issues are being implemented; **done** - the parent's checklist is complete and `bookkeeping` closes the parent.
 
