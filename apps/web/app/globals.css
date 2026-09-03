@@ -30,26 +30,6 @@
 }
 /*---break---
  */
-/*
- * The skeleton-hold rule (story #117 design packet, States): a loading
- * skeleton appears only if the load outlives ~150ms - a fast response
- * must not flash one. `display` is animated (discrete, Chrome 116 /
- * Safari 17.4 / Firefox 129+): fill-mode backwards holds the `from`
- * keyframe through the delay, so the skeleton is OUT OF LAYOUT, not
- * merely transparent - an opacity-only hold still reserved the rows'
- * height and the centered dialog jumped 68px on every expansion.
- * Browsers without animated `display` degrade to the old behavior.
- */
-@theme {
-  --animate-skeleton-hold: skeleton-hold 1ms 150ms backwards;
-
-  @keyframes skeleton-hold {
-    from {
-      display: none;
-    }
-  }
-}
-
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: var(--font-sans);

@@ -48,6 +48,38 @@ interface ChildrenState {
 /** Per-depth indentation in px (deep names wrap; the tree does not scroll sideways). */
 const INDENT = 16;
 
+/** How long a load must outlive before its skeleton is mounted at all. */
+const SKELETON_DELAY_MS = 250;
+
+/** True `ms` after mount; the timer is the whole component's state. */
+function useDelayedTrue(ms: number): boolean {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setShow(true), ms);
+    return () => clearTimeout(timer);
+  }, [ms]);
+  return show;
+}
+
+/**
+ * Skeleton rows that MOUNT only once the pending load has outlived the
+ * delay - a fast listing never reserves a single pixel. (A CSS
+ * display-animation hold was tried first and is a browser-feature bet:
+ * where `display` is not animatable it degrades to an invisible-but-
+ * laid-out box, which is the exact dialog jump this exists to prevent.)
+ */
+function SkeletonRows({ rows, indent }: { rows: string[]; indent: number }): ReactElement | null {
+  const show = useDelayedTrue(SKELETON_DELAY_MS);
+  if (!show) return null;
+  return (
+    <div className="flex flex-col gap-1.5 py-1" style={{ paddingLeft: indent }}>
+      {rows.map((row, index) => (
+        <Skeleton key={index} className={row} />
+      ))}
+    </div>
+  );
+}
+
 /** The tree's cached seed: the root listing plus the session's browsing. */
 interface TreeSeed {
   root: TreeNode;
@@ -233,17 +265,11 @@ function FolderTree({
         {open && (
           <div>
             {state === undefined || (state.entries === undefined && state.loading) ? (
-              // Skeleton rows, never a "Loading…" label - and held OUT OF
-              // LAYOUT for the first 150ms (animate-skeleton-hold, defined
-              // in globals.css): a fast listing neither flashes a skeleton
-              // nor shifts the dialog. An opacity-only hold was not enough
-              // - invisible rows still reserved their height. A refresh
-              // that HAS stale entries keeps them on screen instead.
-              <div className="flex animate-skeleton-hold flex-col gap-1.5 py-1" style={{ paddingLeft: (depth + 1) * INDENT }}>
-                {Array.from({ length: 3 }, (_, index) => (
-                  <Skeleton key={index} className="h-4 w-32" />
-                ))}
-              </div>
+              // Skeleton rows, never a "Loading…" label - mounted only if
+              // the load outlives the delay (a fast listing reserves no
+              // space), and a refresh that HAS stale entries keeps them
+              // on screen instead.
+              <SkeletonRows rows={["h-4 w-32", "h-4 w-32", "h-4 w-32"]} indent={(depth + 1) * INDENT} />
             ) : state.entries === undefined && state.error !== undefined ? (
               <p
                 className="py-1 text-xs break-all text-destructive"
@@ -289,15 +315,12 @@ function FolderTree({
   }
   if (root === null) {
     return (
-      // The same out-of-layout 150ms hold as the expansion: the chip's
-      // prefetch usually wins the race, and when it does no skeleton is
-      // painted or reserved at all.
-      <div className="flex animate-skeleton-hold flex-col gap-1.5">
-        <Skeleton className="h-5 w-full" />
-        {Array.from({ length: 5 }, (_, index) => (
-          <Skeleton key={index} className="h-7 w-full" />
-        ))}
-      </div>
+      // The chip's prefetch usually wins this race outright; when it
+      // doesn't, the skeleton waits out the same delay before taking space.
+      <SkeletonRows
+        rows={["h-5 w-full", "h-7 w-full", "h-7 w-full", "h-7 w-full", "h-7 w-full", "h-7 w-full"]}
+        indent={0}
+      />
     );
   }
   return (
