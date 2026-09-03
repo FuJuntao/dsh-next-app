@@ -37,7 +37,24 @@ export type ReferenceSearchResult =
 export async function searchSessionReferences(query: string): Promise<ReferenceSearchResult> {
   const trimmed = query.trim();
   if (trimmed === "") {
-    return { ok: true, items: [] };
+    // The empty query offers the recent roster, not nothing: typing `@`
+    // alone should immediately show sessions to reference (the nav's own
+    // order is the host's activity order, so the head of the list IS
+    // "recent"). A down bridge yields no options - the menu just stays shut.
+    const nav = await fetchSessions();
+    if (nav.status !== "ok") {
+      return { ok: true, items: [] };
+    }
+    const items = nav.sessions.slice(0, 8).map((session) => {
+      const label = session.title === "New Session" ? session.id : session.title;
+      return {
+        sessionId: session.id,
+        label,
+        snippet: "Recent session",
+        mention: formatSessionReferenceMention({ sessionId: session.id, label }),
+      };
+    });
+    return { ok: true, items };
   }
   try {
     const searchPromise = getActionBridgeClient().sessions.search({ query: trimmed });

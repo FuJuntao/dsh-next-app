@@ -437,7 +437,7 @@ function TypeaheadMenus({
     const source =
       referenceSearch === undefined
         ? filterOptions(references, atQuery)
-        : atQuery !== null && atQuery !== "" && searchedRefs.query === atQuery
+        : atQuery !== null && searchedRefs.query === atQuery
           ? searchedRefs.entries
           : [];
     return source.map(
@@ -450,12 +450,14 @@ function TypeaheadMenus({
     (query: string | null) => {
       setAtQuery(query);
       if (referenceSearch === undefined) return;
-      if (query === null || query === "") {
+      if (query === null) {
         // Invalidate any in-flight response too: it no longer belongs to an open query.
         searchSeq.current += 1;
         setSearchedRefs({ query: "", entries: [] });
         return;
       }
+      // The EMPTY query searches too (recent sessions) - typing `@` alone
+      // must offer something immediately, not wait for a query.
       const seq = ++searchSeq.current;
       void referenceSearch(query).then(
         (entries) => {
