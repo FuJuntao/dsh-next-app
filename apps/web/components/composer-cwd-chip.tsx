@@ -48,6 +48,68 @@ interface ChildrenState {
 /** Per-depth indentation in px (deep names wrap; the tree does not scroll sideways). */
 const INDENT = 16;
 
+/** The tree's cached seed: the root listing plus the session's browsing. */
+interface TreeSeed {
+  root: TreeNode;
+  children: Record<string, ChildrenState>;
+  expanded: Record<string, boolean>;
+}
+
+type SeedResult = { seed: TreeSeed } | { error: string };
+
+// The seed lives at module scope (one cwd chip per page, one deployment
+// per tab): the chip warms it on mount so the FIRST dialog open usually
+// renders the tree instead of flashing the seed skeleton, and the tree
+// writes its state back so a REOPEN shows the cached listing instantly
+// and refreshes it in the background (stale-while-revalidate).
+let seedCache: TreeSeed | null = null;
+let seedPromise: Promise<SeedResult> | null = null;
+
+const visibleEntries = (
+  entries: { name: string; path: string; hidden: boolean }[],
+): TreeNode[] =>
+  entries
+    .filter((entry) => !entry.hidden)
+    .map((entry) => ({ name: entry.name, path: entry.path }));
+
+/** The root listing, deduplicated across the prefetch and the tree mount. */
+function getSeed(): Promise<SeedResult> {
+  if (seedCache !== null) return Promise.resolve({ seed: seedCache });
+  if (seedPromise === null) {
+    seedPromise = browseDirectory()
+      .then((result): SeedResult => {
+        if (!result.ok) return { error: result.error };
+        const first = result.listing.crumbs[0];
+        const root: TreeNode = {
+          name: first?.name ?? folderName(result.listing.path),
+          path: result.listing.path,
+        };
+        const seed: TreeSeed = {
+          root,
+          children: {
+            [root.path]: {
+              loading: false,
+              entries: visibleEntries(result.listing.entries),
+              truncated: result.listing.truncated,
+            },
+          },
+          expanded: { [root.path]: true },
+        };
+        seedCache = seed;
+        return { seed };
+      })
+      .catch((cause: unknown): SeedResult => ({
+        error: cause instanceof Error ? cause.message : String(cause),
+      }))
+        .finally(() => {
+          // A failed seed must not poison the next attempt; a resolved one
+          // is already in seedCache.
+          seedPromise = null;
+        });
+  }
+  return seedPromise;
+}
+
 /**
  * The in-app folder TREE (story #117 task #122, restricted per review;
  * tree view per layout round): the default working folder is the root and
@@ -69,20 +131,19 @@ function FolderTree({
   value: string | null;
   onPick: (path: string) => void;
 }) {
-  const [root, setRoot] = useState<TreeNode | null>(null);
+  const [root, setRoot] = useState<TreeNode | null>(seedCache?.root ?? null);
   const [rootError, setRootError] = useState<string | null>(null);
-  const [children, setChildren] = useState<Record<string, ChildrenState>>({});
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [children, setChildren] = useState<Record<string, ChildrenState>>(seedCache?.children ?? {});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(seedCache?.expanded ?? {});
   // Stale-response guard per node: fast expand clicks must not land out of order.
   const seqRef = useRef<Record<string, number>>({});
-
-  const visible = (entries: { name: string; path: string; hidden: boolean }[]): TreeNode[] =>
-    entries.filter((entry) => !entry.hidden).map((entry) => ({ name: entry.name, path: entry.path }));
 
   const load = useCallback((path: string) => {
     const seq = (seqRef.current[path] ?? 0) + 1;
     seqRef.current[path] = seq;
-    setChildren((prev) => ({ ...prev, [path]: { loading: true } }));
+    // Keep any stale entries on screen while refreshing (the background
+    // revalidation must not blank the tree into a skeleton flash).
+    setChildren((prev) => ({ ...prev, [path]: { ...prev[path], loading: true } }));
     void browseDirectory(path).then((result) => {
       if (seqRef.current[path] !== seq) return;
       if (result.ok) {
@@ -90,43 +151,40 @@ function FolderTree({
           ...prev,
           [path]: {
             loading: false,
-            entries: result.listing.entries
-              .filter((entry) => !entry.hidden)
-              .map((entry) => ({ name: entry.name, path: entry.path })),
+            entries: visibleEntries(result.listing.entries),
             truncated: result.listing.truncated,
           },
         }));
       } else {
-        setChildren((prev) => ({ ...prev, [path]: { loading: false, error: result.error } }));
+        setChildren((prev) => ({ ...prev, [path]: { ...prev[path], loading: false, error: result.error } }));
       }
     });
   }, []);
 
-  // The root listing seeds the tree (and arrives expanded - its children
-  // ARE the list the picker used to show).
+  // Hydrate-or-seed: a cached tree shows NOW and revalidates its root
+  // listing in the background; a cold tree awaits the (possibly already
+  // in-flight from the chip's prefetch) shared seed call.
   useEffect(() => {
-    void browseDirectory().then((result) => {
-      if (!result.ok) {
+    if (seedCache !== null) {
+      load(seedCache.root.path);
+      return;
+    }
+    void getSeed().then((result) => {
+      if ("error" in result) {
         setRootError(result.error);
         return;
       }
-      const first = result.listing.crumbs[0];
-      const rootNode: TreeNode = {
-        name: first?.name ?? folderName(result.listing.path),
-        path: result.listing.path,
-      };
-      setRoot(rootNode);
-      setChildren({
-        [rootNode.path]: {
-          loading: false,
-          entries: visible(result.listing.entries),
-          truncated: result.listing.truncated,
-        },
-      });
-      setExpanded({ [rootNode.path]: true });
+      setRoot(result.seed.root);
+      setChildren(result.seed.children);
+      setExpanded(result.seed.expanded);
     });
-    // One seed per mount; the dialog remounts this tree when it opens.
-  }, []);
+  }, [load]);
+
+  // Write the live browsing back to the module cache, so a reopen starts
+  // from where the user left off (expanded nodes included).
+  useEffect(() => {
+    if (root !== null) seedCache = { root, children, expanded };
+  }, [root, children, expanded]);
 
   const toggle = (path: string): void => {
     const open = expanded[path] !== true;
@@ -174,15 +232,17 @@ function FolderTree({
         </div>
         {open && (
           <div>
-            {state === undefined || state.loading ? (
+            {state === undefined || (state.entries === undefined && state.loading) ? (
               // Skeleton rows, not a "Loading…" label - the same loading
               // language as the seed, so an expansion previews its rows.
+              // A refresh that HAS stale entries keeps them on screen
+              // instead (no skeleton flash on revalidation).
               <div className="flex flex-col gap-1.5 py-1" style={{ paddingLeft: (depth + 1) * INDENT }}>
                 {Array.from({ length: 3 }, (_, index) => (
                   <Skeleton key={index} className="h-4 w-32" />
                 ))}
               </div>
-            ) : state.error !== undefined ? (
+            ) : state.entries === undefined && state.error !== undefined ? (
               <p
                 className="py-1 text-xs break-all text-destructive"
                 style={{ paddingLeft: (depth + 1) * INDENT }}
@@ -259,6 +319,12 @@ export function ComposerCwdChip({
   onOpenChange: (open: boolean) => void;
 }) {
   const setOpen = onOpenChange;
+  // Warm the root listing while the page sits idle: by the time the user
+  // taps the chip, the seed is usually in, and the dialog opens straight
+  // into the tree - the skeleton only survives a genuinely slow first call.
+  useEffect(() => {
+    void getSeed();
+  }, []);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
