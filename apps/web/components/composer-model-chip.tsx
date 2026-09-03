@@ -19,6 +19,12 @@ import { cn } from "@/lib/utils";
  */
 const SECONDARY = "block break-words text-[11px] leading-tight text-muted-foreground";
 
+/** One secondary line: text, and whether it carries emphasis (model over provider). */
+interface SecondaryLine {
+  text: string;
+  strong?: boolean;
+}
+
 /** One selectable row of the popover list. */
 function Row({
   selected,
@@ -32,7 +38,7 @@ function Row({
   onSelect: () => void;
   primary: string;
   /** One small line, or several - each item gets its own line (no "·" joins). */
-  secondary?: string | string[];
+  secondary?: string | SecondaryLine[];
   leading?: "check" | "back" | "chevron" | undefined;
   chevron?: boolean;
 }) {
@@ -55,8 +61,15 @@ function Row({
         <span className="block break-all">{primary}</span>
         {Array.isArray(secondary)
           ? secondary.map((line) => (
-              <span key={line} className={SECONDARY}>
-                {line}
+              <span
+                key={line.text}
+                className={
+                  line.strong === true
+                    ? "block break-words text-xs leading-tight font-medium text-foreground"
+                    : SECONDARY
+                }
+              >
+                {line.text}
               </span>
             ))
           : secondary !== undefined && <span className={SECONDARY}>{secondary}</span>}
@@ -109,7 +122,9 @@ export function ComposerModelChip({
   const [drill, setDrill] = useState<{ provider: string; model: string } | null>(null);
 
   // The default entry's concrete target: provider on one small line,
-  // model · effort on the next - two lines, not a joined single one.
+  // model · effort on the next - two lines, not a joined single one, and
+  // NOT the same font: the provider stays the muted footnote, the model
+  // line carries the weight.
   const defaultGroup =
     hostDefault === null ? undefined : groups.find((g) => g.id === hostDefault.provider);
   const defaultModel = defaultGroup?.models.find((m) => m.id === hostDefault?.model);
@@ -119,16 +134,20 @@ export function ComposerModelChip({
   const defaultEffortName =
     defaultModel?.reasoning?.efforts.find((e) => e.id === defaultEffortId)?.name ??
     (defaultEffortId !== undefined ? defaultEffortId : undefined);
-  const defaultSecondary =
+  const defaultSecondary: SecondaryLine[] | undefined =
     hostDefault === null
       ? undefined
       : defaultModel === undefined
-        ? [`${hostDefault.provider}/${hostDefault.model}`]
+        ? [{ text: `${hostDefault.provider}/${hostDefault.model}` }]
         : [
-            defaultProviderName ?? hostDefault.provider,
-            defaultEffortName === undefined
-              ? defaultModel.name
-              : `${defaultModel.name} · ${defaultEffortName}`,
+            { text: defaultProviderName ?? hostDefault.provider },
+            {
+              text:
+                defaultEffortName === undefined
+                  ? defaultModel.name
+                  : `${defaultModel.name} · ${defaultEffortName}`,
+              strong: true,
+            },
           ];
 
   // The chip's minimal label: model and effort only - no provider line.
