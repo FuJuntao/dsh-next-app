@@ -233,11 +233,16 @@ function FolderTree({
         {open && (
           <div>
             {state === undefined || (state.entries === undefined && state.loading) ? (
-              // Skeleton rows, not a "Loading…" label - the same loading
-              // language as the seed, so an expansion previews its rows.
+              // Skeleton rows, never a "Loading…" label - and CSS-delayed
+              // into the bargain: fill-mode backwards holds them at opacity
+              // 0 for the first 150ms, so a listing that lands fast never
+              // flashes one, while a slow one still earns its skeleton.
               // A refresh that HAS stale entries keeps them on screen
               // instead (no skeleton flash on revalidation).
-              <div className="flex flex-col gap-1.5 py-1" style={{ paddingLeft: (depth + 1) * INDENT }}>
+              <div
+                className="flex animate-in flex-col gap-1.5 fade-in-0 py-1 [animation-delay:150ms] [animation-fill-mode:backwards]"
+                style={{ paddingLeft: (depth + 1) * INDENT }}
+              >
                 {Array.from({ length: 3 }, (_, index) => (
                   <Skeleton key={index} className="h-4 w-32" />
                 ))}
@@ -287,7 +292,9 @@ function FolderTree({
   }
   if (root === null) {
     return (
-      <div className="flex flex-col gap-1.5">
+      // The same 150ms rule as the expansion: the chip's prefetch usually
+      // wins the race, and when it does no skeleton is painted at all.
+      <div className="flex animate-in flex-col gap-1.5 fade-in-0 [animation-delay:150ms] [animation-fill-mode:backwards]">
         <Skeleton className="h-5 w-full" />
         {Array.from({ length: 5 }, (_, index) => (
           <Skeleton key={index} className="h-7 w-full" />
