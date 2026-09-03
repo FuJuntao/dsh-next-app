@@ -94,6 +94,19 @@ export type SessionComposerProps = {
    * the lock is asking for. Only ever fires while `enabled` is false.
    */
   onLockedActivate?: () => void;
+  /**
+   * Visible text on the send button (design packet: home's submit is
+   * "Start session" - the one first-screen action that says its name).
+   * Absent means the icon-only square with the "Send message" accessible
+   * name - the session page's shape.
+   */
+  submitLabel?: string;
+  /**
+   * Footer text while LOCKED - the remedy the lock asks for ("Choose a
+   * folder to start."), not the shortcut legend of an editor that does
+   * not yet accept typing.
+   */
+  lockedHint?: string;
 };
 
 class ComposerOption extends MenuOption {
@@ -346,22 +359,26 @@ function SendButton({
   isPending,
   sendEnabled,
   submit,
+  submitLabel,
 }: {
   hasText: boolean;
   isPending: boolean;
   sendEnabled: boolean;
   submit: () => void;
+  /** Visible text (home: "Start session"); absent keeps the icon-only square. */
+  submitLabel: string | undefined;
 }) {
   return (
     <Button
       type="button"
       variant="default"
-      size="icon-sm"
-      aria-label="Send message"
+      size={submitLabel === undefined ? "icon-sm" : "xs"}
+      aria-label={submitLabel ?? "Send message"}
       disabled={!hasText || isPending || !sendEnabled}
       onClick={submit}
     >
       {isPending ? <Spinner /> : <RiSendPlane2Fill />}
+      {submitLabel !== undefined && submitLabel}
     </Button>
   );
 }
@@ -510,6 +527,8 @@ function ComposerInner({
   referenceSearch,
   enabled,
   onLockedActivate,
+  submitLabel,
+  lockedHint,
   setIsPending,
 }: {
   commands: ComposerEntry[];
@@ -523,6 +542,8 @@ function ComposerInner({
   referenceSearch: ((query: string) => Promise<ComposerEntry[]>) | undefined;
   enabled: boolean;
   onLockedActivate: (() => void) | undefined;
+  submitLabel: string | undefined;
+  lockedHint: string | undefined;
   setIsPending: (pending: boolean) => void;
 }) {
   // Sync twin of the enabled prop for the submit paths (same reason
@@ -533,10 +554,11 @@ function ComposerInner({
   }, [enabled]);
   const submit = useComposerSubmit({ onSubmit, pendingRef, enabledRef, setIsPending });
   // The hint advertises only the triggers this surface actually injected: an
-  // empty source mounts no menu, so advertising it would be a lie.
+  // empty source mounts no menu, so advertising it would be a lie. The
+  // legend is trimmed to one compact line at phone widths (design packet);
+  // Shift+Enter is discoverable on its own.
   const hint = [
-    "Enter send",
-    "Shift+Enter newline",
+    "Enter sends",
     commands.length > 0 && "/ commands",
     referenceSearch !== undefined ? "@ sessions" : references.length > 0 && "@ files",
   ]
@@ -580,12 +602,17 @@ function ComposerInner({
           />
         </div>
         <div className="flex items-center justify-between gap-2 border-t border-input px-2.5 py-1.5">
-          <p className="min-w-0 flex-1 text-xs text-muted-foreground">{hint}</p>
+          {/* While locked the footer states the remedy, not the shortcuts of
+              an editor that does not accept typing yet (design packet). */}
+          <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+            {enabled || lockedHint === undefined ? hint : lockedHint}
+          </p>
           <SendButton
             hasText={hasText}
             isPending={isPending}
             sendEnabled={enabled}
             submit={submit}
+            submitLabel={submitLabel}
           />
         </div>
       </div>
@@ -608,6 +635,8 @@ export function SessionComposer({
   referenceSearch,
   enabled = true,
   onLockedActivate,
+  submitLabel,
+  lockedHint,
 }: SessionComposerProps) {
   const [hasText, setHasText] = useState(false);
   const [isPending, setIsPending] = useState(false);
@@ -640,6 +669,8 @@ export function SessionComposer({
         referenceSearch={referenceSearch}
         enabled={enabled}
         onLockedActivate={onLockedActivate}
+        submitLabel={submitLabel}
+        lockedHint={lockedHint}
         setIsPending={setIsPending}
       />
       <OnChangePlugin

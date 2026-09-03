@@ -87,6 +87,8 @@ export function HomeComposerIsland({
         placeholder="Describe what you want to build"
         enabled={cwd !== null}
         onLockedActivate={() => setFolderOpen(true)}
+        submitLabel="Start session"
+        lockedHint="Choose a folder to start."
         onSubmit={async (text) => {
           setError(null);
           const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
