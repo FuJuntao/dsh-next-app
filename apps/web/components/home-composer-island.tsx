@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentPresetEntry, ModelProviderGroup } from "@deepseek-ai/dsh-host-apiproxy/api";
 
 import { ComposerCwdChip } from "@/components/composer-cwd-chip";
@@ -9,6 +9,7 @@ import { ComposerModelChip } from "@/components/composer-model-chip";
 import { ComposerPresetChip } from "@/components/composer-preset-chip";
 import { type ComposerEntry, SessionComposer } from "@/components/session-composer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { fetchProjectSkills, type ProjectSkill } from "@/lib/host-skills";
 import { searchSessionReferences } from "@/lib/session-references";
 import { SLASH_MENU_ENTRIES } from "@/lib/slash-commands";
 import { startSession, type StartSessionModel } from "@/lib/start-session";
@@ -40,6 +41,38 @@ export function HomeComposerIsland({
   const [folderOpen, setFolderOpen] = useState(false);
   // The model selection (story AC 10); null means the deployment default.
   const [model, setModel] = useState<StartSessionModel | null>(null);
+  // The chosen folder's project skills (the `/` menu's dynamic half):
+  // re-read whenever the folder changes, newest response wins.
+  const [skills, setSkills] = useState<ProjectSkill[]>([]);
+  const skillsSeq = useRef(0);
+  useEffect(() => {
+    const seq = ++skillsSeq.current;
+    if (cwd === null) {
+      setSkills([]);
+      return;
+    }
+    void fetchProjectSkills(cwd).then(
+      (next) => {
+        if (seq === skillsSeq.current) setSkills(next);
+      },
+      () => {
+        // A failed read leaves the vendored list alone; skills stay
+        // invocable (the host routes leading-`/` prompts regardless).
+      },
+    );
+  }, [cwd]);
+  // Project skills lead, the vendored host commands follow; a skill that
+  // shadows a command name wins (the project's word over the platform's).
+  const commands = useMemo<ComposerEntry[]>(() => {
+    const skillEntries: ComposerEntry[] = skills.map((skill) => ({
+      key: "skill:" + skill.name,
+      kind: "command" as const,
+      label: "/" + skill.name,
+      description: skill.description,
+    }));
+    const shadowed = new Set(skillEntries.map((entry) => entry.label));
+    return [...skillEntries, ...SLASH_MENU_ENTRIES.filter((entry) => !shadowed.has(entry.label))];
+  }, [skills]);
   // The `@` source (story AC 9): session references via session.search.
   // A failed search yields no options (never an empty-Enter trap: with an
   // empty list the menu simply does not open).
@@ -81,7 +114,7 @@ export function HomeComposerIsland({
         )}
       </div>
       <SessionComposer
-        commands={SLASH_MENU_ENTRIES}
+        commands={commands}
         references={[]}
         referenceSearch={queryReferences}
         placeholder="Describe what you want to build"
