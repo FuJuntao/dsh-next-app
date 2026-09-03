@@ -138,7 +138,9 @@ class ComposerOption extends MenuOption {
 // a CJK query at zero characters); the `@` itself is excluded so a second
 // `@` starts a fresh reference instead of extending the first.
 
-const SLASH_TRIGGER_REGEX = /(^|\n)\/([\w-]*)$/;
+// `(^|\s)`: the menu opens after any word boundary, not only at line
+// start - typing "fix this /mode" must offer commands like dsh web does.
+const SLASH_TRIGGER_REGEX = /(^|\s)\/([\w-]*)$/u;
 const AT_TRIGGER_REGEX = /(^|\s|\n)@([^\s@]*)$/u;
 
 function checkForSlashTrigger(text: string): MenuTextMatch | null {
