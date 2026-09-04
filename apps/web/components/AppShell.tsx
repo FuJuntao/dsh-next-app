@@ -176,7 +176,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
       <Separator />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-6 py-4">{children}</div>
+        {/* A flex column with min-h-full so a page section can flex-1 to fill
+            the scroll area (the home hero centers); plain block children keep
+            their natural top-aligned height. */}
+        <div className="mx-auto flex min-h-full max-w-3xl flex-col px-6 py-4">{children}</div>
       </div>
     </SidebarInset>
   );

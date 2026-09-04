@@ -334,7 +334,7 @@ test("the bridge-down state renders distinctly and recovers via Retry", async ({
     const retry = page.getByRole("button", { name: "Retry loading sessions" });
     await expect(retry).toBeVisible();
     // The rest of the page still renders.
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Into the Unknown");
     await expect(page.locator("[data-session-id]")).toHaveCount(0);
 
     // Recovery: with the channel back, Retry re-fetches and the rows render.
