@@ -31,7 +31,7 @@ export type SessionReferenceHit = {
 
 /** Search outcome: hits (possibly none), or the folded failure. */
 export type ReferenceSearchResult =
-  | { ok: true; items: SessionReferenceHit[] }
+  | { ok: true; items: SessionReferenceHit[]; hasMore: boolean }
   | { ok: false; error: string };
 
 export async function searchSessionReferences(query: string): Promise<ReferenceSearchResult> {
@@ -43,7 +43,7 @@ export async function searchSessionReferences(query: string): Promise<ReferenceS
     // "recent"). A down bridge yields no options - the menu just stays shut.
     const nav = await fetchSessions();
     if (nav.status !== "ok") {
-      return { ok: true, items: [] };
+      return { ok: true, items: [], hasMore: false };
     }
     const items = nav.sessions.slice(0, 8).map((session) => {
       const label = session.title === "New Session" ? session.id : session.title;
@@ -54,7 +54,7 @@ export async function searchSessionReferences(query: string): Promise<ReferenceS
         mention: formatSessionReferenceMention({ sessionId: session.id, label }),
       };
     });
-    return { ok: true, items };
+    return { ok: true, items, hasMore: false };
   }
   try {
     const searchPromise = getActionBridgeClient().sessions.search({ query: trimmed });
@@ -73,7 +73,8 @@ export async function searchSessionReferences(query: string): Promise<ReferenceS
     );
     // The contract bounds results at 20 and asks the client to refine on
     // `hasMore` (there is no continuation cursor): the slice is the
-    // defensive bound, the extra row is the refine cue.
+    // defensive bound; hasMore travels to the menu as a hint line, never
+    // as a fake option.
     const items: SessionReferenceHit[] = response.result.value.items.slice(0, 20).map((hit) => {
       // The nav's blank fallback "New Session" is not a title worth a
       // mention label - the id reads better there.
@@ -86,15 +87,7 @@ export async function searchSessionReferences(query: string): Promise<ReferenceS
         mention: formatSessionReferenceMention({ sessionId: hit.sessionId, label }),
       };
     });
-    if (response.result.value.hasMore) {
-      items.push({
-        sessionId: "refine-query",
-        label: "More results - refine the query",
-        snippet: "",
-        mention: "@" + trimmed,
-      });
-    }
-    return { ok: true, items };
+    return { ok: true, items, hasMore: response.result.value.hasMore };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { ok: false, error: `the dsh bridge call failed: ${message}` };

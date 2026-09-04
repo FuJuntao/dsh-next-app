@@ -39,6 +39,10 @@ const DEFAULT_PLACEHOLDER = "Message the session";
 // home injects its own sources. An empty source disables its trigger entirely
 // (its plugin never mounts, no menu opens, Enter never defers to it).
 
+/** One async `@` search outcome: the options, plus a hint line rendered
+ * OUTSIDE the option list (the list stays all-choices). */
+export type ComposerSearch = { entries: ComposerEntry[]; hint?: string };
+
 export type ComposerEntry = {
   label: string;
   description: string;
@@ -72,7 +76,7 @@ export type SessionComposerProps = {
    * further filtering). Presence also mounts the `@` trigger even with an
    * empty static list.
    */
-  referenceSearch?: (query: string) => Promise<ComposerEntry[]>;
+  referenceSearch?: (query: string) => Promise<ComposerSearch>;
   /**
    * Whether the surface accepts interaction at all (default true). Home
    * requires a chosen working folder first: while false the editor stays
@@ -180,6 +184,7 @@ type MenuItemProps = {
 function renderMenu(
   anchorElementRef: RefObject<HTMLElement | null>,
   { selectedIndex, options, selectOptionAndCleanUp, setHighlightedIndex }: MenuItemProps,
+  hint?: string,
 ) {
   if (anchorElementRef.current === null || options.length === 0) return null;
   // Viewport-safe placement (the caret-anchored 288px-min menu walked off
@@ -232,6 +237,10 @@ function renderMenu(
           </li>
         ))}
       </ul>
+      {hint !== undefined && (
+        // A signal, not a choice: outside the option list, unselectable.
+        <p className="border-t border-input px-2 py-1 text-[11px] text-muted-foreground">{hint}</p>
+      )}
     </div>,
     anchorElementRef.current,
   );
@@ -405,7 +414,7 @@ function TypeaheadMenus({
   menuOpenRef: RefObject<boolean>;
   commands: ComposerEntry[];
   references: ComposerEntry[];
-  referenceSearch: ((query: string) => Promise<ComposerEntry[]>) | undefined;
+  referenceSearch: ((query: string) => Promise<ComposerSearch>) | undefined;
 }) {
   const [editor] = useLexicalComposerContext();
   const [slashQuery, setSlashQuery] = useState<string | null>(null);
@@ -416,6 +425,7 @@ function TypeaheadMenus({
   const [searchedRefs, setSearchedRefs] = useState<{
     query: string;
     entries: ComposerEntry[];
+    hint?: string;
   }>({ query: "", entries: [] });
   const searchSeq = useRef(0);
 
@@ -438,6 +448,11 @@ function TypeaheadMenus({
         new ComposerOption(entry.kind, entry.label, entry.description, entry.insertText, entry.key),
     );
   }, [referenceSearch, references, atQuery, searchedRefs]);
+  // The hint belongs to the CURRENT query's response only.
+  const atHint =
+    referenceSearch !== undefined && atQuery !== null && searchedRefs.query === atQuery
+      ? searchedRefs.hint
+      : undefined;
 
   const handleAtQueryChange = useCallback(
     (query: string | null) => {
@@ -453,8 +468,13 @@ function TypeaheadMenus({
       // must offer something immediately, not wait for a query.
       const seq = ++searchSeq.current;
       void referenceSearch(query).then(
-        (entries) => {
-          if (seq === searchSeq.current) setSearchedRefs({ query, entries });
+        (result) => {
+          if (seq === searchSeq.current)
+            setSearchedRefs({
+              query,
+              entries: result.entries,
+              ...(result.hint !== undefined && { hint: result.hint }),
+            });
         },
         () => {
           // Failed search: show nothing; the draft and Enter-to-send are unaffected.
@@ -514,7 +534,7 @@ function TypeaheadMenus({
           onSelectOption={selectOption}
           options={atOptions}
           triggerFn={checkForAtTrigger}
-          menuRenderFn={renderMenu}
+          menuRenderFn={(anchor, props) => renderMenu(anchor, props, atHint)}
           onOpen={handleMenuOpen}
           onClose={handleMenuClose}
           preselectFirstItem
@@ -552,7 +572,7 @@ function ComposerInner({
   pendingRef: RefObject<boolean>;
   placeholder: string;
   references: ComposerEntry[];
-  referenceSearch: ((query: string) => Promise<ComposerEntry[]>) | undefined;
+  referenceSearch: ((query: string) => Promise<ComposerSearch>) | undefined;
   enabled: boolean;
   onLockedActivate: (() => void) | undefined;
   submitLabel: string | undefined;

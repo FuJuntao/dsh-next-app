@@ -7,7 +7,7 @@ import type { AgentPresetEntry, ModelProviderGroup } from "@deepseek-ai/dsh-host
 import { ComposerCwdChip } from "@/components/composer-cwd-chip";
 import { ComposerModelChip } from "@/components/composer-model-chip";
 import { ComposerPresetChip } from "@/components/composer-preset-chip";
-import { type ComposerEntry, SessionComposer } from "@/components/session-composer";
+import { type ComposerEntry, type ComposerSearch, SessionComposer } from "@/components/session-composer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { fetchProjectSkills, type ProjectSkill } from "@/lib/host-skills";
 import { searchSessionReferences } from "@/lib/session-references";
@@ -76,18 +76,21 @@ export function HomeComposerIsland({
   // The `@` source (story AC 9): session references via session.search.
   // A failed search yields no options (never an empty-Enter trap: with an
   // empty list the menu simply does not open).
-  const queryReferences = useCallback(async (query: string): Promise<ComposerEntry[]> => {
+  const queryReferences = useCallback(async (query: string): Promise<ComposerSearch> => {
     const result = await searchSessionReferences(query);
     if (!result.ok) {
-      return [];
+      return { entries: [] };
     }
-    return result.items.map((hit) => ({
-      key: hit.sessionId,
-      kind: "session" as const,
-      label: hit.label,
-      description: hit.snippet,
-      insertText: hit.mention,
-    }));
+    return {
+      entries: result.items.map((hit) => ({
+        key: hit.sessionId,
+        kind: "session" as const,
+        label: hit.label,
+        description: hit.snippet,
+        insertText: hit.mention,
+      })),
+      ...(result.hasMore && { hint: "More results - refine the query" }),
+    };
   }, []);
   return (
     <div className="flex w-full flex-col gap-2">
