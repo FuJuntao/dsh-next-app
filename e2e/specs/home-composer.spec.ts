@@ -330,8 +330,11 @@ test("a leading-/ first message executes host-side", async ({ page }) => {
     .poll(
       async () => {
         if (page.url().includes("/sessions/")) return "navigated";
-        const alertText = await page.getByTestId("send-error").textContent();
-        return alertText === null ? "pending" : "alert:" + alertText;
+        // Non-blocking check: a textContent() on the success path (no
+        // alert ever appears) would wait out the whole poll timeout.
+        const alert = page.getByTestId("send-error");
+        if (!(await alert.isVisible())) return "pending";
+        return "alert:" + (await alert.textContent());
       },
       { timeout: 30_000 },
     )
