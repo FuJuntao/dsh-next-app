@@ -240,6 +240,18 @@ test("the folder tree fits a phone viewport", async ({ page }) => {
   await dialog.getByRole("button", { name: "Expand apps", exact: true }).click();
   await expect(dialog.getByRole("button", { name: "web", exact: true })).toBeVisible();
   await expect(fits).toPass();
+  // A leaf says so (packet States: "No subfolders.").
+  await dialog.getByRole("button", { name: "Expand docs", exact: true }).click();
+  await dialog.getByRole("button", { name: "Expand adr", exact: true }).click();
+  await expect(dialog.getByText("No subfolders.")).toBeVisible();
+});
+
+// ...and the session page's icon-only chrome surviving the home redesign.
+test("the session page keeps the icon-only Send message chrome", async ({ page }) => {
+  const created = (await envelopeCall("session.create", {})) as { sessionId: string };
+  await page.goto(profile.baseURL + "/sessions/" + created.sessionId);
+  await expect(page.getByRole("textbox", { name: "Message the session" })).toBeEditable();
+  await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
 });
 
 test("the model picker selection is applied before the first prompt", async ({ page }) => {
