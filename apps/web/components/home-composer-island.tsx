@@ -7,7 +7,11 @@ import type { AgentPresetEntry, ModelProviderGroup } from "@deepseek-ai/dsh-host
 import { ComposerCwdChip } from "@/components/composer-cwd-chip";
 import { ComposerModelChip } from "@/components/composer-model-chip";
 import { ComposerPresetChip } from "@/components/composer-preset-chip";
-import { type ComposerEntry, type ComposerSearch, SessionComposer } from "@/components/session-composer";
+import {
+  type ComposerEntry,
+  type ComposerSearch,
+  SessionComposer,
+} from "@/components/session-composer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { fetchProjectSkills, type ProjectSkill } from "@/lib/host-skills";
 import { searchSessionReferences } from "@/lib/session-references";
