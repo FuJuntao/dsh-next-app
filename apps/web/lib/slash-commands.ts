@@ -15,7 +15,7 @@
  * if the host answers `unknown-command` for any of them - the mechanical
  * pin that keeps this file honest against the dsh version in the catalog.
  *
- * Pin: dsh 0.1.1-rc.2 (the workspace catalog version at vendoring time).
+ * Pin: the catalog-pinned dsh (versions tracked in pnpm-workspace.yaml).
  */
 export type VendoredSlashCommand = {
   /** Lowercase name WITHOUT the leading slash, as the registry spells it. */
