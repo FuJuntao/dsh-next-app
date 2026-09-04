@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ModelProviderGroup } from "@deepseek-ai/dsh-host-apiproxy/api";
 import { RiSparklingLine } from "@remixicon/react";
 
@@ -13,15 +13,36 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { LABEL, PickerRow } from "@/components/picker-row";
+import { Input } from "@/components/ui/input";
+import { LABEL, META, PickerRow } from "@/components/picker-row";
 import { cn } from "@/lib/utils";
 
+/** The last picks, most-recent-first; localStorage is a browser cache, not truth. */
+const RECENT_KEY = "dsh-nex…dels";
+const RECENT_MAX = 3;
+
+function readRecent(): StartSessionModel[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY);
+    if (raw === null) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as StartSessionModel[]).slice(0, RECENT_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
 /**
- * The model picker chip (story #117 task #125, review rounds): a DIALOG
- * like the folder chip (the whole action row opens dialogs - pickers
- * deserve the room, and a phone's popover kept clipping), over the
- * session-independent `llm.models` catalog fetched server-side, grouped
- * by provider.
+ * The model picker chip (story #117 task #125, review + optimization
+ * rounds): a DIALOG like the folder chip, over the session-independent
+ * `llm.models` catalog fetched server-side, grouped by provider.
+ *
+ * The dialog is a find surface, so it got the find affordances: a
+ * filter input narrows across providers and model names (a provider hit
+ * keeps its whole roster); a Recent section (last 3 explicit picks,
+ * localStorage) puts yesterday's model one tap away; provider headers
+ * stick while the list scrolls; and the list is capped to the viewport
+ * rather than a fixed 288px strip.
  *
  * The Default entry leads with "Default", then the provider (the same
  * LABEL font the group headers use) and the resolved target - model ·
@@ -36,7 +57,8 @@ import { cn } from "@/lib/utils";
  *
  * Effort-bearing models DRILL: tapping swaps the dialog's content to
  * that model's effort list (adapter-default entry first) with a back
- * row - never an inline expansion. The committed selection rides
+ * row, and the dialog's TITLE becomes the model's name - the drill
+ * reads as navigation, not replacement. The committed selection rides
  * `startSession` into `session.selectModel` (best-effort per story AC 4).
  */
 export function ComposerModelChip({
@@ -56,8 +78,16 @@ export function ComposerModelChip({
   const [open, setOpen] = useState(false);
   // The drilled model (provider+id), or null on the list view.
   const [drill, setDrill] = useState<{ provider: string; model: string } | null>(null);
+  const [filter, setFilter] = useState("");
+  const [recent, setRecent] = useState<StartSessionModel[]>([]);
 
-  // The Default entry's concrete target: provider (LABEL) and resolved
+  // Hydrate the recent roster after mount (localStorage is client-only;
+  // the island server-renders this component).
+  useEffect(() => {
+    setRecent(readRecent());
+  }, []);
+
+  // The default entry's concrete target: provider (LABEL) and resolved
   // model · effort (META) on their own lines.
   const defaultGroup =
     hostDefault === null ? undefined : groups.find((g) => g.id === hostDefault.provider);
@@ -100,9 +130,60 @@ export function ComposerModelChip({
 
   const pick = (next: StartSessionModel | null) => {
     onChange(next);
+    // Explicit picks join the recent roster (Default is the absence of
+    // a choice, not a habit).
+    if (next !== null) {
+      const merged = [
+        next,
+        ...recent.filter(
+          (entry) =>
+            entry.provider !== next.provider ||
+            entry.model !== next.model ||
+            entry.reasoningEffort !== next.reasoningEffort,
+        ),
+      ].slice(0, RECENT_MAX);
+      setRecent(merged);
+      try {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(merged));
+      } catch {
+        // A browser that refuses storage simply gets no recents.
+      }
+    }
     setOpen(false);
     setDrill(null);
+    // A programmatic close never fires onOpenChange, so the reset lives
+    // here too: the next open starts at the top of the catalog, filter
+    // cleared, recents visible.
+    setFilter("");
   };
+
+  const needle = filter.trim().toLowerCase();
+
+  // The filter narrows across providers and model names; a provider-name
+  // hit keeps its whole roster (searching "deepseek" wants every model).
+  const visibleGroups = groups
+    .map((group) =>
+      needle === "" || group.name.toLowerCase().includes(needle)
+        ? { group, models: group.models }
+        : { group, models: group.models.filter((m) => m.name.toLowerCase().includes(needle)) },
+    )
+    .filter((entry) => entry.models.length > 0);
+
+  // Recents resolve against the live catalog; stale ids (model retired)
+  // drop out silently rather than offering a dead row.
+  const recentRows =
+    needle === ""
+      ? recent.flatMap((entry) => {
+          const group = groups.find((g) => g.id === entry.provider);
+          const model = group?.models.find((m) => m.id === entry.model);
+          if (group === undefined || model === undefined) return [];
+          const effort =
+            entry.reasoningEffort === undefined
+              ? undefined
+              : model.reasoning?.efforts.find((e) => e.id === entry.reasoningEffort)?.name;
+          return [{ entry, providerName: group.name, modelName: model.name, effort }];
+        })
+      : [];
 
   const drilledGroup = drill === null ? undefined : groups.find((g) => g.id === drill.provider);
   const drilledModel = drilledGroup?.models.find((m) => m.id === drill?.model);
@@ -112,7 +193,10 @@ export function ComposerModelChip({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) setDrill(null);
+        if (!next) {
+          setDrill(null);
+          setFilter("");
+        }
       }}
     >
       <DialogTrigger
@@ -124,10 +208,22 @@ export function ComposerModelChip({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Choose a model</DialogTitle>
-          <DialogDescription>The model the new session runs on.</DialogDescription>
+          <DialogTitle>{drilledModel?.name ?? "Choose a model"}</DialogTitle>
+          <DialogDescription>
+            {drilledModel === undefined
+              ? "The model the new session runs on."
+              : "The thinking effort for this model."}
+          </DialogDescription>
         </DialogHeader>
-        <div className="max-h-72 overflow-y-auto">
+        {drilledModel === undefined && (
+          <Input
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder="Filter models"
+            aria-label="Filter models"
+          />
+        )}
+        <div className="max-h-[min(24rem,55vh)] overflow-y-auto">
           {drilledModel !== undefined && drilledGroup !== undefined && drill !== null ? (
             // Effort view: back row, the adapter-default choice, then the list.
             <div className="flex flex-col">
@@ -183,10 +279,33 @@ export function ComposerModelChip({
                 {...(defaultTarget !== undefined && { secondary: defaultTarget })}
                 leading="check"
               />
-              {groups.map((group) => (
+              {recentRows.length > 0 && (
+                <div className="flex flex-col">
+                  <p className={cn("px-1.5 pt-2 pb-0.5", LABEL)}>Recent</p>
+                  {recentRows.map(({ entry, providerName, modelName, effort }) => (
+                    <PickerRow
+                      key={`${entry.provider}/${entry.model}/${entry.reasoningEffort ?? ""}`}
+                      selected={
+                        value !== null &&
+                        value.provider === entry.provider &&
+                        value.model === entry.model &&
+                        value.reasoningEffort === entry.reasoningEffort
+                      }
+                      onSelect={() => pick(entry)}
+                      primary={effort === undefined ? modelName : `${modelName} · ${effort}`}
+                      label={providerName}
+                      leading="check"
+                    />
+                  ))}
+                  <div className="my-1 h-px bg-input" />
+                </div>
+              )}
+              {visibleGroups.map(({ group, models }) => (
                 <div key={group.id} className="flex flex-col">
-                  <p className={cn("px-1.5 pt-2 pb-0.5", LABEL)}>{group.name}</p>
-                  {group.models.map((model) => {
+                  <p className={cn("sticky top-0 z-10 bg-popover px-1.5 pt-2 pb-0.5", LABEL)}>
+                    {group.name}
+                  </p>
+                  {models.map((model) => {
                     const efforts = model.reasoning?.efforts ?? [];
                     const isSelected = value?.provider === group.id && value.model === model.id;
                     const selectedEffort =
@@ -217,6 +336,9 @@ export function ComposerModelChip({
                   })}
                 </div>
               ))}
+              {visibleGroups.length === 0 && (
+                <p className={cn("px-1.5 py-2", META)}>No models match “{filter}”.</p>
+              )}
             </div>
           )}
         </div>
