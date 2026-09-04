@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ModelProviderGroup } from "@deepseek-ai/dsh-host-apiproxy/api";
-import { RiSparklingLine } from "@remixicon/react";
+import { RiArrowLeftSLine, RiSparklingLine } from "@remixicon/react";
 
 import type { StartSessionModel } from "@/lib/start-session";
 import {
@@ -30,6 +30,75 @@ function readRecent(): StartSessionModel[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * One model's thinking efforts as CHIPS: the choices are short words
+ * (Off/Low/High), so a wrapping chip row beats a second full-width list.
+ * "Default" names the adapter's own pick (a selection without an effort
+ * override); the quiet line below carries the one fact the chips cannot
+ * show - which chip that is - or the selected effort's description.
+ */
+function EffortPicker({
+  group,
+  model,
+  value,
+  onPick,
+}: {
+  group: ModelProviderGroup;
+  model: ModelProviderGroup["models"][number];
+  /** The live selection; EffortPicker decides whether it names this model. */
+  value: StartSessionModel | null;
+  onPick: (next: StartSessionModel) => void;
+}) {
+  const selected =
+    value !== null && value.provider === group.id && value.model === model.id ? value : null;
+  const efforts = model.reasoning?.efforts ?? [];
+  const defaultEffort = efforts.find((e) => e.id === model.reasoning?.defaultEffort);
+  const activeEffort =
+    selected?.reasoningEffort === undefined
+      ? undefined
+      : efforts.find((e) => e.id === selected.reasoningEffort);
+  const chip = (active: boolean, onClick: () => void, key: string, text: string) => (
+    <button
+      key={key}
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "rounded-sm border border-input px-2.5 py-1 text-xs outline-none transition-colors hover:bg-accent focus-visible:bg-accent",
+        active && "border-transparent bg-primary font-medium text-primary-foreground",
+      )}
+    >
+      {text}
+    </button>
+  );
+  return (
+    <div className="flex flex-col gap-2 py-1">
+      <div className="flex flex-wrap gap-1.5">
+        {chip(
+          selected !== null && selected.reasoningEffort === undefined,
+          () => onPick({ provider: group.id, model: model.id }),
+          "__adapter-default__",
+          "Default",
+        )}
+        {efforts.map((effort) =>
+          chip(
+            selected?.reasoningEffort === effort.id,
+            () => onPick({ provider: group.id, model: model.id, reasoningEffort: effort.id }),
+            effort.id,
+            effort.name,
+          ),
+        )}
+      </div>
+      <p className={META}>
+        {activeEffort?.description ??
+          (defaultEffort === undefined
+            ? "The adapter's own default applies."
+            : `Adapter default: ${defaultEffort.name}`)}
+      </p>
+    </div>
+  );
 }
 
 /**
@@ -208,7 +277,21 @@ export function ComposerModelChip({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{drilledModel?.name ?? "Choose a model"}</DialogTitle>
+          {drilledModel === undefined ? (
+            <DialogTitle>Choose a model</DialogTitle>
+          ) : (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setDrill(null)}
+                aria-label="Back to models"
+                className="flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground"
+              >
+                <RiArrowLeftSLine className="size-4" />
+              </button>
+              <DialogTitle>{drilledModel.name}</DialogTitle>
+            </div>
+          )}
           <DialogDescription>
             {drilledModel === undefined
               ? "The model the new session runs on."
@@ -225,50 +308,9 @@ export function ComposerModelChip({
         )}
         <div className="max-h-[min(24rem,55vh)] overflow-y-auto">
           {drilledModel !== undefined && drilledGroup !== undefined && drill !== null ? (
-            // Effort view: back row, the adapter-default choice, then the list.
-            <div className="flex flex-col">
-              <PickerRow
-                selected={false}
-                onSelect={() => setDrill(null)}
-                primary={drilledModel.name}
-                secondary="Back to models"
-                leading="back"
-              />
-              <PickerRow
-                selected={
-                  value?.provider === drilledGroup.id &&
-                  value.model === drilledModel.id &&
-                  value.reasoningEffort === undefined
-                }
-                onSelect={() => pick({ provider: drilledGroup.id, model: drilledModel.id })}
-                primary="Adapter default"
-                {...(drilledModel.reasoning?.defaultEffort !== undefined && {
-                  secondary: `default effort: ${drilledModel.reasoning.defaultEffort}`,
-                })}
-                leading="check"
-              />
-              <div className="my-1 h-px bg-input" />
-              {(drilledModel.reasoning?.efforts ?? []).map((effort) => (
-                <PickerRow
-                  key={effort.id}
-                  selected={
-                    value?.provider === drilledGroup.id &&
-                    value.model === drilledModel.id &&
-                    value.reasoningEffort === effort.id
-                  }
-                  onSelect={() =>
-                    pick({
-                      provider: drilledGroup.id,
-                      model: drilledModel.id,
-                      reasoningEffort: effort.id,
-                    })
-                  }
-                  primary={effort.name}
-                  {...(effort.description !== undefined && { secondary: effort.description })}
-                  leading="check"
-                />
-              ))}
-            </div>
+            // Effort view: the choices are short words, so they are chips -
+            // one wrapping row, not a second list.
+            <EffortPicker group={drilledGroup} model={drilledModel} value={value} onPick={pick} />
           ) : (
             <div className="flex flex-col">
               <PickerRow
