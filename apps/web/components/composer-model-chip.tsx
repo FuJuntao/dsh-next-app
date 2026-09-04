@@ -113,10 +113,10 @@ function EffortPicker({
  * stick while the list scrolls; and the list is capped to the viewport
  * rather than a fixed 288px strip.
  *
- * The Default entry leads with "Default", then the provider (the same
- * LABEL font the group headers use) and the resolved target - model ·
- * thinking effort (META) - on their own lines. The effort resolves
- * through the truth the host itself applies: the configured
+ * The Default section wears the same shape as the Recent section: a
+ * LABEL header over a row whose primary is the resolved target - model ·
+ * thinking effort - with the provider as its LABEL line. The effort
+ * resolves through the truth the host itself applies: the configured
  * agent-default-model value first, then the adapter's declared default,
  * then the model alone.
  *
@@ -313,12 +313,17 @@ export function ComposerModelChip({
             <EffortPicker group={drilledGroup} model={drilledModel} value={value} onPick={pick} />
           ) : (
             <div className="flex flex-col">
+              {/* The Default section wears the same shape as Recent: a
+                  LABEL header over rows whose primary is the model itself.
+                  "Default" says what the choice IS; the row says what it
+                  resolves TO - no third footnote line. */}
+              <p className={cn("px-1.5 pt-1 pb-0.5", LABEL)}>Default</p>
               <PickerRow
                 selected={value === null}
                 onSelect={() => pick(null)}
-                primary="Default"
-                {...(defaultProviderName !== undefined && { label: defaultProviderName })}
-                {...(defaultTarget !== undefined && { secondary: defaultTarget })}
+                primary={defaultTarget ?? "Deployment default"}
+                {...(defaultTarget !== undefined &&
+                  defaultProviderName !== undefined && { label: defaultProviderName })}
                 leading="check"
               />
               {recentRows.length > 0 && (
