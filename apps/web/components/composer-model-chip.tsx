@@ -168,11 +168,16 @@ export function ComposerModelChip({
     defaultModel?.reasoning?.efforts.find((e) => e.id === defaultEffortId)?.name ??
     (defaultEffortId !== undefined ? defaultEffortId : undefined);
   const defaultTarget =
-    hostDefault === null || defaultModel === undefined
+    hostDefault === null
       ? undefined
-      : defaultEffortName === undefined
-        ? defaultModel.name
-        : `${defaultModel.name} · ${defaultEffortName}`;
+      : defaultModel === undefined
+        ? // The configured default is absent from the fetched catalog (a
+          // provider group failed upstream): name the raw target rather
+          // than leave the row without the resolution it promises.
+          `${hostDefault.provider}/${hostDefault.model}`
+        : defaultEffortName === undefined
+          ? defaultModel.name
+          : `${defaultModel.name} · ${defaultEffortName}`;
 
   // The chip's minimal label: model and effort only - no provider line.
   const selectedGroup = value === null ? undefined : groups.find((g) => g.id === value.provider);

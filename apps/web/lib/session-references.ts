@@ -71,7 +71,10 @@ export async function searchSessionReferences(query: string): Promise<ReferenceS
     const titles = new Map(
       nav.status === "ok" ? nav.sessions.map((s) => [s.id, s.title] as const) : [],
     );
-    const items = response.result.value.items.map((hit) => {
+    // The contract bounds results at 20 and asks the client to refine on
+    // `hasMore` (there is no continuation cursor): the slice is the
+    // defensive bound, the extra row is the refine cue.
+    const items: SessionReferenceHit[] = response.result.value.items.slice(0, 20).map((hit) => {
       // The nav's blank fallback "New Session" is not a title worth a
       // mention label - the id reads better there.
       const titled = titles.get(hit.sessionId);
@@ -83,6 +86,14 @@ export async function searchSessionReferences(query: string): Promise<ReferenceS
         mention: formatSessionReferenceMention({ sessionId: hit.sessionId, label }),
       };
     });
+    if (response.result.value.hasMore) {
+      items.push({
+        sessionId: "refine-query",
+        label: "More results - refine the query",
+        snippet: "",
+        mention: "@" + trimmed,
+      });
+    }
     return { ok: true, items };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
