@@ -6,7 +6,9 @@
  * bridge (apps/web/lib/bridge.ts, ADR-0010), which is server-only, so the
  * call must run server-side. The home composer is the caller that lands
  * with task #120; the picker fields ride in from the later tasks (#121,
- * #122, #125) and stay optional here.
+ * #122, #125) and stay optional here. A client-named `cwd` passes the
+ * shared containment fence (host-path.ts) before `session.create`: what
+ * the picker may name, this door accepts - nothing more.
  *
  * The result is a deliberate discriminated union rather than a throw: the
  * composer keeps the draft and renders the inline destructive Alert on
@@ -18,6 +20,7 @@
  */
 import type { RpcError } from "@deepseek-ai/dsh-host-apiproxy/api";
 import { getActionBridgeClient } from "./bridge";
+import { fenceInsideHostRoot } from "./host-path";
 
 /** A complete model selection to apply before the first prompt (task #125). */
 export type StartSessionModel = {
@@ -60,10 +63,21 @@ export async function startSession(input: StartSessionInput): Promise<StartSessi
   if (text === "") {
     return { ok: false, error: "nothing to send: the composer text is empty" };
   }
+  // The picker's containment is a server rule, not a client courtesy: a
+  // client-named cwd passes the same shared fence the browse door and the
+  // skills read enforce, or the send folds into the standard Alert.
+  let cwd: string | undefined;
+  if (input.cwd !== undefined) {
+    const fenced = await fenceInsideHostRoot(input.cwd);
+    if (!fenced.ok) {
+      return { ok: false, error: fenced.reason };
+    }
+    cwd = fenced.path;
+  }
   const client = getActionBridgeClient();
   try {
     const created = await client.sessions.create({
-      ...(input.cwd !== undefined && { cwd: input.cwd }),
+      ...(cwd !== undefined && { cwd }),
       ...(input.agentPreset !== undefined && { agentPreset: input.agentPreset }),
     });
     if (!created.result.ok) {

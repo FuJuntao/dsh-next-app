@@ -13,41 +13,21 @@
  * first `.agents/skills/` directory found wins (a session created under
  * a subfolder resolves to the same project root). One skill per
  * subdirectory with a `SKILL.md`; its frontmatter's `name`/`description`
- * are the menu's label and second line. Containment matches host-browse:
- * a path outside the default folder's subtree is refused before any read.
+ * are the menu's label and second line. Containment is the shared fence
+ * (host-path.ts) - the same line the browse door and the session's `cwd`
+ * enforce - so a path outside the subtree is refused before any read.
  *
  * This powers completion only - invocation is a plain `session.prompt`
  * whose leading `/name` the host recognizes at the pre-step boundary
  * (the skills contract), so a stale or missing entry here can never
  * break a send, only fail to suggest it.
  */
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { dirname, join, resolve, sep } from "node:path";
-import { getActionBridgeClient } from "./bridge";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fenceInsideHostRoot, getHostRoot } from "./host-path";
 
 /** One project skill as the `/` menu consumes it. */
 export type ProjectSkill = { name: string; description: string };
-
-/** The host's default working folder (realpath-stable), cached per process. */
-let hostCwd: string | undefined;
-
-async function getHostCwd(): Promise<string | null> {
-  if (hostCwd !== undefined) return hostCwd;
-  try {
-    const response = await getActionBridgeClient().host.describe({});
-    if (!response.result.ok) {
-      console.error(
-        `[host-skills] host.describe failed: ${response.result.error.code} ${response.result.error.message}`,
-      );
-      return null;
-    }
-    hostCwd = realpathSync(response.result.value.cwd);
-    return hostCwd;
-  } catch (error) {
-    console.error("[host-skills] host.describe failed:", error);
-    return null;
-  }
-}
 
 /**
  * List the project skills visible to a session created at `cwd`. Any
@@ -56,16 +36,13 @@ async function getHostCwd(): Promise<string | null> {
  * nothing about the miss.
  */
 export async function fetchProjectSkills(cwd: string): Promise<ProjectSkill[]> {
-  const root = await getHostCwd();
+  const fenced = await fenceInsideHostRoot(cwd);
+  if (!fenced.ok) return [];
+  const root = await getHostRoot();
   if (root === null) return [];
-  let real: string;
-  try {
-    real = realpathSync(resolve(cwd));
-  } catch {
-    return [];
-  }
-  if (real !== root && !real.startsWith(root + sep)) return [];
-  for (let dir = real; ; dir = dirname(dir)) {
+  // The fence returns a canonical path, so the walk-up climbs only real
+  // parents inside the subtree - no symlink can join it.
+  for (let dir = fenced.path; ; dir = dirname(dir)) {
     const skillsDir = join(dir, ".agents", "skills");
     if (existsSync(skillsDir)) return readSkills(skillsDir);
     if (dir === root || dirname(dir) === dir) break;

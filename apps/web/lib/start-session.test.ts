@@ -7,6 +7,9 @@
  * real profile refuses to produce on demand, so they are pinned here with
  * a mocked bridge (precedent: session-view.test.ts).
  */
+import { mkdtempSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import { RpcId } from "@deepseek-ai/dsh-host-apiproxy/api";
@@ -14,7 +17,10 @@ import type { RpcResponse } from "@deepseek-ai/dsh-host-apiproxy/api";
 
 // The action module pulls the bridge client at call time; hand it the fake
 // below instead of a unix socket.
+// The cwd fence (host-path) canonicalizes against the REAL fs, so the
+// test root is a real temp dir and the chosen folder lives under it.
 const fake = vi.hoisted(() => ({
+  host: { describe: vi.fn() },
   sessions: {
     create: vi.fn(),
     selectModel: vi.fn(),
@@ -46,7 +52,23 @@ function calls(fn: Mock): unknown[] {
   return fn.mock.calls.map((args) => args[0]);
 }
 
+const base = realpathSync(mkdtempSync(join(tmpdir(), "start-session-test-")));
+const thing = join(base, "thing");
+
 beforeEach(() => {
+  // The fence asks the bridge who the host root is before anything else.
+  fake.host.describe.mockReset().mockResolvedValue({
+    result: {
+      ok: true,
+      value: {
+        cwd: base,
+        version: "test",
+        attachedSessions: 0,
+        home: "/home/tester",
+        canOpenPath: false,
+      },
+    },
+  });
   fake.sessions.create.mockReset();
   fake.sessions.selectModel.mockReset();
   fake.sessions.prompt.mockReset();
@@ -76,7 +98,7 @@ describe("startSession - happy path", () => {
 
     const result = await startSession({
       text: "  build me a thing  ",
-      cwd: "/work/thing",
+      cwd: thing,
       agentPreset: "builder",
       model: { provider: "acme", model: "acme-xl", reasoningEffort: "high" },
       clientTimeZone: "Asia/Shanghai",
@@ -84,7 +106,7 @@ describe("startSession - happy path", () => {
 
     expect(result).toEqual({ ok: true, sessionId: "session-1" });
     expect(order).toEqual(["create", "selectModel", "prompt"]);
-    expect(calls(fake.sessions.create)).toEqual([{ cwd: "/work/thing", agentPreset: "builder" }]);
+    expect(calls(fake.sessions.create)).toEqual([{ cwd: thing, agentPreset: "builder" }]);
     expect(calls(fake.sessions.selectModel)).toEqual([
       { sessionId: "session-1", provider: "acme", model: "acme-xl", reasoningEffort: "high" },
     ]);
