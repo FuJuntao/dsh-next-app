@@ -2,12 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactElement } from "react";
-import {
-  RiArrowDownSLine,
-  RiArrowRightSLine,
-  RiCheckLine,
-  RiFolder5Line,
-} from "@remixicon/react";
+import { RiArrowDownSLine, RiArrowRightSLine, RiCheckLine, RiFolder5Line } from "@remixicon/react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -97,12 +92,8 @@ type SeedResult = { seed: TreeSeed } | { error: string };
 let seedCache: TreeSeed | null = null;
 let seedPromise: Promise<SeedResult> | null = null;
 
-const visibleEntries = (
-  entries: { name: string; path: string; hidden: boolean }[],
-): TreeNode[] =>
-  entries
-    .filter((entry) => !entry.hidden)
-    .map((entry) => ({ name: entry.name, path: entry.path }));
+const visibleEntries = (entries: { name: string; path: string; hidden: boolean }[]): TreeNode[] =>
+  entries.filter((entry) => !entry.hidden).map((entry) => ({ name: entry.name, path: entry.path }));
 
 /** The root listing, deduplicated across the prefetch and the tree mount. */
 function getSeed(): Promise<SeedResult> {
@@ -133,11 +124,11 @@ function getSeed(): Promise<SeedResult> {
       .catch((cause: unknown): SeedResult => ({
         error: cause instanceof Error ? cause.message : String(cause),
       }))
-        .finally(() => {
-          // A failed seed must not poison the next attempt; a resolved one
-          // is already in seedCache.
-          seedPromise = null;
-        });
+      .finally(() => {
+        // A failed seed must not poison the next attempt; a resolved one
+        // is already in seedCache.
+        seedPromise = null;
+      });
   }
   return seedPromise;
 }
@@ -156,16 +147,12 @@ function getSeed(): Promise<SeedResult> {
  * platform convention; the client owns the display choice) stay out of
  * the tree. Collapsing and re-expanding a failed node retries it.
  */
-function FolderTree({
-  value,
-  onPick,
-}: {
-  value: string | null;
-  onPick: (path: string) => void;
-}) {
+function FolderTree({ value, onPick }: { value: string | null; onPick: (path: string) => void }) {
   const [root, setRoot] = useState<TreeNode | null>(seedCache?.root ?? null);
   const [rootError, setRootError] = useState<string | null>(null);
-  const [children, setChildren] = useState<Record<string, ChildrenState>>(seedCache?.children ?? {});
+  const [children, setChildren] = useState<Record<string, ChildrenState>>(
+    seedCache?.children ?? {},
+  );
   const [expanded, setExpanded] = useState<Record<string, boolean>>(seedCache?.expanded ?? {});
   // Stale-response guard per node: fast expand clicks must not land out of order.
   const seqRef = useRef<Record<string, number>>({});
@@ -188,7 +175,10 @@ function FolderTree({
           },
         }));
       } else {
-        setChildren((prev) => ({ ...prev, [path]: { ...prev[path], loading: false, error: result.error } }));
+        setChildren((prev) => ({
+          ...prev,
+          [path]: { ...prev[path], loading: false, error: result.error },
+        }));
       }
     });
   }, []);
@@ -269,7 +259,10 @@ function FolderTree({
               // the load outlives the delay (a fast listing reserves no
               // space), and a refresh that HAS stale entries keeps them
               // on screen instead.
-              <SkeletonRows rows={["h-4 w-32", "h-4 w-32", "h-4 w-32"]} indent={(depth + 1) * INDENT} />
+              <SkeletonRows
+                rows={["h-4 w-32", "h-4 w-32", "h-4 w-32"]}
+                indent={(depth + 1) * INDENT}
+              />
             ) : state.entries === undefined && state.error !== undefined ? (
               <p
                 className="py-1 text-xs break-all text-destructive"
@@ -323,9 +316,7 @@ function FolderTree({
       />
     );
   }
-  return (
-    <div className="max-h-72 overflow-y-auto">{renderNode(root, 0, true)}</div>
-  );
+  return <div className="max-h-72 overflow-y-auto">{renderNode(root, 0, true)}</div>;
 }
 
 /**

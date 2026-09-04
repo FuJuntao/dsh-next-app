@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
  *   the primary it sits under).
  */
 export const PRIMARY_SELECTED = "bg-accent/60 font-medium";
-export const LABEL = "block break-words text-[11px] leading-tight font-medium text-muted-foreground";
+export const LABEL =
+  "block break-words text-[11px] leading-tight font-medium text-muted-foreground";
 export const META = "block break-words text-[11px] leading-tight text-muted-foreground";
 
 /** One selectable row of a picker dialog. */

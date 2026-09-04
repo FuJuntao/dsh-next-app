@@ -96,7 +96,10 @@ function readSkills(skillsDir: string): ProjectSkill[] {
         if (colon <= 0) continue;
         fields.set(
           line.slice(0, colon).trim(),
-          line.slice(colon + 1).trim().replace(/^["'](.*)["']$/u, "$1"),
+          line
+            .slice(colon + 1)
+            .trim()
+            .replace(/^["'](.*)["']$/u, "$1"),
         );
       }
       const description = fields.get("description");
