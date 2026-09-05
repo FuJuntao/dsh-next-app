@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { stopProfile } from "./profile";
 import { sleep } from "./process";
+import type { ScriptedModel } from "./scripted-model";
 import { STATE_PATH, type E2EState } from "./state";
 
 /** Stop the profile (SIGTERM then SIGKILL its process group) and remove the scratch dir. */
@@ -65,5 +66,12 @@ export default async function globalTeardown(): Promise<void> {
 
     rmSync(state.scratchDir, { recursive: true, force: true });
   }
+  // The scripted provider lives in this same process (global setup started
+  // it); close it so the run cannot leave the listener behind.
+  const scripted = (globalThis as Record<string, unknown>)["__dshE2EScriptedModel"] as
+    | ScriptedModel
+    | undefined;
+  delete (globalThis as Record<string, unknown>)["__dshE2EScriptedModel"];
+  await scripted?.stop();
   rmSync(STATE_PATH, { force: true });
 }

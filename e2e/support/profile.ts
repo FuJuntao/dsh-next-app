@@ -1,5 +1,5 @@
 import { randomBytes, scryptSync } from "node:crypto";
-import { createWriteStream, mkdirSync, writeFileSync } from "node:fs";
+import { createWriteStream, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { freePort } from "./port";
@@ -122,6 +122,37 @@ export function writeRuntimePatch(profileDir: string, config?: ProfileRuntimeCon
 }
 
 /**
+ * Prune the profile-local copy of `@deepseek-ai/dsh-tools` after a fresh
+ * `dsh plugin add` (story #134 task #135 commit 2).
+ *
+ * Why: installing the bundle hoists apiproxy's host graph into the profile,
+ * so the profile root carries its own dsh-tools while `dsh-agent-loop` (not
+ * in the bundle graph) loads from the host's global install and imports
+ * THAT copy. Tool execution crosses the two through
+ * `TOOL_RUNTIME_SCHEDULER` - a module-scoped `Symbol()`, not `Symbol.for` -
+ * so the agent loop reads `ctx.tools[SYM_global]` on the instance built
+ * from `SYM_profile`: undefined, and every tool call dies with "Cannot
+ * read properties of undefined (reading 'prepare')". Verified empirically
+ * against two independent installs (preview + e2e layout): pruning the
+ * profile root copy makes base rows and agent-loop share one instance, and
+ * tool execution completes.
+ *
+ * This is a test-fixture seam for a PRODUCT gap - see the follow-up issue
+ * ("next-app profile: duplicated host graph breaks tool execution"); the
+ * production profile composes the same collision and is fixed in the
+ * product, not here. The apiproxy client keeps working because its own
+ * nested (`.pnpm`) resolution still finds its dependencies; only the
+ * hoisted root copy that shadows the global for CORDIS ROW resolution is
+ * removed.
+ */
+export function pruneProfileHostDupes(profileDir: string): void {
+  rmSync(join(profileDir, "node_modules", "@deepseek-ai", "dsh-tools"), {
+    recursive: true,
+    force: true,
+  });
+}
+
+/**
  * Boot one profile instance on a free port and resolve once the serving URL
  * is announced on stdout. With a logsDir the instance's stdout/stderr are
  * teed into it for the specs to assert (the supervision specs use the stderr
@@ -149,7 +180,13 @@ export async function bootProfile(
   return new Promise((resolve, reject) => {
     const child = spawn("dsh", argv, {
       cwd: REPO_ROOT,
-      env: { ...process.env, DSH_HOME: dshHome },
+      // DSH_PERMISSION_MODE is pinned CONFINED on purpose (task #135
+      // commit 2): the bundle patch derives the approval policy from it
+      // ('never' under danger-full-access), and the launching shell's own
+      // mode must not silently disable the suite's approval scenarios.
+      // An unset mode defaults the same way; the pin keeps the suite
+      // hermetic against a fully-open launcher environment.
+      env: { ...process.env, DSH_HOME: dshHome, DSH_PERMISSION_MODE: "workspace-write" },
       stdio: ["ignore", "pipe", "pipe"],
       // Own process group: stopping the instance kills dsh and its children.
       detached: true,

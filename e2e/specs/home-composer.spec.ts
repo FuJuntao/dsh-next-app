@@ -298,7 +298,10 @@ test("the model picker selection is applied before the first prompt", async ({ p
     await expect(dialog.getByRole("button", { name: "Default", exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: effort.name, exact: true }).click();
   }
-  await expect(page.getByRole("button", { name: "Model" })).toContainText(model.name);
+  // exact:true - catalog option buttons (e.g. "Stub Model", joined with
+  // task #135's scripted provider) contain "Model" in their names; the
+  // composer chip is the ONLY button named exactly "Model".
+  await expect(page.getByRole("button", { name: "Model", exact: true })).toContainText(model.name);
   await composer.pressSequentially("model picker send");
   await page.getByRole("button", { name: "Start session" }).click();
   await expect(page).toHaveURL(/\/sessions\/[^/]+$/);
