@@ -4,54 +4,12 @@ import Link from "next/link";
 import { SessionTranscript } from "@/components/chat/session-transcript";
 import { SessionComposerIsland } from "@/components/session-composer-island";
 import { buttonVariants } from "@/components/ui/button";
-import { fetchSessionPage, type SessionPageData } from "@/lib/session-page-data";
-import type { SessionProjectionsBlock } from "@deepseek-ai/dsh-host-apiproxy/api";
+import { fetchSessionPage } from "@/lib/session-page-data";
 
 export const metadata: Metadata = {
   title: "Session",
   description: "A dsh session",
 };
-
-/**
- * Title cell of the projections block. The "title" UNIT is declared by the
- * host's session-title package (invisible to this app's view of the
- * projection map), so the slot is read structurally - same as the side
- * nav's toSession (lib/sessions.ts); null means no title yet.
- */
-function titleOf(projections: SessionProjectionsBlock | undefined): string | null {
-  const values = projections?.values as Record<string, unknown> | undefined;
-  const value = values?.["title"];
-  return typeof value === "string" && value !== "" ? value : null;
-}
-
-/** Human, deterministic date for the meta line (server-rendered, no Intl drift). */
-function formatDate(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 16).replace("T", " ");
-}
-
-function Header({
-  data,
-  sessionId,
-}: {
-  data: Extract<SessionPageData, { status: "ok" }>;
-  sessionId: string;
-}) {
-  const title = titleOf(data.window.projections) ?? "New Session";
-  return (
-    <header className="flex flex-col gap-0.5 border-b border-border/60 px-4 py-3 sm:px-6">
-      <h1 className="truncate text-base font-medium">{title}</h1>
-      <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-        {data.meta?.cwd !== undefined && (
-          <span className="truncate font-mono">{data.meta.cwd}</span>
-        )}
-        {data.meta !== null && <span>Updated {formatDate(data.meta.updatedAt)}</span>}
-        <span className="font-mono opacity-60">
-          {sessionId.slice("session-".length, 8 + "session-".length)}
-        </span>
-      </div>
-    </header>
-  );
-}
 
 export default async function SessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -92,7 +50,6 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <Header data={data} sessionId={id} />
       <SessionTranscript
         sessionId={id}
         initialEntries={data.window.entries}
@@ -101,6 +58,14 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
           ? { initialProjections: data.window.projections }
           : {})}
         blank={data.blank}
+        meta={
+          data.meta === null
+            ? null
+            : {
+                updatedAt: data.meta.updatedAt,
+                ...(data.meta.cwd !== undefined ? { cwd: data.meta.cwd } : {}),
+              }
+        }
       />
       <div className="border-t border-border/60 px-4 py-3 sm:px-6">
         <div className="mx-auto w-full max-w-3xl">
