@@ -13,7 +13,6 @@
  */
 import type { SessionSummary } from "@deepseek-ai/dsh-host-apiproxy/api";
 import { getBridgeClient } from "./bridge";
-import { mockSessionsResult } from "./sessions.mock";
 
 /** One session row in the side nav (the story's session shape). */
 export interface Session {
@@ -69,12 +68,6 @@ function toSession(summary: SessionSummary): Session {
  * Business errors surface the same way: the list cannot render.
  */
 export async function fetchSessions(): Promise<SessionsResult> {
-  // Dev-only mock seam (visual testing): returns the controlled list or
-  // the bridge-down state before any bridge call. The gate is the absence
-  // of the <runDir>/mock-sessions switch file - without it the real path
-  // below is the only one that ever runs, production included.
-  const mock = mockSessionsResult();
-  if (mock !== undefined) return mock;
   try {
     const response = await getBridgeClient().sessions.list({});
     if (!response.result.ok) {
