@@ -375,9 +375,11 @@ test("the side nav shows the real sessions list, empty in a fresh profile", asyn
   // An empty list through a healthy bridge (ok) must be distinguishable
   // from the bridge-down state: no error row may render here.
   await expect(nav.getByText("Sessions unavailable")).toHaveCount(0);
-  // The sessions detail route still renders as its own page.
+  // The sessions detail route still renders as its own page - and since
+  // story #134 it answers honestly: an id with no session log gets the
+  // unknown-session state (the old placeholder echoed the raw id).
   await page.goto(state.baseURL + "/sessions/2");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session 2");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Unknown session");
 });
 
 test("the mobile drawer shows the brand and the empty sessions list", async ({ page }) => {
