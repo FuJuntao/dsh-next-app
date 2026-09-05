@@ -35,13 +35,21 @@ import type { HistoryEntry, SessionProjectionsBlock } from "@deepseek-ai/dsh-hos
 import { TranscriptRow } from "@/components/chat/transcript-rows";
 import { useSessionLive } from "@/components/chat/use-session-live";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SessionComposer } from "@/components/session-composer";
+import { SLASH_MENU_ENTRIES } from "@/lib/slash-commands";
+import { cancelTurn, sendPrompt } from "@/lib/chat-send";
 import { navTitleOf, setNavTitle } from "@/lib/nav-live";
 import { loadOlderHistory } from "@/lib/session-history-action";
 import {
+  reconcileProvisional,
   createTranscript,
   foldHistoryPage,
+  markProvisional,
   prependHistoryPage,
   seedProjections,
+  withdrawProvisional,
+  type QueuedItem,
   type TranscriptItem,
   type TranscriptState,
 } from "@/lib/transcript";
@@ -108,11 +116,55 @@ export function SessionTranscript(props: SessionTranscriptProps) {
   const [unseen, setUnseen] = useState(0);
   const [atBottom, setAtBottom] = useState(true);
 
+  const [running, setRunning] = useState<boolean>(() => fold.runningTurn !== null);
+  const [queue, setQueue] = useState<QueuedItem[]>(() => [...fold.queue]);
+  const [sendError, setSendError] = useState<string | null>(null);
+
   const sync = useCallback((): void => {
     if (foldRef.current === null) return;
     setItems([...foldRef.current.items]);
     setHasMore(foldRef.current.hasMore);
+    setRunning(foldRef.current.runningTurn !== null);
+    setQueue([...foldRef.current.queue]);
   }, []);
+
+  // The write flow (AC 13/15). The provisional row is minted with a temp
+  // key, re-keyed to the prompt's rpcId when the action resolves (that is
+  // what the durable user/message will carry), and withdrawn on refusal -
+  // while the composer keeps the draft and the Alert shows the reason
+  // (throwing back is what tells the composer the send failed).
+  const handleSend = useCallback(
+    async (text: string, mode: "steer" | "queue"): Promise<void> => {
+      const state = foldRef.current;
+      if (state === null) return;
+      const tempKey = "tmp-" + Math.random().toString(36).slice(2);
+      markProvisional(state, { rpcId: tempKey, text: text.trim(), time: Date.now() });
+      sync();
+      const result = await sendPrompt({
+        sessionId,
+        text,
+        mode,
+        clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      if (result.ok) {
+        reconcileProvisional(state, tempKey, result.rpcId);
+        setSendError(null);
+      } else {
+        withdrawProvisional(state, tempKey);
+        setSendError(result.error);
+        sync();
+        throw new Error(result.error); // preserve the draft (composer contract)
+      }
+      sync();
+    },
+    [sessionId, sync],
+  );
+
+  const handleStop = useCallback((): void => {
+    void cancelTurn(sessionId).then((result) => {
+      if (!result.ok) setSendError(result.error);
+    });
+  }, [sessionId]);
 
   const onTitle = useCallback((next: string): void => setTitle(next), []);
 
@@ -260,9 +312,40 @@ export function SessionTranscript(props: SessionTranscriptProps) {
             {items.map((item) => (
               <TranscriptRow key={item.id} item={item} />
             ))}
+            {/* The queued strip (AC 14): pending `queued` items at the tail,
+                muted, read-only - an item leaves when the agent claims it. */}
+            {queue.length > 0 && (
+              <div className="mt-2 flex flex-col gap-1 border-t border-dashed border-border/60 pt-2">
+                {queue.map((q) => (
+                  <div key={q.id} className="truncate text-xs text-muted-foreground italic">
+                    {q.text.split("\n")[0]}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         {pill}
+      </div>
+      {/* The composer (island of its own chrome): steer/queue gestures, the
+          stop control while a turn runs, and the inline send Alert (AC 13's
+          failure keeps the draft). */}
+      <div className="border-t border-border/60 px-4 py-3 sm:px-6">
+        <div className="mx-auto w-full max-w-3xl space-y-2">
+          {sendError !== null && (
+            <Alert variant="destructive">
+              <AlertDescription>{sendError}</AlertDescription>
+            </Alert>
+          )}
+          <SessionComposer
+            commands={[...SLASH_MENU_ENTRIES]}
+            references={[]}
+            sendModes
+            running={running}
+            onStop={handleStop}
+            onSubmit={handleSend}
+          />
+        </div>
       </div>
     </>
   );

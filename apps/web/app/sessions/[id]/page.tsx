@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { SessionTranscript } from "@/components/chat/session-transcript";
-import { SessionComposerIsland } from "@/components/session-composer-island";
 import { buttonVariants } from "@/components/ui/button";
 import { fetchSessionPage } from "@/lib/session-page-data";
 
@@ -67,11 +66,6 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
               }
         }
       />
-      <div className="border-t border-border/60 px-4 py-3 sm:px-6">
-        <div className="mx-auto w-full max-w-3xl">
-          <SessionComposerIsland />
-        </div>
-      </div>
     </section>
   );
 }

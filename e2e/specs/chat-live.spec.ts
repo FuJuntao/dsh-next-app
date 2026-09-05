@@ -9,7 +9,7 @@
  * The scripted provider's timing knobs (delayed chunked replies) are what
  * make "live" observable rather than a race against a settled turn.
  */
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -118,12 +118,12 @@ test("Load older pages the transcript in place", async ({ page }) => {
   // The oldest loaded row before the click (whatever it is) must remain
   // visible after, and a row from the newly fetched page must appear.
   await older.click();
-  await expect(page.getByText("paging filler 0", { exact: false })).toBeVisible({
+  await expect(scroller.getByText("paging filler 0", { exact: false })).toBeVisible({
     timeout: 20_000,
   });
   // Scroll preservation: the viewport did not slam to the top on prepend -
   // the settled rows near the bottom are still in view.
-  await expect(page.getByText("paging filler 15", { exact: false })).toBeVisible();
+  await expect(scroller.getByText("paging filler 15", { exact: false })).toBeVisible();
 });
 
 test("an unknown id gets the distinct unknown-session state", async ({ page }) => {

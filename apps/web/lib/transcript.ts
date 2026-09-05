@@ -1068,6 +1068,30 @@ export function markProvisional(
   });
 }
 
+/**
+ * Converge the provisional row with its durable echo once the send action
+ * resolves - BOTH orders, because the downlink can beat the action's
+ * response: if the durable `user/message` (carrying the RPC's rpcId) has
+ * already landed, the provisional row is simply withdrawn (the durable one
+ * IS the row); if it has not, the provisional row is re-keyed so the
+ * arriving echo replaces it in place. Either order settles to exactly one.
+ */
+export function reconcileProvisional(state: TranscriptState, tempKey: string, rpcId: string): void {
+  const durable = state.items.some(
+    (item) => item.kind === "user" && item.provisional !== true && item.rpcId === rpcId,
+  );
+  if (durable) {
+    withdrawProvisional(state, tempKey);
+    return;
+  }
+  for (const item of state.items) {
+    if (item.kind === "user" && item.provisional === true && item.rpcId === tempKey) {
+      item.rpcId = rpcId;
+      return;
+    }
+  }
+}
+
 /** Flag the provisional row failed (a refused send keeps the draft, AC 13). */
 export function markProvisionalFailed(state: TranscriptState, rpcId: string): void {
   const item = state.items.find(

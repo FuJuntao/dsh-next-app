@@ -72,7 +72,7 @@ export const DEFAULT_SCENARIOS: ScriptedScenario[] = [
       {
         text: "Streaming alpha. beta gamma. delta. the quick brown fox. jumps over. the lazy dog. END-OF-STREAM.",
         chunkParts: 12,
-        chunkDelayMs: 120,
+        chunkDelayMs: 300,
       },
     ],
   },
@@ -276,6 +276,58 @@ export async function startScriptedModel(
           (m) => m !== null && typeof m === "object" && (m as { role?: unknown }).role === "tool",
         ).length;
         const model = typeof body.model === "string" ? body.model : "stub-model";
+        // The session-title unit asks the model for a title with its own
+        // system prompt. Answer it deterministically - derived from the
+        // embedded human prompt (marker token stripped) - so title
+        // liveness is testable and never lands on a scenario's long reply.
+        if (JSON.stringify(body).includes("concise title")) {
+          served.push({ marker: "title", step: 0, model });
+          // The title unit's user message embeds the human messages as a JSON
+          // array ([{seq,text},...]); title off THOSE, not the instruction
+          // sentence (which would otherwise become the literal title).
+          const embedded = /\[\s*\{[\s\S]*\]\s*$/.exec(prompt);
+          let humanText = prompt;
+          if (embedded !== null) {
+            try {
+              const arr = JSON.parse(embedded[0]) as { text?: unknown }[];
+              humanText = arr.map((m) => (typeof m.text === "string" ? m.text : "")).join(" ");
+            } catch {
+              // keep the prompt when the tail is not parseable JSON
+            }
+          }
+          const derived =
+            humanText
+              .replace(/scripted-[\w-]+/g, "")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 60) || "Scripted session";
+          const titleId = `chatcmpl-title-${String(++seq)}`;
+          res.writeHead(200, {
+            "content-type": "text/event-stream",
+            "cache-control": "no-cache, no-store",
+            "x-accel-buffering": "no",
+          });
+          const sendTitle = (payload: unknown): void => {
+            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+          };
+          const titleChunk = (
+            delta: Record<string, unknown>,
+            finish: string | null = null,
+          ): void => {
+            sendTitle({
+              id: titleId,
+              object: "chat.completion.chunk",
+              created: Math.floor(Date.now() / 1000),
+              model,
+              choices: [{ index: 0, delta, ...(finish !== null ? { finish_reason: finish } : {}) }],
+            });
+          };
+          titleChunk({ role: "assistant", content: derived });
+          titleChunk({}, "stop");
+          res.write("data: [DONE]\n\n");
+          res.end();
+          return;
+        }
         served.push({ marker, step, model });
         const scripted = scenario?.steps[step] ?? (step === 0 ? DEFAULT_STEP : { text: "Done." });
         if (scripted.httpError !== undefined) {

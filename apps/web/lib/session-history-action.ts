@@ -7,7 +7,12 @@
  * come back folded too (never a thrown action the client must catch).
  * The bridge call itself lives in session-page-data.ts.
  */
-import { fetchOlderPage, fetchSessionPage, type HistoryWindow, type OlderPageResult } from "./session-page-data";
+import {
+  fetchOlderPage,
+  fetchSessionPage,
+  type HistoryWindow,
+  type OlderPageResult,
+} from "./session-page-data";
 
 export async function loadOlderHistory(
   sessionId: string,

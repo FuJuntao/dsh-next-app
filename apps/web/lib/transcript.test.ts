@@ -22,6 +22,7 @@ import {
   markProvisional,
   markProvisionalFailed,
   prependHistoryPage,
+  reconcileProvisional,
   seedProjections,
   withdrawProvisional,
   type WireEvent,
@@ -537,6 +538,36 @@ describe("tool views (AC 4)", () => {
     expect(tool?.kind === "tool" && tool.callView).toBeDefined();
     expect(tool?.kind === "tool" && tool.resultView).toBeDefined();
     expect(tool?.kind === "tool" && (tool.callView as { title?: string }).title).toBe("ls -al");
+  });
+});
+
+describe("provisional/durable convergence", () => {
+  const durableUser = (seq: number, rpcId: string): WireEvent =>
+    ev("user/message", seq, {
+      role: "user",
+      id: `m${String(seq)}`,
+      content: [{ type: "text", text: "typed" }],
+      source: { kind: "user", rpcId },
+    });
+
+  it("durable-lands-first: reconcile withdraws the provisional, leaving one row", () => {
+    const state = createTranscript();
+    markProvisional(state, { rpcId: "tmp-1", text: "typed", time: 1 });
+    foldEvent(state, durableUser(2, "real-9")); // beat the action
+    reconcileProvisional(state, "tmp-1", "real-9");
+    const users = state.items.filter((item) => item.kind === "user");
+    expect(users).toHaveLength(1);
+    expect(users[0]?.kind === "user" && users[0].provisional).toBeUndefined();
+  });
+
+  it("action-lands-first: reconcile re-keys so the echo replaces in place", () => {
+    const state = createTranscript();
+    markProvisional(state, { rpcId: "tmp-2", text: "typed", time: 1 });
+    reconcileProvisional(state, "tmp-2", "real-8");
+    foldEvent(state, durableUser(3, "real-8"));
+    const users = state.items.filter((item) => item.kind === "user");
+    expect(users).toHaveLength(1);
+    expect(users[0]?.kind === "user" && users[0].seq).toBe(3);
   });
 });
 

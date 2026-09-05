@@ -24,9 +24,22 @@ import {
   MenuOption,
   type MenuTextMatch,
 } from "@lexical/react/LexicalTypeaheadMenuPlugin";
-import { RiChat3Line, RiFileLine, RiSendPlane2Fill, RiTerminalBoxLine } from "@remixicon/react";
+import {
+  RiArrowDropDownLine,
+  RiChat3Line,
+  RiFileLine,
+  RiSendPlane2Fill,
+  RiStopLine,
+  RiTerminalBoxLine,
+} from "@remixicon/react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +69,9 @@ export type ComposerEntry = {
   key?: string;
 };
 
+/** Which inbox placement a submit gesture asked for (AC 13). */
+export type SendMode = "steer" | "queue";
+
 export type SessionComposerProps = {
   /** Injected `/` source. */
   commands: ComposerEntry[];
@@ -63,8 +79,11 @@ export type SessionComposerProps = {
    * Pluggable submit action, supplied by the surface. Resolving means the text
    * was accepted: the composer clears the draft. Rejecting means failure: the
    * surface renders the error and the composer preserves the draft for retry.
+   * The mode is the gesture that fired it (story #134 AC 13): the session
+   * page steers on the primary gesture and queues on the chord/secondary;
+   * surfaces without modes (home) ignore the parameter.
    */
-  onSubmit: (text: string) => Promise<unknown>;
+  onSubmit: (text: string, mode: SendMode) => Promise<unknown>;
   /** Empty-state text and accessible name; defaults to the session wording. */
   placeholder?: string;
   /** Injected `@` source (static list; filtered locally against the query). */
@@ -104,6 +123,17 @@ export type SessionComposerProps = {
    * not yet accept typing.
    */
   lockedHint?: string;
+  /**
+   * Steer/queue chrome (session page, AC 13/15): Enter and the Send button
+   * STEER (the primary gesture interrupts the running turn), Cmd/Ctrl+Enter
+   * and the chevron menu QUEUE, and a running turn grows the stop control.
+   * Default false keeps home's single-submit chrome untouched.
+   */
+  sendModes?: boolean;
+  /** Whether a turn is running (drives the stop control). */
+  running?: boolean;
+  /** Stop the running turn (AC 15); rendered only while `running`. */
+  onStop?: () => void;
 };
 
 class ComposerOption extends MenuOption {
@@ -260,7 +290,7 @@ function useComposerSubmit({
   enabledRef,
   setIsPending,
 }: {
-  onSubmit: (text: string) => Promise<unknown>;
+  onSubmit: (text: string, mode: SendMode) => Promise<unknown>;
   pendingRef: RefObject<boolean>;
   /** Sync gate from the surface (e.g. "no working folder chosen yet"). */
   enabledRef: RefObject<boolean>;
@@ -275,39 +305,42 @@ function useComposerSubmit({
     onSubmitRef.current = onSubmit;
   }, [onSubmit]);
 
-  return useCallback(() => {
-    if (pendingRef.current) return;
-    // Surface refused the send (disabled state): swallow it on every path,
-    // button and Enter alike.
-    if (!enabledRef.current) return;
-    let text = "";
-    editor.getEditorState().read(() => {
-      text = $getRoot().getTextContent().trim();
-    });
-    if (text.length === 0) return;
-    pendingRef.current = true;
-    setIsPending(true);
-    void (async () => {
-      try {
-        await onSubmitRef.current(text);
-        // Accepted: drop the draft (the surface navigates or shows it sent).
-        // The editor may already be gone when the action navigates away.
-        const root = editor.getRootElement();
-        if (root !== null && root.isConnected) {
-          editor.update(() => {
-            $getRoot().clear();
-          });
+  return useCallback(
+    (mode: SendMode = "steer") => {
+      if (pendingRef.current) return;
+      // Surface refused the send (disabled state): swallow it on every path,
+      // button and Enter alike.
+      if (!enabledRef.current) return;
+      let text = "";
+      editor.getEditorState().read(() => {
+        text = $getRoot().getTextContent().trim();
+      });
+      if (text.length === 0) return;
+      pendingRef.current = true;
+      setIsPending(true);
+      void (async () => {
+        try {
+          await onSubmitRef.current(text, mode);
+          // Accepted: drop the draft (the surface navigates or shows it sent).
+          // The editor may already be gone when the action navigates away.
+          const root = editor.getRootElement();
+          if (root !== null && root.isConnected) {
+            editor.update(() => {
+              $getRoot().clear();
+            });
+          }
+        } catch {
+          // Failed: preserve the draft for retry; the surface renders the error.
+        } finally {
+          pendingRef.current = false;
+          setIsPending(false);
+          const root = editor.getRootElement();
+          if (root !== null && root.isConnected) editor.focus();
         }
-      } catch {
-        // Failed: preserve the draft for retry; the surface renders the error.
-      } finally {
-        pendingRef.current = false;
-        setIsPending(false);
-        const root = editor.getRootElement();
-        if (root !== null && root.isConnected) editor.focus();
-      }
-    })();
-  }, [editor, pendingRef, setIsPending]);
+      })();
+    },
+    [editor, pendingRef, setIsPending],
+  );
 }
 
 function submitWithEnter(
@@ -315,7 +348,8 @@ function submitWithEnter(
   event: KeyboardEvent | null,
   menuOpenRef: RefObject<boolean>,
   pendingRef: RefObject<boolean>,
-  submit: () => void,
+  submit: (mode: SendMode) => void,
+  sendModes: boolean,
 ): boolean {
   if (event === null) return false;
   // IME composition: block Lexical's other Enter handlers but never
@@ -333,7 +367,13 @@ function submitWithEnter(
   }
   // In flight: swallow the Enter - no submit, no newline.
   if (pendingRef.current) return true;
-  submit();
+  // The queue chord (AC 13, packet Q2): Cmd/Ctrl+Enter queues on a
+  // mode-aware surface; elsewhere plain Enter submits whatever it means.
+  if (sendModes && (event.metaKey || event.ctrlKey)) {
+    submit("queue");
+    return true;
+  }
+  submit(sendModes ? "steer" : "steer");
   return true;
 }
 
@@ -341,20 +381,22 @@ function EnterToSendPlugin({
   menuOpenRef,
   pendingRef,
   submit,
+  sendModes,
 }: {
   menuOpenRef: RefObject<boolean>;
   pendingRef: RefObject<boolean>;
-  submit: () => void;
+  submit: (mode: SendMode) => void;
+  sendModes: boolean;
 }) {
   const [editor] = useLexicalComposerContext();
   useEffect(() => {
     return editor.registerCommand(
       KEY_ENTER_COMMAND,
       (event: KeyboardEvent | null) =>
-        submitWithEnter(editor, event, menuOpenRef, pendingRef, submit),
+        submitWithEnter(editor, event, menuOpenRef, pendingRef, submit, sendModes),
       COMMAND_PRIORITY_HIGH,
     );
-  }, [editor, menuOpenRef, pendingRef, submit]);
+  }, [editor, menuOpenRef, pendingRef, submit, sendModes]);
   return null;
 }
 
@@ -384,7 +426,7 @@ function SendButton({
   hasText: boolean;
   isPending: boolean;
   sendEnabled: boolean;
-  submit: () => void;
+  submit: (mode: SendMode) => void;
   /** Visible text (home: "Start session"); absent keeps the icon-only square. */
   submitLabel: string | undefined;
 }) {
@@ -395,7 +437,7 @@ function SendButton({
       size={submitLabel === undefined ? "icon-sm" : "xs"}
       aria-label={submitLabel ?? "Send message"}
       disabled={!hasText || isPending || !sendEnabled}
-      onClick={submit}
+      onClick={() => submit("steer")}
     >
       {isPending ? <Spinner /> : <RiSendPlane2Fill />}
       {submitLabel !== undefined && submitLabel}
@@ -563,12 +605,15 @@ function ComposerInner({
   submitLabel,
   lockedHint,
   setIsPending,
+  sendModes,
+  running,
+  onStop,
 }: {
   commands: ComposerEntry[];
   hasText: boolean;
   isPending: boolean;
   menuOpenRef: RefObject<boolean>;
-  onSubmit: (text: string) => Promise<unknown>;
+  onSubmit: (text: string, mode: SendMode) => Promise<unknown>;
   pendingRef: RefObject<boolean>;
   placeholder: string;
   references: ComposerEntry[];
@@ -578,6 +623,9 @@ function ComposerInner({
   submitLabel: string | undefined;
   lockedHint: string | undefined;
   setIsPending: (pending: boolean) => void;
+  sendModes: boolean;
+  running: boolean;
+  onStop?: (() => void) | undefined;
 }) {
   // Sync twin of the enabled prop for the submit paths (same reason
   // pendingRef exists: a click/Enter can arrive before the re-render).
@@ -591,7 +639,7 @@ function ComposerInner({
   // legend is trimmed to one compact line at phone widths (design packet);
   // Shift+Enter is discoverable on its own.
   const hint = [
-    "Enter sends",
+    sendModes ? "Enter steers · ⌘/Ctrl+Enter queues" : "Enter sends",
     commands.length > 0 && "/ commands",
     referenceSearch !== undefined ? "@ sessions" : references.length > 0 && "@ files",
   ]
@@ -640,16 +688,59 @@ function ComposerInner({
           <p className="min-w-0 flex-1 text-xs text-muted-foreground">
             {enabled || lockedHint === undefined ? hint : lockedHint}
           </p>
-          <SendButton
-            hasText={hasText}
-            isPending={isPending}
-            sendEnabled={enabled}
-            submit={submit}
-            submitLabel={submitLabel}
-          />
+          <div className="flex shrink-0 items-center gap-1">
+            {sendModes &&
+              running === true &&
+              onStop !== undefined && (
+                // AC 15: a running turn grows the stop control beside send.
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="Stop current turn"
+                  onClick={onStop}
+                >
+                  <RiStopLine />
+                </Button>
+              )}
+            <SendButton
+              hasText={hasText}
+              isPending={isPending}
+              sendEnabled={enabled}
+              submit={submit}
+              submitLabel={submitLabel}
+              {...(sendModes ? { sendModes: true } : {})}
+            />
+            {sendModes && (
+              // The secondary queue gesture as a control (touch-safe): the
+              // chevron opens Send now / Queue.
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                  aria-label="Send options"
+                  disabled={!hasText || isPending || !enabled}
+                >
+                  <RiArrowDropDownLine />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => submit("steer")}>
+                    Send now (steer)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => submit("queue")}>
+                    Queue (wait for the turn)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
       </div>
-      <EnterToSendPlugin menuOpenRef={menuOpenRef} pendingRef={pendingRef} submit={submit} />
+      <EnterToSendPlugin
+        menuOpenRef={menuOpenRef}
+        pendingRef={pendingRef}
+        submit={submit}
+        sendModes={sendModes}
+      />
       <TypeaheadMenus
         menuOpenRef={menuOpenRef}
         commands={commands}
@@ -670,6 +761,9 @@ export function SessionComposer({
   onLockedActivate,
   submitLabel,
   lockedHint,
+  sendModes = false,
+  running = false,
+  onStop,
 }: SessionComposerProps) {
   const [hasText, setHasText] = useState(false);
   const [isPending, setIsPending] = useState(false);
@@ -705,6 +799,9 @@ export function SessionComposer({
         submitLabel={submitLabel}
         lockedHint={lockedHint}
         setIsPending={setIsPending}
+        sendModes={sendModes}
+        running={running}
+        {...(onStop !== undefined ? { onStop } : {})}
       />
       <OnChangePlugin
         onChange={(editorState) => {
