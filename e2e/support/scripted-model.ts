@@ -142,6 +142,31 @@ export const DEFAULT_SCENARIOS: ScriptedScenario[] = [
     ],
   },
   {
+    // A markdown + fenced-code reply: the renderer (commit 5) and the live
+    // specs exercise headings, lists, and a CLOSED fence (Shiki highlights
+    // it; an open one would stay plain until the provider closes it).
+    marker: "scripted-code",
+    steps: [
+      {
+        text: [
+          "## Report",
+          "",
+          "- one finding",
+          "- two findings",
+          "",
+          "```ts",
+          'const greeting: string = "hi";',
+          "console.log(greeting);",
+          "```",
+          "",
+          "Done.",
+        ].join("\n"),
+        chunkParts: 8,
+        chunkDelayMs: 40,
+      },
+    ],
+  },
+  {
     // A model-call failure: a non-retryable 4xx lands a `turn/end` with
     // reason.kind 'error' fast (a truncated stream would ride the default
     // retry ladder first) - the transcript's visibly-failed-turn mark.

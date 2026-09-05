@@ -55,7 +55,13 @@
  * to this package's view of the map); the carrier has already zod-validated
  * every frame, so the structural read is total, not defensive.
  */
-import type { HistoryEntry, MuxFrame, ToolEventView } from "@deepseek-ai/dsh-host-apiproxy/api";
+import type {
+  HistoryEntry,
+  MuxFrame,
+  ToolCallView,
+  ToolEventView,
+  ToolResultView,
+} from "@deepseek-ai/dsh-host-apiproxy/api";
 import type { SessionEvent, SurfaceOp } from "@deepseek-ai/dsh-session/types";
 
 // ---------------------------------------------------------------------------
@@ -177,8 +183,10 @@ export interface ToolItem {
   result?: ToolResultFold;
   /** The tool's own failure identity (distinct from an isError result). */
   error?: { name: string; code: string };
-  /** Host-computed render intent, when the presenter produced one. */
-  view?: ToolEventView;
+  /** Host-computed render intents, kept separately for the call and the
+   * result (each arrives on its own event; AC 4 renders them on one card). */
+  callView?: ToolCallView;
+  resultView?: ToolResultView;
 }
 
 /** The live checklist row: one at a time, kept current by `todo/write`. */
@@ -649,7 +657,7 @@ export function foldEvent(
         callId: str(data["callId"]),
         name: str(data["name"]),
         arguments: str(data["arguments"]),
-        ...(view !== undefined && view.for === "call" ? { view } : {}),
+        ...(view !== undefined && view.for === "call" ? { callView: view.view } : {}),
       };
       state.items.push(item);
       break;
@@ -682,7 +690,7 @@ export function foldEvent(
         if (error !== undefined) {
           target.error = { name: str(error["name"]), code: str(error["code"]) };
         }
-        if (view !== undefined && view.for === "result") target.view = view;
+        if (view !== undefined && view.for === "result") target.resultView = view.view;
       } else {
         // Orphan result (its call was shadowed or dropped): show the fact
         // it happened rather than lose it.

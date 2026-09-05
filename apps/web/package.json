@@ -23,6 +23,10 @@
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-markdown": "catalog:",
+    "rehype-sanitize": "catalog:",
+    "remark-gfm": "catalog:",
+    "shiki": "catalog:",
     "tailwind-merge": "catalog:"
   },
   "devDependencies": {

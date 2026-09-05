@@ -9,6 +9,8 @@
  * (messages, code, tool args/results) is break-words / overflow-x-scrolled
  * so a wide code block never pushes horizontal overflow at 390px.
  */
+import { Markdown } from "@/components/chat/markdown";
+import { CallBody, ResultBody, toolHeadline } from "@/components/chat/tool-views";
 import type {
   ApprovalRowItem,
   AssistantItem,
@@ -56,8 +58,8 @@ export function AssistantRow({ item }: { item: AssistantItem }) {
           </pre>
         </details>
       )}
-      <div className="whitespace-pre-wrap break-words text-sm">
-        {item.text}
+      <Markdown text={item.text} streaming={item.streaming} />
+      <div>
         {item.streaming && (
           <span className="ml-0.5 inline-block h-3 w-1 animate-pulse bg-foreground/50 align-middle" />
         )}
@@ -69,41 +71,36 @@ export function AssistantRow({ item }: { item: AssistantItem }) {
   );
 }
 
-/** A collapsed generic tool card (AC 4): one summary line, expands to args + result. */
+/**
+ * The tool card (AC 4 + the agreed defaults): collapsed to a one-line
+ * summary for every kind; a FAILED one is tinted and auto-expanded so the
+ * error needs no click. Events carrying a host view render it
+ * (tool-views.tsx); events without one render the generic card expanding
+ * to raw args and result - the documented default.
+ */
 export function ToolRow({ item }: { item: ToolItem }) {
   const failed = item.error !== undefined || item.result?.isError === true;
+  const headline = toolHeadline(item.callView, item.resultView, item.name, item.arguments);
   return (
     <details
       className={`my-1 rounded-md border text-sm ${failed ? "border-destructive/40 bg-destructive/5" : "border-border bg-muted/30"}`}
+      {...(failed ? { open: true } : {})}
     >
       <summary className="flex cursor-pointer items-center gap-2 px-2 py-1 select-none">
         <span
-          className={`h-1.5 w-1.5 rounded-full ${item.result === undefined ? "bg-amber-400" : failed ? "bg-destructive" : "bg-emerald-500"}`}
+          className={`h-1.5 w-1.5 shrink-0 rounded-full ${item.result === undefined ? "bg-amber-400" : failed ? "bg-destructive" : "bg-emerald-500"}`}
         />
-        <span className="font-mono text-xs">{item.name}</span>
-        <span className="truncate text-xs text-muted-foreground">
-          {item.result?.text.split("\n")[0]?.slice(0, 80) ?? item.arguments.slice(0, 80)}
-        </span>
+        <span className="shrink-0 font-mono text-xs">{item.name}</span>
+        <span className="truncate text-xs text-muted-foreground">{headline}</span>
       </summary>
       <div className="space-y-2 border-t border-border/60 px-2 py-2">
-        <div>
-          <div className="mb-0.5 text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
-            Arguments
-          </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-xs">
-            {item.arguments}
-          </pre>
-        </div>
+        <CallBody view={item.callView} rawArgs={item.arguments} />
         {item.result !== undefined && (
           <div>
             <div className="mb-0.5 text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
               Result
             </div>
-            <pre
-              className={`max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-xs ${item.result.isError ? "text-destructive" : ""}`}
-            >
-              {item.result.text}
-            </pre>
+            <ResultBody view={item.resultView} fold={item.result} />
           </div>
         )}
       </div>

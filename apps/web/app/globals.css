@@ -152,3 +152,75 @@
 }
 /*---break---
  */
+
+/* Chat markdown (story #134 task #135 commit 5): compact document rhythm
+   inside bubbles - react-markdown emits semantic HTML with no styling. */
+.md-body > :first-child {
+  margin-top: 0;
+}
+.md-body > :last-child {
+  margin-bottom: 0;
+}
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4 {
+  margin: 0.75em 0 0.35em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.md-body h1 {
+  font-size: 1.15em;
+}
+.md-body h2 {
+  font-size: 1.1em;
+}
+.md-body h3,
+.md-body h4 {
+  font-size: 1em;
+}
+.md-body p {
+  margin: 0.5em 0;
+}
+.md-body ul,
+.md-body ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+.md-body ul {
+  list-style: disc;
+}
+.md-body ol {
+  list-style: decimal;
+}
+.md-body li {
+  margin: 0.15em 0;
+}
+.md-body blockquote {
+  margin: 0.5em 0;
+  padding-left: 0.75em;
+  border-left: 2px solid var(--border);
+  color: var(--muted-foreground);
+}
+.md-body hr {
+  margin: 0.75em 0;
+  border-color: var(--border);
+}
+
+/* Shiki static dual theme (AC 5): codeToHtml with defaultColor:false emits
+   spans reading --shiki-light/--shiki-dark variables; the .dark rule below
+   (the existing Tailwind custom variant) swaps them with zero JS. */
+.shiki span {
+  color: var(--shiki-light);
+  background-color: var(--shiki-light-bg);
+  font-style: var(--shiki-light-font-style);
+  font-weight: var(--shiki-light-font-weight);
+  text-decoration: var(--shiki-light-text-decoration);
+}
+.dark .shiki span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}

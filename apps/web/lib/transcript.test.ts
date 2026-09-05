@@ -501,6 +501,45 @@ describe("history pages", () => {
   });
 });
 
+describe("tool views (AC 4)", () => {
+  it("keeps the call view and the result view on one card", () => {
+    const state = createTranscript();
+    const callView = { card: "terminal", title: "ls -al", description: "List files" } as never;
+    const resultView = { card: "terminal", output: "total 3\nfile.txt", exitCode: 0 } as never;
+    foldEvent(state, userMsg(1, "hi"));
+    foldEvent(
+      state,
+      ev("tool/call", 2, { turn: 1, step: 1, callId: "c1", name: "bash", arguments: "{}" }),
+      { for: "call", view: callView } as never,
+    );
+    foldEvent(
+      state,
+      ev("tool/result", 3, {
+        turn: 1,
+        step: 1,
+        message: {
+          id: "r1",
+          role: "user",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "c1",
+              content: [{ type: "text", text: "total 3\nfile.txt" }],
+              isError: false,
+            },
+          ],
+          source: { kind: "tool", callId: "c1" },
+        },
+      }),
+      { for: "result", view: resultView } as never,
+    );
+    const tool = state.items.find((item) => item.kind === "tool");
+    expect(tool?.kind === "tool" && tool.callView).toBeDefined();
+    expect(tool?.kind === "tool" && tool.resultView).toBeDefined();
+    expect(tool?.kind === "tool" && (tool.callView as { title?: string }).title).toBe("ls -al");
+  });
+});
+
 describe("catalog drift guard", () => {
   const handled = new Set<string>([...RENDERED_EVENT_TYPES, ...SILENT_EVENT_TYPES]);
 
