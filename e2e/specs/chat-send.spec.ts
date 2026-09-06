@@ -2,7 +2,8 @@
  * Talking back from the browser (story #134 task #135 commit 7; AC 27's
  * "send and reconciliation"). The composer's real send rides the
  * session.prompt action; these specs pin what the packet promised:
- * the optimistic row reconciles exactly once, the queue gesture and the
+ * a typed send's row lands exactly once (from the host's own event - the
+ * page mints no optimistic echo), the queue gesture and the
  * queued strip behave, and the stop control settles the turn as stopped.
  */
 import { mkdtempSync, realpathSync } from "node:fs";
@@ -45,7 +46,7 @@ async function createSession(): Promise<string> {
   return created.sessionId;
 }
 
-test("a typed send reconciles its optimistic row exactly once", async ({ page }) => {
+test("a typed send lands its row exactly once, from the host's event", async ({ page }) => {
   const sessionId = await createSession();
   await page.goto(profile.baseURL + "/sessions/" + sessionId);
   const box = page.getByRole("textbox", { name: "Message the session" });
@@ -54,8 +55,8 @@ test("a typed send reconciles its optimistic row exactly once", async ({ page })
   await box.press("Enter");
   const scroller = page.getByTestId("transcript-scroll");
   const userRow = scroller.getByText("typed send reconciliation", { exact: false });
-  await expect(userRow).toBeVisible({ timeout: 10_000 }); // optimistic, instantly
-  await expect(userRow).toHaveCount(1); // and the durable echo replaced it, no twin
+  await expect(userRow).toBeVisible({ timeout: 10_000 }); // when the host records it
+  await expect(userRow).toHaveCount(1); // one row, and only ever one
   await expect(scroller.getByText("END-OF-STREAM", { exact: false })).toBeVisible({
     timeout: 45_000,
   });
@@ -79,8 +80,8 @@ test("Cmd/Ctrl+Enter queues while a turn runs and the queued strip settles", asy
   await expect(scroller.getByText("queued second message", { exact: false })).toBeVisible({
     timeout: 10_000,
   });
-  // The provisional row persists (queued placement is not the model's yet);
-  // after the agent claims it, exactly one durable user row remains.
+  // The queued strip (the host's own session/queue snapshot) carries it
+  // first; after the agent claims it, exactly one durable user row remains.
   await expect(scroller.getByText("first long turn", { exact: false })).toBeVisible();
   await expect(scroller.getByText("queued second message", { exact: false })).toHaveCount(1, {
     timeout: 60_000,
@@ -116,8 +117,15 @@ test("the stop control settles the turn as stopped", async ({ page }) => {
   await box.click();
   await box.pressSequentially("scripted-stream please be long");
   await box.press("Enter");
+  // While the turn runs the composer offers the two mode gestures; the idle
+  // Send button is gone for exactly that duration.
+  await expect(page.getByRole("button", { name: "Steer the session now" })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByRole("button", { name: "Queue this message" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send message" })).toHaveCount(0);
   const stop = page.getByRole("button", { name: "Stop current turn" });
-  await expect(stop).toBeVisible({ timeout: 15_000 }); // grew while the turn ran
+  await expect(stop).toBeVisible(); // grew while the turn ran
   await stop.click();
   await expect(page.getByText("Turn stopped", { exact: false })).toBeVisible({
     timeout: 30_000,

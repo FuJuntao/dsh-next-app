@@ -119,11 +119,10 @@ export type SessionComposerProps = {
    */
   lockedHint?: string;
   /**
-   * Steer/queue chrome (session page, AC 13/15): Enter and the **Steer**
-   * button STEER (the primary gesture interrupts the running turn),
-   * Cmd/Ctrl+Enter and the **Queue** button QUEUE, and a running turn grows
-   * the stop control. Default false keeps home's single-submit chrome
-   * untouched.
+   * Turn-state chrome (session page, AC 13/15): idle shows one Send button;
+   * while a turn runs the pair becomes **Steer** / **Queue** (Enter steers,
+   * Cmd/Ctrl+Enter queues) and the stop control joins the row. Default false
+   * keeps home's single-submit chrome untouched.
    */
   sendModes?: boolean;
   /** Whether a turn is running (drives the stop control). */
@@ -427,14 +426,15 @@ function EditableGatePlugin({ enabled }: { enabled: boolean }) {
 }
 
 /**
- * The send controls. A mode-aware surface (the session page) shows its two
- * gestures as two buttons - **Steer** interrupts the running turn, **Queue**
- * waits its turn - because a chord and a chevron menu both hide the second
- * one from the reader who is deciding where the message should land. A
- * surface without modes (home) keeps its single labelled submit.
+ * The send controls, per turn state. A mode-aware surface (the session page)
+ * shows ONE Send button while the session is idle - with no turn running,
+ * steer and queue are the same gesture and naming two of them is noise - and
+ * the two named gestures only while a turn runs: **Steer** interrupts it,
+ * **Queue** waits its turn. A surface without modes (home) keeps its single
+ * labelled submit whatever the state.
  *
- * `isPending` disables both: one send in flight is the contract the Enter
- * handler shares (see `useComposerSubmit`).
+ * `isPending` disables the controls: one send in flight is the contract the
+ * Enter handler shares (see `useComposerSubmit`).
  */
 function SendControls({
   hasText,
@@ -443,6 +443,7 @@ function SendControls({
   submit,
   submitLabel,
   sendModes,
+  running,
 }: {
   hasText: boolean;
   isPending: boolean;
@@ -451,20 +452,22 @@ function SendControls({
   /** Visible text (home: "Start session"); absent keeps the icon-only square. */
   submitLabel: string | undefined;
   sendModes: boolean;
+  running: boolean;
 }) {
   const disabled = !hasText || isPending || !sendEnabled;
-  if (!sendModes) {
+  if (!sendModes || !running) {
     return (
       <Button
         type="button"
         variant="default"
-        size={submitLabel === undefined ? "icon-sm" : "xs"}
+        size={submitLabel === undefined && !sendModes ? "icon-sm" : "xs"}
         aria-label={submitLabel ?? "Send message"}
+        title={sendModes ? "Send this message" : undefined}
         disabled={disabled}
         onClick={() => submit("steer")}
       >
         {isPending ? <Spinner /> : <RiSendPlane2Fill />}
-        {submitLabel !== undefined && submitLabel}
+        {(submitLabel !== undefined || sendModes) && (submitLabel ?? "Send")}
       </Button>
     );
   }
@@ -703,11 +706,16 @@ function ComposerInner({
     ...(hasAttachments !== undefined ? { hasAttachments } : {}),
   });
   // The hint advertises only the triggers this surface actually injected: an
-  // empty source mounts no menu, so advertising it would be a lie. The
-  // legend is trimmed to one compact line at phone widths (design packet);
-  // Shift+Enter is discoverable on its own.
+  // empty source mounts no menu, so advertising it would be a lie. The send
+  // chord's meaning follows the buttons: with a turn running, Enter steers
+  // and the chord queues; idle, Enter just sends. Shift+Enter is
+  // discoverable on its own.
   const hint = [
-    sendModes ? "Enter steers · ⌘/Ctrl+Enter queues" : "Enter sends",
+    sendModes
+      ? running === true
+        ? "Enter steers · ⌘/Ctrl+Enter queues"
+        : "Enter sends"
+      : "Enter sends",
     commands.length > 0 && "/ commands",
     referenceSearch !== undefined
       ? (referenceHint ?? "@ sessions")
@@ -762,9 +770,9 @@ function ComposerInner({
             {sendModes &&
               running === true &&
               onStop !== undefined && (
-                // AC 15: a running turn grows the stop control - the only
-                // third button this row ever shows, and only while it means
-                // something.
+                // AC 15: while a turn runs, the stop control joins the two
+                // mode gestures - the one moment cancelling is as meaningful
+                // as steering.
                 <Button
                   type="button"
                   variant="ghost"
@@ -783,6 +791,7 @@ function ComposerInner({
               submit={submit}
               submitLabel={submitLabel}
               sendModes={sendModes === true}
+              running={running === true}
             />
           </div>
         </div>

@@ -246,14 +246,18 @@ test("the folder tree fits a phone viewport", async ({ page }) => {
   await expect(dialog.getByText("No subfolders.")).toBeVisible();
 });
 
-// ...and the session page's own send chrome: two named gestures, and no stop
-// control until a turn is actually running.
-test("the session page offers Steer and Queue, and no Stop while idle", async ({ page }) => {
+// ...and the session page's own send chrome: idle is ONE Send button - steer
+// and queue are the same gesture with no turn to interrupt or wait for - and
+// the named pair only exists while a turn actually runs.
+test("the session page shows Send while idle, Steer and Queue only while running", async ({
+  page,
+}) => {
   const created = (await envelopeCall("session.create", {})) as { sessionId: string };
   await page.goto(profile.baseURL + "/sessions/" + created.sessionId);
   await expect(page.getByRole("textbox", { name: "Message the session" })).toBeEditable();
-  await expect(page.getByRole("button", { name: "Steer the session now" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Queue this message" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Steer the session now" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Queue this message" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Stop current turn" })).toHaveCount(0);
 });
 
