@@ -109,10 +109,10 @@ export function UserRow({ item, sessionId }: { item: UserItem; sessionId: string
   return (
     <div className="group/row flex flex-col items-end gap-0.5 py-1.5">
       <div
-        className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-[0.8125rem] leading-[1.55] ${
+        className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-sm leading-normal ${
           item.failed
-            ? "border border-destructive/40 bg-destructive/8 text-foreground"
-            : "bg-primary/[0.07] text-foreground dark:bg-primary/10"
+            ? "border border-destructive/40 bg-destructive/10 text-foreground"
+            : "bg-primary/10 text-foreground"
         } ${item.provisional ? "opacity-70" : ""}`}
       >
         {item.text}
@@ -129,7 +129,7 @@ export function UserRow({ item, sessionId }: { item: UserItem; sessionId: string
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1.5 pr-1 text-[0.68rem] text-muted-foreground/60">
+      <div className="flex items-center gap-1.5 pr-1 text-2xs text-muted-foreground/60">
         {item.failed === true && <span className="text-destructive">Not sent</span>}
         {item.provisional === true && item.failed !== true && <span>Sending…</span>}
         <span className="font-mono">{clockOf(item.time)}</span>
@@ -161,7 +161,7 @@ export function AssistantRow({ item }: { item: AssistantItem }) {
           detail={reasoningFirst.slice(0, 120)}
           state={item.streaming && item.text === "" ? "running" : "done"}
         >
-          <div className="whitespace-pre-wrap break-words text-[0.8rem] leading-[1.6] text-muted-foreground italic">
+          <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground italic">
             {item.reasoning}
           </div>
         </EventRow>
@@ -175,11 +175,11 @@ export function AssistantRow({ item }: { item: AssistantItem }) {
         {item.streaming && (
           <span
             aria-hidden
-            className="inline-block h-3.5 w-[2px] animate-pulse rounded-full bg-primary motion-reduce:hidden"
+            className="inline-block h-3.5 w-0.5 animate-pulse rounded-full bg-primary motion-reduce:hidden"
           />
         )}
         {item.interrupted === true && (
-          <span className="text-[0.72rem] text-muted-foreground/70">Stopped mid-reply</span>
+          <span className="text-xs text-muted-foreground/70">Stopped mid-reply</span>
         )}
       </div>
     </div>
@@ -229,7 +229,7 @@ export function TodoRow({ item }: { item: TodoFoldItem }) {
     >
       <ul className="space-y-0.5">
         {item.todos.map((todo, index) => (
-          <li key={index} className="flex items-start gap-2 text-[0.8125rem] leading-5">
+          <li key={index} className="flex items-start gap-2 text-sm leading-5">
             <span
               aria-hidden
               className={`mt-[3px] flex h-4 w-4 shrink-0 items-center justify-center ${
@@ -264,22 +264,22 @@ export function TodoRow({ item }: { item: TodoFoldItem }) {
 export function CompactionRow({ item }: { item: CompactionItem }) {
   return (
     <div className="my-3">
-      <div className="flex items-center gap-2 text-[0.7rem] text-muted-foreground/70">
+      <div className="flex items-center gap-2 text-2xs tracking-wide text-muted-foreground/70">
         <span aria-hidden className="h-px flex-1 bg-border" />
-        <span className="shrink-0 tracking-[0.04em] uppercase">Context compacted</span>
+        <span className="shrink-0 uppercase">Context compacted</span>
         <span aria-hidden className="shrink-0 font-mono">
           {item.shadowedCount} hidden
         </span>
         <span aria-hidden className="h-px flex-1 bg-border" />
       </div>
       <details className="group/row mt-1">
-        <summary className="list-none cursor-pointer rounded-md px-1.5 py-[3px] text-[0.78rem] text-muted-foreground hover:bg-muted/60 [&::-webkit-details-marker]:hidden">
+        <summary className="list-none cursor-pointer rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/60 [&::-webkit-details-marker]:hidden">
           Read the summary
         </summary>
         <div
           className={cn(
             RAIL_BODY,
-            "text-[0.8rem] leading-[1.6] text-muted-foreground whitespace-pre-wrap break-words",
+            "text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap break-words",
           )}
         >
           {item.summary}
@@ -314,10 +314,10 @@ export function ContextRow({ item }: { item: ContextItem }) {
   const label = item.summary ?? (item.form !== undefined ? item.form : item.source);
   return (
     <EventRow icon={<RiStackLine />} label="Context" detail={label} className="opacity-90">
-      <div className="text-[0.68rem] font-medium uppercase tracking-[0.06em] text-muted-foreground/60">
+      <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground/60">
         {item.source}
       </div>
-      <pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 px-2.5 py-2 font-mono text-[0.74rem] leading-[1.5]">
+      <pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 px-2.5 py-2 font-mono text-xs leading-normal">
         {item.text}
       </pre>
     </EventRow>
@@ -333,7 +333,7 @@ export function TurnRow({ item }: { item: TurnItem }) {
   if (item.state === "completed") return null;
   if (item.state === "running") {
     return (
-      <div className="flex items-center gap-2 py-1 pl-1.5 text-[0.8125rem] text-primary">
+      <div className="flex items-center gap-2 py-1 pl-2 text-sm text-primary">
         <RowIcon state="running">
           <RiLoaderLine className="animate-spin motion-reduce:animate-none" />
         </RowIcon>
@@ -414,7 +414,7 @@ export function QueueStrip({ queue }: { queue: readonly { id: string; text: stri
       {/* The items hang off the same rail an expanded row uses. */}
       <ul className={cn("space-y-0.5", RAIL_BODY)}>
         {queue.map((q) => (
-          <li key={q.id} className="truncate text-[0.78rem] text-muted-foreground/80">
+          <li key={q.id} className="truncate text-xs text-muted-foreground/80">
             {q.text.split("\n")[0]}
           </li>
         ))}
@@ -445,7 +445,7 @@ export function TurnLive({ since }: { since: number }) {
       ? `${String(seconds)}s`
       : `${String(Math.floor(seconds / 60))}m ${String(seconds % 60).padStart(2, "0")}s`;
   return (
-    <div className="flex items-center gap-2 py-1 pl-1.5 text-[0.8125rem] leading-5 text-primary">
+    <div className="flex items-center gap-2 py-1 pl-2 text-sm leading-5 text-primary">
       <RowIcon state="running">
         <RiLoaderLine className="animate-spin motion-reduce:animate-none" />
       </RowIcon>
@@ -453,7 +453,7 @@ export function TurnLive({ since }: { since: number }) {
       <span aria-hidden className="text-primary/40">
         ·
       </span>
-      <span className="font-mono text-[0.78rem] text-primary/70">{elapsed}</span>
+      <span className="font-mono text-xs text-primary/70">{elapsed}</span>
     </div>
   );
 }

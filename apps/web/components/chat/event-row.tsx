@@ -5,11 +5,11 @@
  * well + the 8px gap. Assistant prose and any free-standing line use it so
  * the whole transcript shares one left edge for words and one for marks.
  */
-export const RAIL_TEXT = "pl-[30px]";
+export const RAIL_TEXT = "pl-8";
 
 /** The rail's hairline: the vertical rule a detail hangs off, at the icon's
- * own centre (6px padding + 8px to the middle of the 16px well). */
-export const RAIL_BODY = "ml-[14px] border-l border-border/70 py-1 pl-4 pr-1";
+ * own centre (8px padding + 8px to the middle of the 16px well = ml-4). */
+export const RAIL_BODY = "ml-4 border-l border-border/70 py-1 pl-4 pr-1";
 
 /**
  * The event row (the transcript's one shared line shape).
@@ -44,7 +44,7 @@ const STATE_CLASS: Record<RowState, string> = {
   running: "text-primary",
   done: "text-muted-foreground/70",
   failed: "text-destructive",
-  notice: "text-amber-600 dark:text-amber-500",
+  notice: "text-warning",
 };
 
 /** The 16px icon well: every row's mark lands on the same vertical line. */
@@ -123,7 +123,7 @@ export function EventRow({
       )}
       <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-2">
         {time !== undefined && (
-          <span className="font-mono text-[0.68rem] text-muted-foreground/50 opacity-0 transition-opacity group-hover/row:opacity-100">
+          <span className="font-mono text-2xs text-muted-foreground/50 opacity-0 transition-opacity group-hover/row:opacity-100">
             {time}
           </span>
         )}
@@ -137,8 +137,7 @@ export function EventRow({
     </>
   );
 
-  const lineClass =
-    "flex min-w-0 items-start gap-2 rounded-md px-1.5 py-[3px] text-[0.8125rem] leading-5";
+  const lineClass = "flex min-w-0 items-start gap-2 rounded-md px-2 py-0.5 text-sm leading-5";
 
   if (children === undefined) {
     return <div className={cn("group/row", lineClass, className)}>{line}</div>;
@@ -179,15 +178,15 @@ export function DetailBlock({
   return (
     <div className="mb-2 last:mb-0">
       {label !== undefined && (
-        <div className="mb-0.5 text-[0.68rem] font-medium uppercase tracking-[0.06em] text-muted-foreground/60">
+        <div className="mb-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground/60">
           {label}
         </div>
       )}
       <div
         className={cn(
-          "max-h-[26rem] overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 px-2.5 py-2 text-[0.78rem] leading-[1.5]",
-          mono && "font-mono text-[0.74rem]",
-          tone === "error" && "bg-destructive/8 text-destructive",
+          "max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 px-2.5 py-2 text-xs leading-normal",
+          mono && "font-mono",
+          tone === "error" && "bg-destructive/10 text-destructive",
         )}
       >
         {children}

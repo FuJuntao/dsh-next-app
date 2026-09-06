@@ -275,7 +275,7 @@ function renderMenu(
       </ul>
       {hint !== undefined && (
         // A signal, not a choice: outside the option list, unselectable.
-        <p className="border-t border-input px-2 py-1 text-[11px] text-muted-foreground">{hint}</p>
+        <p className="border-t border-input px-2 py-1 text-2xs text-muted-foreground">{hint}</p>
       )}
     </div>,
     anchorElementRef.current,
@@ -749,7 +749,7 @@ function ComposerInner({
             contentEditable={
               <ContentEditable
                 aria-label={placeholder}
-                className="block max-h-48 min-h-11 overflow-y-auto px-3 py-2.5 text-sm leading-[1.55] outline-none"
+                className="block max-h-48 min-h-11 overflow-y-auto px-3 py-2.5 text-sm leading-normal outline-none"
               />
             }
             placeholder={
@@ -763,7 +763,7 @@ function ComposerInner({
         <div className="flex items-center justify-between gap-2 border-t border-border/50 px-2.5 py-1.5">
           {/* While locked the footer states the remedy, not the shortcuts of
               an editor that does not accept typing yet (design packet). */}
-          <p className="min-w-0 flex-1 text-[0.7rem] leading-4 text-muted-foreground/70">
+          <p className="min-w-0 flex-1 text-xs leading-4 text-muted-foreground/70">
             {enabled || lockedHint === undefined ? hint : lockedHint}
           </p>
           <div className="flex shrink-0 items-center gap-1">

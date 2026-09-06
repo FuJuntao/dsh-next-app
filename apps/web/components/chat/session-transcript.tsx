@@ -307,7 +307,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
         onClick={jumpToLatest}
         data-testid="approval-jump"
         title="An approval is waiting"
-        className="absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-amber-500/50 bg-amber-500/15 text-amber-600 shadow-sm backdrop-blur dark:text-amber-400"
+        className="absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-warning/50 bg-warning/15 text-warning shadow-sm backdrop-blur"
       >
         <RiShieldCheckLine className="h-4 w-4" />
       </button>
@@ -321,7 +321,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
       >
         <RiArrowDownSLine className="h-4 w-4" />
         {unseen > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-mono text-[0.6rem] text-primary-foreground">
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-mono text-2xs text-primary-foreground">
             {unseen > 99 ? "99+" : unseen}
           </span>
         )}
@@ -329,7 +329,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     ) : status === "reconnecting" ? (
       <div
         data-testid="reconnecting"
-        className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-600 dark:text-amber-500"
+        className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs text-warning"
       >
         Reconnecting…
       </div>
@@ -338,15 +338,15 @@ export function SessionTranscript(props: SessionTranscriptProps) {
   return (
     <>
       <header className="flex items-baseline gap-2 border-b border-border/60 px-4 py-2.5 sm:px-6">
-        <h1 className="min-w-0 truncate text-[0.95rem] font-medium">
+        <h1 className="min-w-0 truncate text-base font-medium">
           {title ?? navTitleOf(sessionId) ?? "New Session"}
         </h1>
         {meta !== null && (
-          <span className="hidden shrink-0 text-[0.7rem] text-muted-foreground/60 sm:inline">
+          <span className="hidden shrink-0 text-xs text-muted-foreground/60 sm:inline">
             updated {formatDate(meta.updatedAt)}
           </span>
         )}
-        <span className="ml-auto flex shrink-0 items-center gap-2 text-[0.7rem] text-muted-foreground/60">
+        <span className="ml-auto flex shrink-0 items-center gap-2 text-xs text-muted-foreground/60">
           {meta?.cwd !== undefined && (
             <span className="hidden max-w-[24ch] truncate font-mono lg:inline">{meta.cwd}</span>
           )}

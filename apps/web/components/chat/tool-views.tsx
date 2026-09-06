@@ -50,18 +50,18 @@ function DiffBlock({
     <div className="mb-2 space-y-2 last:mb-0">
       {diffs.map((diff, index) => (
         <div key={index} className="overflow-hidden rounded-md border border-border/60">
-          <div className="truncate bg-muted/50 px-2.5 py-1 font-mono text-[0.72rem] text-muted-foreground">
+          <div className="truncate bg-muted/50 px-2.5 py-1 font-mono text-xs text-muted-foreground">
             {diff.path}
           </div>
-          <div className="grid grid-cols-1 font-mono text-[0.72rem] leading-[1.5] sm:grid-cols-2">
+          <div className="grid grid-cols-1 font-mono text-xs leading-normal sm:grid-cols-2">
             <pre
               className={`overflow-x-auto whitespace-pre-wrap break-words p-2.5 ${
-                diff.oldText === null ? "" : "bg-destructive/8"
+                diff.oldText === null ? "" : "bg-destructive/10"
               }`}
             >
               {diff.oldText ?? "(new file)"}
             </pre>
-            <pre className="overflow-x-auto whitespace-pre-wrap break-words border-t border-border/40 bg-emerald-500/8 p-2.5 sm:border-t-0 sm:border-l">
+            <pre className="overflow-x-auto whitespace-pre-wrap break-words border-t border-border/40 bg-success/10 p-2.5 sm:border-t-0 sm:border-l">
               {diff.newText}
             </pre>
           </div>
@@ -107,7 +107,7 @@ export function CallBody({ view, rawArgs }: { view: ToolCallView | undefined; ra
       return (
         <div className="mb-2 space-y-1 last:mb-0">
           {view.description !== undefined && view.description !== "" && (
-            <div className="text-[0.8rem] text-muted-foreground">{view.description}</div>
+            <div className="text-sm text-muted-foreground">{view.description}</div>
           )}
           <DetailBlock mono>
             <span aria-hidden className="text-muted-foreground select-none">
@@ -116,7 +116,7 @@ export function CallBody({ view, rawArgs }: { view: ToolCallView | undefined; ra
             {view.title}
           </DetailBlock>
           {view.cwd !== undefined && (
-            <div className="truncate font-mono text-[0.7rem] text-muted-foreground/70">
+            <div className="truncate font-mono text-2xs text-muted-foreground/70">
               in {view.cwd}
             </div>
           )}
@@ -175,7 +175,7 @@ export function ResultBody({
         <div className="mb-2 space-y-1 last:mb-0">
           {typeof view.exitCode === "number" && (
             <div
-              className={`font-mono text-[0.72rem] ${
+              className={`font-mono text-2xs ${
                 view.exitCode === 0 ? "text-muted-foreground/70" : "text-destructive"
               }`}
             >
@@ -239,7 +239,7 @@ export function ResultBody({
       if (view.kind === "fetch") {
         return (
           <div className="mb-2 space-y-1.5 last:mb-0">
-            <div className="flex min-w-0 items-baseline gap-2 text-[0.78rem]">
+            <div className="flex min-w-0 items-baseline gap-2 text-xs">
               <a
                 className="min-w-0 truncate font-mono text-primary underline-offset-2 hover:underline"
                 href={view.url}
@@ -249,7 +249,7 @@ export function ResultBody({
                 {view.url}
               </a>
               <span
-                className={`shrink-0 font-mono text-[0.72rem] ${
+                className={`shrink-0 font-mono text-2xs ${
                   view.statusCode >= 400 ? "text-destructive" : "text-muted-foreground/70"
                 }`}
               >
@@ -270,7 +270,7 @@ export function ResultBody({
           {view.answer !== undefined && view.answer !== "" && <Markdown text={view.answer} />}
           <ul className="space-y-0.5">
             {view.sources.map((source, index) => (
-              <li key={index} className="flex min-w-0 items-baseline gap-2 text-[0.78rem]">
+              <li key={index} className="flex min-w-0 items-baseline gap-2 text-xs">
                 <a
                   className="min-w-0 truncate text-primary underline-offset-2 hover:underline"
                   href={source.url}

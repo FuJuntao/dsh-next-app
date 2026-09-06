@@ -35,13 +35,13 @@ export function ApprovalCard({ card }: CardProps) {
   if (card.state === "resolved") {
     return (
       <div
-        className="flex items-center gap-2 rounded-md px-1.5 py-[3px] text-[0.8125rem] leading-5 text-muted-foreground"
+        className="flex items-center gap-2 rounded-md px-2 py-0.5 text-sm leading-5 text-muted-foreground"
         data-testid="approval-resolved"
       >
         <span
           aria-hidden
           className={`flex h-4 w-4 shrink-0 items-center justify-center ${
-            card.outcome === "rejected" ? "text-amber-600 dark:text-amber-500" : "text-primary"
+            card.outcome === "rejected" ? "text-warning" : "text-primary"
           }`}
         >
           <RiShieldCheckLine className="h-4 w-4" />
@@ -79,11 +79,11 @@ export function ApprovalCard({ card }: CardProps) {
 
   return (
     <div
-      className="my-1.5 rounded-xl border border-amber-500/35 bg-amber-500/[0.06] px-3 py-2.5 shadow-xs"
+      className="my-1.5 rounded-xl border border-warning/35 bg-warning/5 px-3 py-2.5 shadow-xs"
       data-testid="approval-card"
     >
-      <div className="flex items-center gap-2 text-[0.8125rem]">
-        <span aria-hidden className="text-amber-600 dark:text-amber-500">
+      <div className="flex items-center gap-2 text-sm">
+        <span aria-hidden className="text-warning">
           <RiShieldCheckLine className="h-4 w-4" />
         </span>
         <span className="font-medium">Needs your call</span>
@@ -93,7 +93,7 @@ export function ApprovalCard({ card }: CardProps) {
         <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{toolName}</span>
       </div>
       {reason !== undefined && reason !== "" && (
-        <p className="mt-1 pl-6 text-[0.8rem] leading-[1.5] text-muted-foreground">{reason}</p>
+        <p className="mt-1 pl-6 text-sm leading-normal text-muted-foreground">{reason}</p>
       )}
       {refused !== null && <p className="mt-1.5 pl-6 text-xs text-destructive">{refused}</p>}
       <div className="mt-2.5 flex gap-2 pl-6">
@@ -130,7 +130,7 @@ export function QuestionCard({ card }: CardProps) {
   if (card.state === "resolved") {
     return (
       <div
-        className="flex items-center gap-2 rounded-md px-1.5 py-[3px] text-[0.8125rem] leading-5 text-muted-foreground"
+        className="flex items-center gap-2 rounded-md px-2 py-0.5 text-sm leading-5 text-muted-foreground"
         data-testid="question-resolved"
       >
         <span
@@ -243,7 +243,7 @@ function QuestionForm({
 
   return (
     <form
-      className="my-1.5 space-y-3.5 rounded-xl border border-primary/30 bg-primary/[0.04] px-3 py-2.5 shadow-xs"
+      className="my-1.5 space-y-3.5 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2.5 shadow-xs"
       data-testid="question-card"
       onSubmit={(e) => {
         e.preventDefault();
@@ -255,7 +255,7 @@ function QuestionForm({
         }
       }}
     >
-      <div className="flex items-center gap-2 text-[0.8125rem]">
+      <div className="flex items-center gap-2 text-sm">
         <span aria-hidden className="text-primary">
           <RiQuestionLine className="h-4 w-4" />
         </span>
@@ -265,20 +265,20 @@ function QuestionForm({
         <span aria-hidden className="text-muted-foreground/40">
           ·
         </span>
-        <span className="text-[0.78rem] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           the agent is waiting on this to continue
         </span>
       </div>
       {questions.map((q) => (
         <fieldset key={q.id} disabled={submitting} className="space-y-1.5 pl-6">
           {q.header !== undefined && q.header !== "" && (
-            <legend className="mb-1 text-[0.68rem] font-medium uppercase tracking-[0.06em] text-muted-foreground/70">
+            <legend className="mb-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
               {q.header}
             </legend>
           )}
-          <div className="text-[0.8125rem] font-medium">{q.question}</div>
+          <div className="text-sm font-medium">{q.question}</div>
           {q.detail !== undefined && q.detail !== "" && (
-            <p className="text-[0.78rem] leading-[1.5] text-muted-foreground">{q.detail}</p>
+            <p className="text-xs leading-normal text-muted-foreground">{q.detail}</p>
           )}
           {q.options.length > 0 && (
             <div className="flex flex-wrap gap-1.5 pt-0.5">
@@ -320,7 +320,7 @@ function QuestionForm({
         <Button type="button" size="xs" variant="ghost" onClick={onDismiss} disabled={submitting}>
           Dismiss
         </Button>
-        <span className="ml-auto text-[0.7rem] text-muted-foreground/70">
+        <span className="ml-auto text-xs text-muted-foreground/70">
           {questions.length > 1 ? "answer all to submit" : "pick or type"}
         </span>
       </div>
