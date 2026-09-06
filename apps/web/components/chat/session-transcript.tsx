@@ -36,6 +36,9 @@ import { ImageIntake, type ImageIntakeHandle } from "@/components/chat/image-int
 import { ApprovalCard, QuestionCard } from "@/components/chat/pending-cards";
 import { TranscriptRow } from "@/components/chat/transcript-rows";
 import type { ImageAttachmentLimits } from "@/lib/image-intake";
+import { searchFileReferences } from "@/lib/file-discovery";
+import { searchSessionReferences } from "@/lib/session-references";
+import type { ComposerEntry, ComposerSearch } from "@/components/session-composer";
 import { useSessionLive } from "@/components/chat/use-session-live";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -124,6 +127,46 @@ export function SessionTranscript(props: SessionTranscriptProps) {
   const [queue, setQueue] = useState<QueuedItem[]>(() => [...fold.queue]);
   const [pending, setPending] = useState<PendingCard[]>(() => [...fold.pending]);
   const intakeRef = useRef<ImageIntakeHandle | null>(null);
+
+  // The `@` trigger mounts BOTH sources on a session page (AC 21): file
+  // candidates from the session-cwd discovery walk first, then the
+  // session.search hits home already offers. Either source failing yields
+  // its empty half - the draft and the send never wait on discovery.
+  const referenceSearch = useCallback(
+    async (query: string): Promise<ComposerSearch> => {
+      const [files, sessions] = await Promise.all([
+        searchFileReferences(sessionId, query).catch(() => ({ ok: false }) as const),
+        searchSessionReferences(query).catch(
+          () => ({ ok: false, error: "search failed" }) as const,
+        ),
+      ]);
+      const entries: ComposerEntry[] = [];
+      if (files.ok) {
+        for (const candidate of files.items.slice(0, 6)) {
+          entries.push({
+            kind: "file",
+            label: candidate.path,
+            description: candidate.kind === "directory" ? "Folder" : "File",
+            key: `f:${candidate.path}`,
+            insertText: candidate.mention,
+          });
+        }
+      }
+      if (sessions.ok) {
+        for (const hit of sessions.items.slice(0, 4)) {
+          entries.push({
+            kind: "session",
+            label: hit.label,
+            description: hit.snippet,
+            key: `s:${hit.sessionId}`,
+            insertText: hit.mention,
+          });
+        }
+      }
+      return { entries };
+    },
+    [sessionId],
+  );
   const [, setAttachmentCount] = useState(0); // render pulse only; the count itself is read via the handle
   const [sendError, setSendError] = useState<string | null>(null);
 
@@ -410,6 +453,8 @@ export function SessionTranscript(props: SessionTranscriptProps) {
           </div>
           <SessionComposer
             hasAttachments={() => (intakeRef.current?.count() ?? 0) > 0}
+            referenceSearch={referenceSearch}
+            referenceHint="@ files & sessions"
             commands={[...SLASH_MENU_ENTRIES]}
             references={[]}
             sendModes

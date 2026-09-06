@@ -79,3 +79,32 @@ export async function fenceInsideHostRoot(path: string): Promise<FencedPath> {
   }
   return { ok: true, path: real };
 }
+
+/**
+ * Containment under an EXPLICIT root (the session's own cwd, resolved
+ * server-side) - the per-session sibling of fenceInsideHostRoot sharing
+ * canonicalize's climb-safe realpath so both fences resolve symlink
+ * escapes identically. Refuses absolute paths, `..` segments, and any
+ * realpath that lands outside the root. Used by @-reference discovery
+ * (story #134 task #135 commit 10): candidates are joined under the
+ * session root and every one must still realpath inside it.
+ */
+export function fenceUnderRoot(rootReal: string, candidateRel: string): FencedPath {
+  if (candidateRel === "" || candidateRel.startsWith("/") || candidateRel.includes("\0")) {
+    return { ok: false, reason: `candidate path is not relative: ${candidateRel}` };
+  }
+  if (candidateRel.split(/[/\\]/u).some((segment) => segment === "..")) {
+    return { ok: false, reason: `candidate escapes via parent segment: ${candidateRel}` };
+  }
+  const real = canonicalize(resolve(rootReal, candidateRel));
+  const base = rootReal === sep ? sep : rootReal + sep;
+  if (real !== rootReal && !real.startsWith(base)) {
+    return { ok: false, reason: `candidate resolves outside the session folder: ${candidateRel}` };
+  }
+  return { ok: true, path: real };
+}
+
+/** realpath the session root at resolution time (refusal if not a folder). */
+export function canonicalRoot(path: string): string {
+  return canonicalize(resolve(path));
+}

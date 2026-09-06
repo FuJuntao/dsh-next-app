@@ -78,6 +78,11 @@ const stageWebBuild = () => ({
     });
     await cp(join(appDir, "package.json"), join(webDir, "package.json"));
     await cp(join(appDir, "next.config.ts"), join(webDir, "next.config.ts"));
+    // next.config.ts keeps ZERO app-runtime imports except the self-
+    // contained body-limit derivation it sizes the action cap from (its
+    // module header explains why the derivation lives there); ship that
+    // file beside the config or the packed config cannot load.
+    await cp(join(appDir, "lib", "body-limit.ts"), join(webDir, "lib", "body-limit.ts"));
     await assertAppDepsMirrored();
   },
 });

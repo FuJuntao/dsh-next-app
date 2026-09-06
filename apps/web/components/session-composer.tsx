@@ -19,6 +19,7 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
+import { activeAtToken } from "@deepseek-ai/dsh-file-reference/grammar";
 import {
   LexicalTypeaheadMenuPlugin,
   MenuOption,
@@ -139,6 +140,11 @@ export type SessionComposerProps = {
    * with true, a send with NO text is allowed (image-only prompts).
    */
   hasAttachments?: () => boolean;
+  /**
+   * Legend text for the `@` affordance (the session page's source is
+   * files AND sessions; home keeps "@ sessions").
+   */
+  referenceHint?: string;
 };
 
 class ComposerOption extends MenuOption {
@@ -173,8 +179,6 @@ class ComposerOption extends MenuOption {
 // `(^|\s)`: the menu opens after any word boundary, not only at line
 // start - typing "fix this /mode" must offer commands like dsh web does.
 const SLASH_TRIGGER_REGEX = /(^|\s)\/([\w-]*)$/u;
-const AT_TRIGGER_REGEX = /(^|\s|\n)@([^\s@]*)$/u;
-
 function checkForSlashTrigger(text: string): MenuTextMatch | null {
   const match = SLASH_TRIGGER_REGEX.exec(text);
   if (match === null) return null;
@@ -188,16 +192,19 @@ function checkForSlashTrigger(text: string): MenuTextMatch | null {
   };
 }
 
+// The `@` trigger is the HOST grammar (AC 21): dsh-file-reference's
+// browser-safe activeAtToken - quoted paths, email-like interiors, and
+// cursor anchoring are its rules, not this file's. vendored-grammar.test.ts
+// pins the contract the UI relies on; a host bump that re-tokenizes fails
+// there instead of silently changing the menu.
 function checkForAtTrigger(text: string): MenuTextMatch | null {
-  const match = AT_TRIGGER_REGEX.exec(text);
-  if (match === null) return null;
-  const leading = match[1];
-  const query = match[2];
-  if (leading === undefined || query === undefined) return null;
+  const line = text.slice(text.lastIndexOf("\n") + 1);
+  const token = activeAtToken(line, line.length);
+  if (token === undefined) return null;
   return {
-    leadOffset: match.index + leading.length,
-    matchingString: query,
-    replaceableString: "@" + query,
+    leadOffset: text.length - token.prefix.length,
+    matchingString: token.query,
+    replaceableString: token.prefix,
   };
 }
 
@@ -302,6 +309,7 @@ function useComposerSubmit({
   enabledRef: RefObject<boolean>;
   setIsPending: (pending: boolean) => void;
   hasAttachments?: (() => boolean) | undefined;
+  referenceHint?: string | undefined;
 }) {
   const [editor] = useLexicalComposerContext();
   // Latest-ref: surfaces pass inline closures; without this the submit
@@ -538,7 +546,12 @@ function TypeaheadMenus({
     (option: ComposerOption, textNodeContainingQuery: TextNode | null, closeMenu: () => void) => {
       editor.update(() => {
         const text = option.insertText ?? option.label;
-        const replacement = $createTextNode(text + " ");
+        // Descent rule (AC 21): a quoted, still-open directory mention
+        // (`@"dir/` with no closing quote) must not gain a trailing space -
+        // the space lands inside the open quote and kills descent. Closed
+        // or unquoted mentions finish the token and take the space.
+        const staysOpen = text.startsWith('@"') && !text.endsWith('"');
+        const replacement = $createTextNode(staysOpen ? text : text + " ");
         if (textNodeContainingQuery !== null) {
           textNodeContainingQuery.replace(replacement);
         } else {
@@ -616,6 +629,7 @@ function ComposerInner({
   running,
   onStop,
   hasAttachments,
+  referenceHint,
 }: {
   commands: ComposerEntry[];
   hasText: boolean;
@@ -635,6 +649,7 @@ function ComposerInner({
   running: boolean;
   onStop?: (() => void) | undefined;
   hasAttachments?: (() => boolean) | undefined;
+  referenceHint?: string | undefined;
 }) {
   // Sync twin of the enabled prop for the submit paths (same reason
   // pendingRef exists: a click/Enter can arrive before the re-render).
@@ -656,7 +671,9 @@ function ComposerInner({
   const hint = [
     sendModes ? "Enter steers · ⌘/Ctrl+Enter queues" : "Enter sends",
     commands.length > 0 && "/ commands",
-    referenceSearch !== undefined ? "@ sessions" : references.length > 0 && "@ files",
+    referenceSearch !== undefined
+      ? (referenceHint ?? "@ sessions")
+      : references.length > 0 && "@ files",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -780,6 +797,7 @@ export function SessionComposer({
   running = false,
   onStop,
   hasAttachments,
+  referenceHint,
 }: SessionComposerProps) {
   const [hasText, setHasText] = useState(false);
   const [isPending, setIsPending] = useState(false);
@@ -819,6 +837,7 @@ export function SessionComposer({
         running={running}
         {...(onStop !== undefined ? { onStop } : {})}
         {...(hasAttachments !== undefined ? { hasAttachments } : {})}
+        {...(referenceHint !== undefined ? { referenceHint } : {})}
       />
       <OnChangePlugin
         onChange={(editorState) => {

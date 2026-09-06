@@ -18,19 +18,13 @@
  * wall, and the headroom covers base64's ~4/3 expansion (37%).
  */
 /**
- * The host's image-intake limits, as the `imageLimits` projection carries
- * them (the dsh-attachment `ImageAttachmentLimits` wire shape, mirrored
- * structurally so the client bundle carries no attachment-package import;
- * the carrier's zod validates the truth at the bridge).
+ * The host's image-intake limits and the body-limit derivation live in
+ * lib/body-limit.ts (the config's module - see its header); re-exported
+ * here so app consumers import image facts from one seam.
  */
-export interface ImageAttachmentLimits {
-  maxImageBytes: number;
-  maxImagesPerMessage: number;
-  maxMessageImageBytes: number;
-  maxImagePixels: number;
-  maxImageDimension: number;
-  mediaTypes: readonly string[];
-}
+import { deriveBodySizeLimit, type ImageAttachmentLimits } from "./body-limit";
+
+export { deriveBodySizeLimit, type ImageAttachmentLimits };
 
 /** One intake candidate measured from the browser (bytes + intrinsic pixels). */
 export interface ImageCandidate {
@@ -71,32 +65,10 @@ export function refuseImageIntake(
   return null;
 }
 
-/** Base64 expansion is at most ceil(n/3)*4; 1.37 (rounded-up bytes) is the headroom. */
-const BASE64_HEADROOM = 1.37;
-const KIB = 1024;
-
-/**
- * The server-action body cap (a Next SizeLimit string like "28mb") that admits
- * the host's fullest legal image message plus base64 and JSON envelope
- * headroom. When limits are absent there is no attachment path to size, so a
- * conservative floor (the old default widened for text) is returned - the
- * host refuses over-limit images regardless.
- */
-export function deriveBodySizeLimit(limits: ImageAttachmentLimits | undefined): string {
-  if (limits === undefined) return "8mb";
-  const bytes = Math.ceil(limits.maxImagesPerMessage * limits.maxImageBytes * BASE64_HEADROOM);
-  const roundedKib = Math.ceil(bytes / KIB) * KIB;
-  if (roundedKib >= 1024 * KIB) {
-    const mib = Math.ceil(roundedKib / (1024 * KIB));
-    return `${String(mib)}mb`;
-  }
-  return `${String(roundedKib / KIB)}kb`;
+function fmtNum(n: number): string {
+  return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n.toLocaleString("en-US");
 }
 
 function fmtBytes(n: number): string {
   return n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`;
-}
-
-function fmtNum(n: number): string {
-  return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n.toLocaleString("en-US");
 }

@@ -126,6 +126,20 @@ test("Load older pages the transcript in place", async ({ page }) => {
   await expect(scroller.getByText("paging filler 15", { exact: false })).toBeVisible();
 });
 
+test("the @ trigger offers file candidates from the session cwd", async ({ page }) => {
+  const sessionId = await createSession();
+  writeFileSync(join(cwd, "discoverable-notes.md"), "hi\n");
+  await page.goto(profile.baseURL + "/sessions/" + sessionId);
+  const box = page.getByRole("textbox", { name: "Message the session" });
+  await box.click();
+  await box.pressSequentially("see @disc");
+  const option = page.getByText("discoverable-notes.md", { exact: false }).first();
+  await expect(option).toBeVisible({ timeout: 15_000 });
+  // Selecting inserts the PATH reference (never contents) and closes the menu.
+  await option.click();
+  await expect(box).toContainText("@discoverable-notes.md");
+});
+
 test("an unknown id gets the distinct unknown-session state", async ({ page }) => {
   await page.goto(profile.baseURL + "/sessions/session-does-not-exist-at-all");
   await expect(page.getByRole("heading", { name: "Unknown session" })).toBeVisible();
