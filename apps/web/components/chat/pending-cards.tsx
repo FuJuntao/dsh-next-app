@@ -14,6 +14,7 @@
  * showing a quiet retry note; a transport failure likewise keeps it.
  */
 import { useState } from "react";
+import { RiQuestionLine, RiShieldCheckLine } from "@remixicon/react";
 import type { PendingCard } from "@/lib/transcript";
 import { answerApproval, answerQuestions, cancelQuestion } from "@/lib/respond";
 import { Button } from "@/components/ui/button";
@@ -34,16 +35,24 @@ export function ApprovalCard({ card }: CardProps) {
   if (card.state === "resolved") {
     return (
       <div
-        className="my-1 rounded-md border border-border/60 bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground"
+        className="flex items-center gap-2 rounded-md px-1.5 py-[3px] text-[0.8125rem] leading-5 text-muted-foreground"
         data-testid="approval-resolved"
       >
-        Escalation{" "}
-        {card.outcome === "allowed-once"
-          ? "approved"
-          : card.outcome === "rejected"
-            ? "rejected"
-            : String(card.outcome ?? "resolved")}
-        <span className="ml-1 font-mono">{toolName}</span>
+        <span
+          aria-hidden
+          className={`flex h-4 w-4 shrink-0 items-center justify-center ${
+            card.outcome === "rejected" ? "text-amber-600 dark:text-amber-500" : "text-primary"
+          }`}
+        >
+          <RiShieldCheckLine className="h-4 w-4" />
+        </span>
+        <span className="shrink-0 font-medium text-foreground/70">Approval</span>
+        <span aria-hidden className="shrink-0 text-muted-foreground/40">
+          ·
+        </span>
+        <span className="min-w-0 truncate">
+          <span className="font-mono">{toolName}</span> {outcomeLabel(card.outcome)}
+        </span>
       </div>
     );
   }
@@ -70,19 +79,24 @@ export function ApprovalCard({ card }: CardProps) {
 
   return (
     <div
-      className="my-2 rounded-md border border-amber-500/50 bg-amber-500/5 px-3 py-2 text-sm"
+      className="my-1.5 rounded-xl border border-amber-500/35 bg-amber-500/[0.06] px-3 py-2.5 shadow-xs"
       data-testid="approval-card"
     >
-      <div className="flex items-center gap-2">
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-        <span className="font-medium">Approval requested</span>
-        <span className="font-mono text-xs text-muted-foreground">{toolName}</span>
+      <div className="flex items-center gap-2 text-[0.8125rem]">
+        <span aria-hidden className="text-amber-600 dark:text-amber-500">
+          <RiShieldCheckLine className="h-4 w-4" />
+        </span>
+        <span className="font-medium">Needs your call</span>
+        <span aria-hidden className="text-muted-foreground/40">
+          ·
+        </span>
+        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{toolName}</span>
       </div>
       {reason !== undefined && reason !== "" && (
-        <p className="mt-1 text-xs text-muted-foreground">{reason}</p>
+        <p className="mt-1 pl-6 text-[0.8rem] leading-[1.5] text-muted-foreground">{reason}</p>
       )}
-      {refused !== null && <p className="mt-1 text-xs text-destructive">{refused}</p>}
-      <div className="mt-2 flex gap-2">
+      {refused !== null && <p className="mt-1.5 pl-6 text-xs text-destructive">{refused}</p>}
+      <div className="mt-2.5 flex gap-2 pl-6">
         <Button size="xs" onClick={() => void answer("allowed-once")} disabled={submitting}>
           Allow once
         </Button>
@@ -99,6 +113,13 @@ export function ApprovalCard({ card }: CardProps) {
   );
 }
 
+/** The settled wording of an approval, in the reader's words not the wire's. */
+function outcomeLabel(outcome: string | undefined): string {
+  if (outcome === "allowed-once") return "allowed";
+  if (outcome === "rejected") return "rejected";
+  return String(outcome ?? "resolved");
+}
+
 export function QuestionCard({ card }: CardProps) {
   const [submitting, setSubmitting] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
@@ -109,10 +130,22 @@ export function QuestionCard({ card }: CardProps) {
   if (card.state === "resolved") {
     return (
       <div
-        className="my-1 rounded-md border border-border/60 bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground"
+        className="flex items-center gap-2 rounded-md px-1.5 py-[3px] text-[0.8125rem] leading-5 text-muted-foreground"
         data-testid="question-resolved"
       >
-        Questions {card.outcome === "answered" ? "answered" : "dismissed"}
+        <span
+          aria-hidden
+          className="flex h-4 w-4 shrink-0 items-center justify-center text-primary"
+        >
+          <RiQuestionLine className="h-4 w-4" />
+        </span>
+        <span className="shrink-0 font-medium text-foreground/70">Questions</span>
+        <span aria-hidden className="shrink-0 text-muted-foreground/40">
+          ·
+        </span>
+        <span className="min-w-0 truncate">
+          {card.outcome === "answered" ? "answered" : "dismissed"}
+        </span>
       </div>
     );
   }
@@ -210,7 +243,7 @@ function QuestionForm({
 
   return (
     <form
-      className="my-2 space-y-3 rounded-md border border-primary/40 bg-primary/5 px-3 py-2.5 text-sm"
+      className="my-1.5 space-y-3.5 rounded-xl border border-primary/30 bg-primary/[0.04] px-3 py-2.5 shadow-xs"
       data-testid="question-card"
       onSubmit={(e) => {
         e.preventDefault();
@@ -222,19 +255,33 @@ function QuestionForm({
         }
       }}
     >
+      <div className="flex items-center gap-2 text-[0.8125rem]">
+        <span aria-hidden className="text-primary">
+          <RiQuestionLine className="h-4 w-4" />
+        </span>
+        <span className="font-medium">
+          {questions.length > 1 ? `${questions.length} questions` : "A question"}
+        </span>
+        <span aria-hidden className="text-muted-foreground/40">
+          ·
+        </span>
+        <span className="text-[0.78rem] text-muted-foreground">
+          the agent is waiting on this to continue
+        </span>
+      </div>
       {questions.map((q) => (
-        <fieldset key={q.id} disabled={submitting} className="space-y-1.5">
+        <fieldset key={q.id} disabled={submitting} className="space-y-1.5 pl-6">
           {q.header !== undefined && q.header !== "" && (
-            <legend className="text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
+            <legend className="mb-1 text-[0.68rem] font-medium uppercase tracking-[0.06em] text-muted-foreground/70">
               {q.header}
             </legend>
           )}
-          <div className="font-medium">{q.question}</div>
+          <div className="text-[0.8125rem] font-medium">{q.question}</div>
           {q.detail !== undefined && q.detail !== "" && (
-            <p className="text-xs text-muted-foreground">{q.detail}</p>
+            <p className="text-[0.78rem] leading-[1.5] text-muted-foreground">{q.detail}</p>
           )}
           {q.options.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
               {q.options.map((o) => {
                 const active = (selected[q.id] ?? []).includes(o.label);
                 return (
@@ -247,7 +294,7 @@ function QuestionForm({
                     className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                       active
                         ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border hover:bg-muted"
+                        : "border-border/70 bg-background/60 hover:bg-muted"
                     }`}
                   >
                     {o.label}
@@ -261,19 +308,19 @@ function QuestionForm({
             value={custom[q.id] ?? ""}
             onChange={(e) => setCustom((prev) => ({ ...prev, [q.id]: e.target.value }))}
             placeholder="Or type an answer…"
-            className="w-full rounded-md border border-input bg-transparent px-2 py-1 text-xs outline-none focus-visible:border-ring"
+            className="w-full rounded-lg border border-input bg-background/70 px-2.5 py-1.5 text-xs outline-none focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
           />
         </fieldset>
       ))}
-      {refused !== null && <p className="text-xs text-destructive">{refused}</p>}
-      <div className="flex items-center gap-2">
+      {refused !== null && <p className="pl-6 text-xs text-destructive">{refused}</p>}
+      <div className="flex items-center gap-2 pl-6">
         <Button type="submit" size="xs" disabled={!complete || submitting}>
           {submitting ? "Sending…" : "Submit answers"}
         </Button>
         <Button type="button" size="xs" variant="ghost" onClick={onDismiss} disabled={submitting}>
           Dismiss
         </Button>
-        <span className="ml-auto text-[0.7rem] text-muted-foreground">
+        <span className="ml-auto text-[0.7rem] text-muted-foreground/70">
           {questions.length > 1 ? "answer all to submit" : "pick or type"}
         </span>
       </div>

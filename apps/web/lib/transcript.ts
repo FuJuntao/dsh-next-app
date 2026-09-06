@@ -311,6 +311,9 @@ export interface TranscriptState {
   hasMore: boolean;
   /** The turn currently between `turn/start` and `turn/end` (AC 15 liveness). */
   runningTurn: number | null;
+  /** The `turn/start` time of that turn: the tail's live line reads it so
+   * "Working" also says how long the wait has been (null while idle). */
+  runningSince: number | null;
   /** Latest `session/subscribed.lastSeq` control value, once seen. */
   subscribedLastSeq: number | null;
   /** The last `stream/error` frame (the island's reconnect trigger reads it). */
@@ -330,6 +333,7 @@ export function createTranscript(): TranscriptState {
     lastSeq: -1,
     hasMore: false,
     runningTurn: null,
+    runningSince: null,
     subscribedLastSeq: null,
     streamError: null,
     pending: [],
@@ -782,6 +786,7 @@ export function foldEvent(
       // failure reads at the end of the turn it broke (AC 3's visible
       // mark, and the composer's stop control keys off runningTurn).
       state.runningTurn = data["turn"] as number;
+      state.runningSince = event.time;
       break;
     }
     case "turn/end": {
@@ -818,7 +823,10 @@ export function foldEvent(
         ...(detail !== undefined ? { detail } : {}),
       };
       state.items.push(mark);
-      if (state.runningTurn === turn) state.runningTurn = null;
+      if (state.runningTurn === turn) {
+        state.runningTurn = null;
+        state.runningSince = null;
+      }
       break;
     }
     case "approval/asked": {

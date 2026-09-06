@@ -30,11 +30,12 @@
  * reconnect notice.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { RiArrowDownSLine, RiShieldCheckLine } from "@remixicon/react";
 import type { HistoryEntry, SessionProjectionsBlock } from "@deepseek-ai/dsh-host-apiproxy/api";
 
 import { ImageIntake, type ImageIntakeHandle } from "@/components/chat/image-intake";
 import { ApprovalCard, QuestionCard } from "@/components/chat/pending-cards";
-import { TranscriptRow } from "@/components/chat/transcript-rows";
+import { QueueStrip, TranscriptRow, TurnLive } from "@/components/chat/transcript-rows";
 import type { ImageAttachmentLimits } from "@/lib/image-intake";
 import { searchFileReferences } from "@/lib/file-discovery";
 import { searchSessionReferences } from "@/lib/session-references";
@@ -124,6 +125,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
   const [atBottom, setAtBottom] = useState(true);
 
   const [running, setRunning] = useState<boolean>(() => fold.runningTurn !== null);
+  const [runningSince, setRunningSince] = useState<number | null>(() => fold.runningSince);
   const [queue, setQueue] = useState<QueuedItem[]>(() => [...fold.queue]);
   const [pending, setPending] = useState<PendingCard[]>(() => [...fold.pending]);
   const intakeRef = useRef<ImageIntakeHandle | null>(null);
@@ -175,6 +177,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     setItems([...foldRef.current.items]);
     setHasMore(foldRef.current.hasMore);
     setRunning(foldRef.current.runningTurn !== null);
+    setRunningSince(foldRef.current.runningSince);
     setQueue([...foldRef.current.queue]);
     setPending([...foldRef.current.pending]);
   }, []);
@@ -299,7 +302,10 @@ export function SessionTranscript(props: SessionTranscriptProps) {
   }, [sessionId, loadingOlder, sync]);
 
   // One floating pill slot by priority: an unanswered approval (AC 16's
-  // jump affordance) > new content > reconnect.
+  // jump affordance) > new content > reconnect. The jump control is the
+  // built-in surface's shape - a round icon button riding the bottom of the
+  // column - with the unseen count as its badge, because the number is the
+  // reason to press it.
   const awaitingApproval = pending.some(
     (card) => card.kind === "approval" && card.state === "pending",
   );
@@ -309,19 +315,25 @@ export function SessionTranscript(props: SessionTranscriptProps) {
         type="button"
         onClick={jumpToLatest}
         data-testid="approval-jump"
-        className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-amber-500/50 bg-amber-500/15 px-3 py-1 text-xs text-amber-700 shadow-sm backdrop-blur dark:text-amber-400"
+        title="An approval is waiting"
+        className="absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-amber-500/50 bg-amber-500/15 text-amber-600 shadow-sm backdrop-blur dark:text-amber-400"
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-        Approval waiting
+        <RiShieldCheckLine className="h-4 w-4" />
       </button>
     ) : !atBottom ? (
       <button
         type="button"
         onClick={jumpToLatest}
         data-testid="jump-to-latest"
-        className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-border bg-background/95 px-3 py-1 text-xs shadow-sm backdrop-blur"
+        aria-label={unseen > 0 ? `Jump to latest, ${unseen} new rows` : "Jump to latest"}
+        className="absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
       >
-        {unseen > 0 ? `Jump to latest · ${unseen} new` : "Jump to latest"}
+        <RiArrowDownSLine className="h-4 w-4" />
+        {unseen > 0 && (
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-mono text-[0.6rem] text-primary-foreground">
+            {unseen > 99 ? "99+" : unseen}
+          </span>
+        )}
       </button>
     ) : status === "reconnecting" ? (
       <div
@@ -334,17 +346,23 @@ export function SessionTranscript(props: SessionTranscriptProps) {
 
   return (
     <>
-      <header className="flex flex-col gap-0.5 border-b border-border/60 px-4 py-3 sm:px-6">
-        <h1 className="truncate text-base font-medium">
+      <header className="flex items-baseline gap-2 border-b border-border/60 px-4 py-2.5 sm:px-6">
+        <h1 className="min-w-0 truncate text-[0.95rem] font-medium">
           {title ?? navTitleOf(sessionId) ?? "New Session"}
         </h1>
-        <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-          {meta?.cwd !== undefined && <span className="truncate font-mono">{meta.cwd}</span>}
-          {meta !== null && <span>Updated {formatDate(meta.updatedAt)}</span>}
-          <span className="font-mono opacity-60">
+        {meta !== null && (
+          <span className="hidden shrink-0 text-[0.7rem] text-muted-foreground/60 sm:inline">
+            updated {formatDate(meta.updatedAt)}
+          </span>
+        )}
+        <span className="ml-auto flex shrink-0 items-center gap-2 text-[0.7rem] text-muted-foreground/60">
+          {meta?.cwd !== undefined && (
+            <span className="hidden max-w-[24ch] truncate font-mono lg:inline">{meta.cwd}</span>
+          )}
+          <span className="font-mono opacity-70">
             {sessionId.slice("session-".length, 8 + "session-".length)}
           </span>
-        </div>
+        </span>
       </header>
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div
@@ -382,20 +400,21 @@ export function SessionTranscript(props: SessionTranscriptProps) {
             {items.map((item) => (
               <TranscriptRow key={item.id} item={item} sessionId={sessionId} />
             ))}
-            {/* The queued strip (AC 14): pending `queued` items at the tail,
-                muted, read-only - an item leaves when the agent claims it. */}
-            {queue.length > 0 && (
-              <div className="mt-2 flex flex-col gap-1 border-t border-dashed border-border/60 pt-2">
-                {queue.map((q) => (
-                  <div key={q.id} className="truncate text-xs text-muted-foreground italic">
-                    {q.text.split("\n")[0]}
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* Answerable cards (AC 16/17): approvals and question batches at
-                the tail, settling from their resolved frames - including when
-                another client answered. */}
+            {/* The queued strip (AC 14) and the answerable cards (AC 16/17):
+                the tail overlays, in that order, both settling from the
+                downlink - an item leaves the strip when the agent claims it,
+                a card settles when any client answers it. */}
+            {/* The live tail line: only while a turn runs AND nothing else in
+                the column already shows how it is busy (a streaming caret or
+                an open tool row says that better than a generic line can). */}
+            {running &&
+              runningSince !== null &&
+              !items.some(
+                (item) =>
+                  (item.kind === "assistant" && item.streaming) ||
+                  (item.kind === "tool" && item.result === undefined),
+              ) && <TurnLive since={runningSince} />}
+            <QueueStrip queue={queue} />
             {pending.map((card) =>
               card.kind === "approval" ? (
                 <ApprovalCard key={card.id} card={card} />
