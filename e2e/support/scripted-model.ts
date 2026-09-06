@@ -454,6 +454,7 @@ export function scriptedSettingsYaml(baseURL: string): string {
     "          name: Stub Model",
     "          contextWindow: 8192",
     "          maxTokens: 1024",
+    "          input: [text, image]",
     "",
   ].join("\n");
 }

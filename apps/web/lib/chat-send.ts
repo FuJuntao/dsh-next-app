@@ -25,10 +25,20 @@ import { SessionId } from "@deepseek-ai/dsh-session/types";
 import { getActionBridgeClient } from "./bridge";
 
 /** Prompt input: the composer's draft and the send mode the gesture chose. */
+/** One intake image: base64 the host admits and promotes to a durable
+ * reference (the PromptContentPart image leg; mediaType verified host-side). */
+export interface PromptImage {
+  mediaType: string;
+  /** Canonical base64 (no data-URL prefix). */
+  data: string;
+  name?: string;
+}
+
 export interface SendPromptInput {
   sessionId: string;
   text: string;
   mode: "steer" | "queue";
+  images?: PromptImage[];
   /** The browser's IANA zone (captured client-side; the host canonicalizes). */
   clientTimeZone?: string;
 }
@@ -38,15 +48,26 @@ export type SendPromptResult = { ok: true; rpcId: string } | { ok: false; error:
 
 export async function sendPrompt(input: SendPromptInput): Promise<SendPromptResult> {
   const text = input.text.trim();
-  if (text === "") return { ok: false, error: "nothing to send: the message is empty" };
   if (input.mode !== "steer" && input.mode !== "queue") {
     return { ok: false, error: "unknown send mode" };
+  }
+  const images = input.images ?? [];
+  if (text === "" && images.length === 0) {
+    return { ok: false, error: "nothing to send: the message is empty" };
   }
   try {
     const response = await getActionBridgeClient().sessions.prompt({
       sessionId: SessionId(input.sessionId),
       mode: input.mode,
-      content: [{ type: "text", text }],
+      content: [
+        ...(text === "" ? [] : [{ type: "text" as const, text }]),
+        ...images.map((image) => ({
+          type: "image" as const,
+          mediaType: image.mediaType as "image/png",
+          data: image.data,
+          ...(image.name !== undefined ? { name: image.name } : {}),
+        })),
+      ],
       ...(input.clientTimeZone !== undefined && input.clientTimeZone !== ""
         ? { clientTimeZone: input.clientTimeZone }
         : {}),

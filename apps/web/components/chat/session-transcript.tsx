@@ -32,8 +32,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HistoryEntry, SessionProjectionsBlock } from "@deepseek-ai/dsh-host-apiproxy/api";
 
+import { ImageIntake, type ImageIntakeHandle } from "@/components/chat/image-intake";
 import { ApprovalCard, QuestionCard } from "@/components/chat/pending-cards";
 import { TranscriptRow } from "@/components/chat/transcript-rows";
+import type { ImageAttachmentLimits } from "@/lib/image-intake";
 import { useSessionLive } from "@/components/chat/use-session-live";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -121,6 +123,8 @@ export function SessionTranscript(props: SessionTranscriptProps) {
   const [running, setRunning] = useState<boolean>(() => fold.runningTurn !== null);
   const [queue, setQueue] = useState<QueuedItem[]>(() => [...fold.queue]);
   const [pending, setPending] = useState<PendingCard[]>(() => [...fold.pending]);
+  const intakeRef = useRef<ImageIntakeHandle | null>(null);
+  const [, setAttachmentCount] = useState(0); // render pulse only; the count itself is read via the handle
   const [sendError, setSendError] = useState<string | null>(null);
 
   const sync = useCallback((): void => {
@@ -144,15 +148,19 @@ export function SessionTranscript(props: SessionTranscriptProps) {
       const tempKey = "tmp-" + Math.random().toString(36).slice(2);
       markProvisional(state, { rpcId: tempKey, text: text.trim(), time: Date.now() });
       sync();
+      const images = intakeRef.current?.pending() ?? [];
       const result = await sendPrompt({
         sessionId,
         text,
         mode,
+        ...(images.length > 0 ? { images } : {}),
         clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       if (result.ok) {
         reconcileProvisional(state, tempKey, result.rpcId);
         setSendError(null);
+        intakeRef.current?.clear();
+        setAttachmentCount(0);
       } else {
         withdrawProvisional(state, tempKey);
         setSendError(result.error);
@@ -329,7 +337,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
           )}
           <div className="mx-auto flex w-full max-w-3xl flex-col">
             {items.map((item) => (
-              <TranscriptRow key={item.id} item={item} />
+              <TranscriptRow key={item.id} item={item} sessionId={sessionId} />
             ))}
             {/* The queued strip (AC 14): pending `queued` items at the tail,
                 muted, read-only - an item leaves when the agent claims it. */}
@@ -366,7 +374,42 @@ export function SessionTranscript(props: SessionTranscriptProps) {
               <AlertDescription>{sendError}</AlertDescription>
             </Alert>
           )}
+          {/* Image intake (AC 18): paste/drop forward to the same staged set
+              the picker button opens; limits ride the imageLimits projection
+              (absent = no pre-check, the host answers). */}
+          <div
+            onPasteCapture={(event) => {
+              const files = Array.from(event.clipboardData?.files ?? []);
+              if (files.some((f) => f.type.startsWith("image/"))) {
+                event.preventDefault();
+                event.stopPropagation();
+                intakeRef.current?.acceptFiles(files);
+                setAttachmentCount(intakeRef.current?.count() ?? 0);
+              }
+            }}
+            onDrop={(event) => {
+              const files = Array.from(event.dataTransfer?.files ?? []);
+              if (files.some((f) => f.type.startsWith("image/"))) {
+                event.preventDefault();
+                intakeRef.current?.acceptFiles(files);
+                setAttachmentCount(intakeRef.current?.count() ?? 0);
+              }
+            }}
+            onDragOver={(event) => {
+              if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+            }}
+          >
+            <ImageIntake
+              ref={intakeRef}
+              limits={
+                foldRef.current?.projections["imageLimits"]?.value as
+                  | ImageAttachmentLimits
+                  | undefined
+              }
+            />
+          </div>
           <SessionComposer
+            hasAttachments={() => (intakeRef.current?.count() ?? 0) > 0}
             commands={[...SLASH_MENU_ENTRIES]}
             references={[]}
             sendModes

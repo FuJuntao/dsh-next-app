@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@base-ui/react": "catalog:",
+    "@deepseek-ai/dsh-attachment": "catalog:",
     "@deepseek-ai/dsh-host-apiproxy": "catalog:",
     "@deepseek-ai/dsh-session": "catalog:",
     "@deepseek-ai/schemastery": "catalog:",

@@ -134,6 +134,11 @@ export type SessionComposerProps = {
   running?: boolean;
   /** Stop the running turn (AC 15); rendered only while `running`. */
   onStop?: () => void;
+  /**
+   * Whether the surface holds pending attachments (image intake, AC 18):
+   * with true, a send with NO text is allowed (image-only prompts).
+   */
+  hasAttachments?: () => boolean;
 };
 
 class ComposerOption extends MenuOption {
@@ -289,12 +294,14 @@ function useComposerSubmit({
   pendingRef,
   enabledRef,
   setIsPending,
+  hasAttachments,
 }: {
   onSubmit: (text: string, mode: SendMode) => Promise<unknown>;
   pendingRef: RefObject<boolean>;
   /** Sync gate from the surface (e.g. "no working folder chosen yet"). */
   enabledRef: RefObject<boolean>;
   setIsPending: (pending: boolean) => void;
+  hasAttachments?: (() => boolean) | undefined;
 }) {
   const [editor] = useLexicalComposerContext();
   // Latest-ref: surfaces pass inline closures; without this the submit
@@ -315,7 +322,7 @@ function useComposerSubmit({
       editor.getEditorState().read(() => {
         text = $getRoot().getTextContent().trim();
       });
-      if (text.length === 0) return;
+      if (text.length === 0 && hasAttachments?.() !== true) return;
       pendingRef.current = true;
       setIsPending(true);
       void (async () => {
@@ -339,7 +346,7 @@ function useComposerSubmit({
         }
       })();
     },
-    [editor, pendingRef, setIsPending],
+    [editor, pendingRef, setIsPending, hasAttachments],
   );
 }
 
@@ -608,6 +615,7 @@ function ComposerInner({
   sendModes,
   running,
   onStop,
+  hasAttachments,
 }: {
   commands: ComposerEntry[];
   hasText: boolean;
@@ -626,6 +634,7 @@ function ComposerInner({
   sendModes: boolean;
   running: boolean;
   onStop?: (() => void) | undefined;
+  hasAttachments?: (() => boolean) | undefined;
 }) {
   // Sync twin of the enabled prop for the submit paths (same reason
   // pendingRef exists: a click/Enter can arrive before the re-render).
@@ -633,7 +642,13 @@ function ComposerInner({
   useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
-  const submit = useComposerSubmit({ onSubmit, pendingRef, enabledRef, setIsPending });
+  const submit = useComposerSubmit({
+    onSubmit,
+    pendingRef,
+    enabledRef,
+    setIsPending,
+    ...(hasAttachments !== undefined ? { hasAttachments } : {}),
+  });
   // The hint advertises only the triggers this surface actually injected: an
   // empty source mounts no menu, so advertising it would be a lie. The
   // legend is trimmed to one compact line at phone widths (design packet);
@@ -704,7 +719,7 @@ function ComposerInner({
                 </Button>
               )}
             <SendButton
-              hasText={hasText}
+              hasText={hasText || hasAttachments?.() === true}
               isPending={isPending}
               sendEnabled={enabled}
               submit={submit}
@@ -764,6 +779,7 @@ export function SessionComposer({
   sendModes = false,
   running = false,
   onStop,
+  hasAttachments,
 }: SessionComposerProps) {
   const [hasText, setHasText] = useState(false);
   const [isPending, setIsPending] = useState(false);
@@ -802,6 +818,7 @@ export function SessionComposer({
         sendModes={sendModes}
         running={running}
         {...(onStop !== undefined ? { onStop } : {})}
+        {...(hasAttachments !== undefined ? { hasAttachments } : {})}
       />
       <OnChangePlugin
         onChange={(editorState) => {

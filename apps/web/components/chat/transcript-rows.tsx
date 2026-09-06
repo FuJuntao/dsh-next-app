@@ -25,8 +25,30 @@ import type {
   UserItem,
 } from "@/lib/transcript";
 
-/** A human prompt: right-aligned bubble, images as labelled chips (commit 9 renders them). */
-export function UserRow({ item }: { item: UserItem }) {
+/** One transcript image via the attachment door (AC 20): the URL carries only
+ * the opaque id + session; bytes arrive through the host's log-reference proof. */
+export function AttachmentImage({
+  sessionId,
+  attachmentId,
+  name,
+}: {
+  sessionId: string;
+  attachmentId: string;
+  name?: string;
+}) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- transcript images are runtime attachments, not build-time known; next/image would need remote loader config for a same-origin dynamic route.
+    <img
+      src={`/api/attachment?sessionId=${encodeURIComponent(sessionId)}&attachmentId=${encodeURIComponent(attachmentId)}`}
+      alt={name ?? "image"}
+      loading="lazy"
+      className="max-h-64 max-w-full rounded-md border border-border/60 object-contain"
+    />
+  );
+}
+
+/** A human prompt: right-aligned bubble, images attached below the text. */
+export function UserRow({ item, sessionId }: { item: UserItem; sessionId: string }) {
   return (
     <div className="flex flex-col items-end gap-1 py-1">
       <div
@@ -36,9 +58,16 @@ export function UserRow({ item }: { item: UserItem }) {
       >
         {item.text}
         {item.images.length > 0 && (
-          <span className="mt-1 block text-xs text-muted-foreground">
-            {item.images.length} image{item.images.length > 1 ? "s" : ""}
-          </span>
+          <div className="mt-1 flex flex-wrap justify-end gap-1">
+            {item.images.map((image) => (
+              <AttachmentImage
+                key={image.attachmentId}
+                sessionId={sessionId}
+                attachmentId={image.attachmentId}
+                {...(image.name !== undefined ? { name: image.name } : {})}
+              />
+            ))}
+          </div>
         )}
         {item.provisional === true && <span className="ml-2 text-xs text-muted-foreground">…</span>}
       </div>
@@ -232,10 +261,10 @@ export function ApprovalRow({ item }: { item: ApprovalRowItem }) {
 }
 
 /** Dispatch one fold item to its row component. */
-export function TranscriptRow({ item }: { item: TranscriptItem }) {
+export function TranscriptRow({ item, sessionId }: { item: TranscriptItem; sessionId: string }) {
   switch (item.kind) {
     case "user":
-      return <UserRow item={item} />;
+      return <UserRow item={item} sessionId={sessionId} />;
     case "assistant":
       return <AssistantRow item={item} />;
     case "tool":
