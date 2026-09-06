@@ -32,6 +32,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HistoryEntry, SessionProjectionsBlock } from "@deepseek-ai/dsh-host-apiproxy/api";
 
+import { ApprovalCard, QuestionCard } from "@/components/chat/pending-cards";
 import { TranscriptRow } from "@/components/chat/transcript-rows";
 import { useSessionLive } from "@/components/chat/use-session-live";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ import {
   prependHistoryPage,
   seedProjections,
   withdrawProvisional,
+  type PendingCard,
   type QueuedItem,
   type TranscriptItem,
   type TranscriptState,
@@ -118,6 +120,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
 
   const [running, setRunning] = useState<boolean>(() => fold.runningTurn !== null);
   const [queue, setQueue] = useState<QueuedItem[]>(() => [...fold.queue]);
+  const [pending, setPending] = useState<PendingCard[]>(() => [...fold.pending]);
   const [sendError, setSendError] = useState<string | null>(null);
 
   const sync = useCallback((): void => {
@@ -126,6 +129,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     setHasMore(foldRef.current.hasMore);
     setRunning(foldRef.current.runningTurn !== null);
     setQueue([...foldRef.current.queue]);
+    setPending([...foldRef.current.pending]);
   }, []);
 
   // The write flow (AC 13/15). The provisional row is minted with a temp
@@ -243,24 +247,39 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     setLoadingOlder(false);
   }, [sessionId, loadingOlder, sync]);
 
-  // One floating pill slot by priority (approval, then jump, then reconnect).
-  const pill = !atBottom ? (
-    <button
-      type="button"
-      onClick={jumpToLatest}
-      data-testid="jump-to-latest"
-      className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-border bg-background/95 px-3 py-1 text-xs shadow-sm backdrop-blur"
-    >
-      {unseen > 0 ? `Jump to latest · ${unseen} new` : "Jump to latest"}
-    </button>
-  ) : status === "reconnecting" ? (
-    <div
-      data-testid="reconnecting"
-      className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-600 dark:text-amber-500"
-    >
-      Reconnecting…
-    </div>
-  ) : null;
+  // One floating pill slot by priority: an unanswered approval (AC 16's
+  // jump affordance) > new content > reconnect.
+  const awaitingApproval = pending.some(
+    (card) => card.kind === "approval" && card.state === "pending",
+  );
+  const pill =
+    !atBottom && awaitingApproval ? (
+      <button
+        type="button"
+        onClick={jumpToLatest}
+        data-testid="approval-jump"
+        className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-amber-500/50 bg-amber-500/15 px-3 py-1 text-xs text-amber-700 shadow-sm backdrop-blur dark:text-amber-400"
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+        Approval waiting
+      </button>
+    ) : !atBottom ? (
+      <button
+        type="button"
+        onClick={jumpToLatest}
+        data-testid="jump-to-latest"
+        className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-border bg-background/95 px-3 py-1 text-xs shadow-sm backdrop-blur"
+      >
+        {unseen > 0 ? `Jump to latest · ${unseen} new` : "Jump to latest"}
+      </button>
+    ) : status === "reconnecting" ? (
+      <div
+        data-testid="reconnecting"
+        className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-600 dark:text-amber-500"
+      >
+        Reconnecting…
+      </div>
+    ) : null;
 
   return (
     <>
@@ -322,6 +341,16 @@ export function SessionTranscript(props: SessionTranscriptProps) {
                   </div>
                 ))}
               </div>
+            )}
+            {/* Answerable cards (AC 16/17): approvals and question batches at
+                the tail, settling from their resolved frames - including when
+                another client answered. */}
+            {pending.map((card) =>
+              card.kind === "approval" ? (
+                <ApprovalCard key={card.id} card={card} />
+              ) : (
+                <QuestionCard key={card.id} card={card} />
+              ),
             )}
           </div>
         </div>

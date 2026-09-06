@@ -19,7 +19,7 @@ vi.mock("./bridge", () => ({
   getActionBridgeClient: () => fake,
 }));
 
-const { relayRespond } = await import("./respond");
+const { relayRespond, answerApproval, answerQuestions, cancelQuestion } = await import("./respond");
 
 beforeEach(() => {
   fake.respond.mockReset();
@@ -77,5 +77,65 @@ describe("relayRespond", () => {
     const result = await relayRespond({ answerToken: "", result: { ok: true, value: {} } });
     expect(result).toEqual({ status: "rejected" });
     expect(fake.respond).not.toHaveBeenCalled();
+  });
+});
+
+describe("answerApproval / answerQuestions (AC 16/17)", () => {
+  it("builds the approval client-response with the echoed token and value", async () => {
+    fake.respond.mockResolvedValueOnce({ accepted: true });
+    const result = await answerApproval({
+      answerToken: "tok-appr",
+      sessionId: "sess-1",
+      approvalId: "ap-1",
+      outcome: "allowed-once",
+    });
+    expect(result).toEqual({ status: "accepted" });
+    expect(fake.respond).toHaveBeenCalledWith({
+      type: "client-response",
+      rpcId: "tok-appr",
+      result: {
+        ok: true,
+        value: { sessionId: "sess-1", approvalId: "ap-1", outcome: "allowed-once" },
+      },
+    });
+  });
+
+  it("answers a question batch as one value with the echoed token", async () => {
+    fake.respond.mockResolvedValueOnce({ accepted: true });
+    const result = await answerQuestions({
+      answerToken: "tok-q",
+      sessionId: "sess-1",
+      answers: [{ id: "q1", selected: ["Vanilla"] }],
+    });
+    expect(result).toEqual({ status: "accepted" });
+    expect(fake.respond).toHaveBeenCalledWith({
+      type: "client-response",
+      rpcId: "tok-q",
+      result: {
+        ok: true,
+        value: { sessionId: "sess-1", answer: { answers: [{ id: "q1", selected: ["Vanilla"] }] } },
+      },
+    });
+  });
+
+  it("a bad-response keeps the card answerable (rejected, not settled)", async () => {
+    fake.respond.mockResolvedValueOnce({ accepted: false, reason: "bad-response" });
+    const result = await answerQuestions({
+      answerToken: "tok-q",
+      sessionId: "sess-1",
+      answers: [{ id: "q1", selected: [] }],
+    });
+    expect(result).toEqual({ status: "rejected" });
+  });
+
+  it("dismiss sends a cancelled result", async () => {
+    fake.respond.mockResolvedValueOnce({ accepted: true });
+    const result = await cancelQuestion({ answerToken: "tok-x" });
+    expect(result).toEqual({ status: "accepted" });
+    expect(fake.respond).toHaveBeenCalledWith({
+      type: "client-response",
+      rpcId: "tok-x",
+      result: { ok: false, code: "cancelled", message: "dismissed in the web surface" },
+    });
   });
 });

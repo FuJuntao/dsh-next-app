@@ -87,6 +87,28 @@ test("Cmd/Ctrl+Enter queues while a turn runs and the queued strip settles", asy
   });
 });
 
+test("an approval ask renders an answerable card that settles from the client answer", async ({
+  page,
+}) => {
+  const sessionId = await createSession();
+  await page.goto(profile.baseURL + "/sessions/" + sessionId);
+  await envelopeCall("session.prompt", {
+    sessionId,
+    mode: "queue",
+    content: [{ type: "text", text: "scripted-approval escalate please" }],
+  });
+  const card = page.getByTestId("approval-card");
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await expect(card).toContainText("bash");
+  await card.getByRole("button", { name: "Allow once" }).click();
+  // Settles from the broadcast approval/resolved frame (AC 16).
+  await expect(page.getByTestId("approval-resolved")).toBeVisible({ timeout: 30_000 });
+  // The bash call then runs and the model concludes.
+  await expect(
+    page.getByTestId("transcript-scroll").getByText("Approval round complete"),
+  ).toBeVisible({ timeout: 30_000 });
+});
+
 test("the stop control settles the turn as stopped", async ({ page }) => {
   const sessionId = await createSession();
   await page.goto(profile.baseURL + "/sessions/" + sessionId);

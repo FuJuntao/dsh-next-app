@@ -63,8 +63,12 @@ export async function relayRespond(input: RespondInput): Promise<RespondResult> 
     rpcId: RpcId(input.answerToken),
     result: input.result as RpcResult<unknown>,
   };
+  return postRespond(message);
+}
+
+async function postRespond(message: unknown): Promise<RespondResult> {
   try {
-    const receipt = await getActionBridgeClient().respond(message);
+    const receipt = await getActionBridgeClient().respond(message as never);
     if (receipt.accepted === true) return { status: "accepted" };
     // 'not-pending' settles the card from the resolved frame instead;
     // 'bad-response' means our shape was wrong and the host refused it.
@@ -73,4 +77,56 @@ export async function relayRespond(input: RespondInput): Promise<RespondResult> 
     console.error("[respond] relay failed:", error);
     return { status: "transport" };
   }
+}
+
+/** An approval verdict a client may give (the host's other outcomes are host-side). */
+export type ApprovalVerdict = "allowed-once" | "rejected";
+
+/**
+ * Answer one approval ask (AC 16): the value slot is the ApprovalResponse
+ * payload (sessionId + approvalId + the verdict), echoing the frame's token.
+ * The card settles from the broadcast approval/resolved frame - this returns
+ * only the carrier receipt so the card can react to a refusal.
+ */
+export async function answerApproval(input: {
+  answerToken: string;
+  sessionId: string;
+  approvalId: string;
+  outcome: ApprovalVerdict;
+}): Promise<RespondResult> {
+  return relayRespond({
+    answerToken: input.answerToken,
+    result: {
+      ok: true,
+      value: { sessionId: input.sessionId, approvalId: input.approvalId, outcome: input.outcome },
+    },
+  });
+}
+
+/**
+ * Answer a whole question batch (AC 17): the value slot is the QuestionResponse
+ * payload (sessionId + the answer). One ask is answered as a batch, never split
+ * per question; a `bad-response` refusal surfaces as `rejected` and the card
+ * stays answerable (never dead).
+ */
+export async function answerQuestions(input: {
+  answerToken: string;
+  sessionId: string;
+  answers: { id: string; selected: string[]; custom?: string }[];
+}): Promise<RespondResult> {
+  return relayRespond({
+    answerToken: input.answerToken,
+    result: {
+      ok: true,
+      value: { sessionId: input.sessionId, answer: { answers: input.answers } },
+    },
+  });
+}
+
+/** Refuse a question batch (dismiss): the answer is a cancelled client-response. */
+export async function cancelQuestion(input: { answerToken: string }): Promise<RespondResult> {
+  return relayRespond({
+    answerToken: input.answerToken,
+    result: { ok: false, code: "cancelled", message: "dismissed in the web surface" },
+  });
 }
