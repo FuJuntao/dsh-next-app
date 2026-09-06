@@ -246,12 +246,15 @@ test("the folder tree fits a phone viewport", async ({ page }) => {
   await expect(dialog.getByText("No subfolders.")).toBeVisible();
 });
 
-// ...and the session page's icon-only chrome surviving the home redesign.
-test("the session page keeps the icon-only Send message chrome", async ({ page }) => {
+// ...and the session page's own send chrome: two named gestures, and no stop
+// control until a turn is actually running.
+test("the session page offers Steer and Queue, and no Stop while idle", async ({ page }) => {
   const created = (await envelopeCall("session.create", {})) as { sessionId: string };
   await page.goto(profile.baseURL + "/sessions/" + created.sessionId);
   await expect(page.getByRole("textbox", { name: "Message the session" })).toBeEditable();
-  await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Steer the session now" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Queue this message" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Stop current turn" })).toHaveCount(0);
 });
 
 test("the model picker selection is applied before the first prompt", async ({ page }) => {

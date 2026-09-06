@@ -26,21 +26,15 @@ import {
   type MenuTextMatch,
 } from "@lexical/react/LexicalTypeaheadMenuPlugin";
 import {
-  RiArrowDropDownLine,
   RiChat3Line,
   RiFileLine,
+  RiInboxLine,
   RiSendPlane2Fill,
   RiStopLine,
   RiTerminalBoxLine,
 } from "@remixicon/react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
@@ -114,8 +108,8 @@ export type SessionComposerProps = {
   /**
    * Visible text on the send button (design packet: home's submit is
    * "Start session" - the one first-screen action that says its name).
-   * Absent means the icon-only square with the "Send message" accessible
-   * name - the session page's shape.
+   * Absent on a surface with no modes and no label of its own, the control
+   * is then the icon-only square carrying the "Send message" accessible name.
    */
   submitLabel?: string;
   /**
@@ -125,10 +119,11 @@ export type SessionComposerProps = {
    */
   lockedHint?: string;
   /**
-   * Steer/queue chrome (session page, AC 13/15): Enter and the Send button
-   * STEER (the primary gesture interrupts the running turn), Cmd/Ctrl+Enter
-   * and the chevron menu QUEUE, and a running turn grows the stop control.
-   * Default false keeps home's single-submit chrome untouched.
+   * Steer/queue chrome (session page, AC 13/15): Enter and the **Steer**
+   * button STEER (the primary gesture interrupts the running turn),
+   * Cmd/Ctrl+Enter and the **Queue** button QUEUE, and a running turn grows
+   * the stop control. Default false keeps home's single-submit chrome
+   * untouched.
    */
   sendModes?: boolean;
   /** Whether a turn is running (drives the stop control). */
@@ -431,12 +426,23 @@ function EditableGatePlugin({ enabled }: { enabled: boolean }) {
   return null;
 }
 
-function SendButton({
+/**
+ * The send controls. A mode-aware surface (the session page) shows its two
+ * gestures as two buttons - **Steer** interrupts the running turn, **Queue**
+ * waits its turn - because a chord and a chevron menu both hide the second
+ * one from the reader who is deciding where the message should land. A
+ * surface without modes (home) keeps its single labelled submit.
+ *
+ * `isPending` disables both: one send in flight is the contract the Enter
+ * handler shares (see `useComposerSubmit`).
+ */
+function SendControls({
   hasText,
   isPending,
   sendEnabled,
   submit,
   submitLabel,
+  sendModes,
 }: {
   hasText: boolean;
   isPending: boolean;
@@ -444,19 +450,51 @@ function SendButton({
   submit: (mode: SendMode) => void;
   /** Visible text (home: "Start session"); absent keeps the icon-only square. */
   submitLabel: string | undefined;
+  sendModes: boolean;
 }) {
+  const disabled = !hasText || isPending || !sendEnabled;
+  if (!sendModes) {
+    return (
+      <Button
+        type="button"
+        variant="default"
+        size={submitLabel === undefined ? "icon-sm" : "xs"}
+        aria-label={submitLabel ?? "Send message"}
+        disabled={disabled}
+        onClick={() => submit("steer")}
+      >
+        {isPending ? <Spinner /> : <RiSendPlane2Fill />}
+        {submitLabel !== undefined && submitLabel}
+      </Button>
+    );
+  }
   return (
-    <Button
-      type="button"
-      variant="default"
-      size={submitLabel === undefined ? "icon-sm" : "xs"}
-      aria-label={submitLabel ?? "Send message"}
-      disabled={!hasText || isPending || !sendEnabled}
-      onClick={() => submit("steer")}
-    >
-      {isPending ? <Spinner /> : <RiSendPlane2Fill />}
-      {submitLabel !== undefined && submitLabel}
-    </Button>
+    <>
+      <Button
+        type="button"
+        variant="default"
+        size="xs"
+        aria-label="Steer the session now"
+        title="Steer - interrupt the running turn with this message"
+        disabled={disabled}
+        onClick={() => submit("steer")}
+      >
+        {isPending ? <Spinner /> : <RiSendPlane2Fill />}
+        Steer
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="xs"
+        aria-label="Queue this message"
+        title="Queue - let the current turn finish first (⌘/Ctrl+Enter)"
+        disabled={disabled}
+        onClick={() => submit("queue")}
+      >
+        <RiInboxLine />
+        Queue
+      </Button>
+    </>
   );
 }
 
@@ -680,7 +718,7 @@ function ComposerInner({
 
   return (
     <>
-      <div className="rounded-none border border-input bg-transparent transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50 dark:bg-input/30">
+      <div className="rounded-xl border border-input bg-card transition-colors focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15 dark:bg-input/25">
         <div className="relative">
           {!enabled && (
             // The locked affordance: the editor area becomes the trigger
@@ -703,67 +741,49 @@ function ComposerInner({
             contentEditable={
               <ContentEditable
                 aria-label={placeholder}
-                className="block max-h-48 min-h-12 overflow-y-auto px-2.5 py-2 text-xs outline-none"
+                className="block max-h-48 min-h-11 overflow-y-auto px-3 py-2.5 text-sm leading-[1.55] outline-none"
               />
             }
             placeholder={
-              <div className="pointer-events-none absolute inset-x-0 top-0 px-2.5 py-2 text-xs text-muted-foreground">
+              <div className="pointer-events-none absolute inset-x-0 top-0 px-3 py-2.5 text-sm text-muted-foreground/70">
                 {placeholder}
               </div>
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
         </div>
-        <div className="flex items-center justify-between gap-2 border-t border-input px-2.5 py-1.5">
+        <div className="flex items-center justify-between gap-2 border-t border-border/50 px-2.5 py-1.5">
           {/* While locked the footer states the remedy, not the shortcuts of
               an editor that does not accept typing yet (design packet). */}
-          <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+          <p className="min-w-0 flex-1 text-[0.7rem] leading-4 text-muted-foreground/70">
             {enabled || lockedHint === undefined ? hint : lockedHint}
           </p>
           <div className="flex shrink-0 items-center gap-1">
             {sendModes &&
               running === true &&
               onStop !== undefined && (
-                // AC 15: a running turn grows the stop control beside send.
+                // AC 15: a running turn grows the stop control - the only
+                // third button this row ever shows, and only while it means
+                // something.
                 <Button
                   type="button"
-                  variant="outline"
-                  size="icon-sm"
+                  variant="ghost"
+                  size="icon-xs"
                   aria-label="Stop current turn"
+                  title="Stop the running turn"
                   onClick={onStop}
                 >
                   <RiStopLine />
                 </Button>
               )}
-            <SendButton
+            <SendControls
               hasText={hasText || hasAttachments?.() === true}
               isPending={isPending}
               sendEnabled={enabled}
               submit={submit}
               submitLabel={submitLabel}
-              {...(sendModes ? { sendModes: true } : {})}
+              sendModes={sendModes === true}
             />
-            {sendModes && (
-              // The secondary queue gesture as a control (touch-safe): the
-              // chevron opens Send now / Queue.
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-                  aria-label="Send options"
-                  disabled={!hasText || isPending || !enabled}
-                >
-                  <RiArrowDropDownLine />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => submit("steer")}>
-                    Send now (steer)
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => submit("queue")}>
-                    Queue (wait for the turn)
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
           </div>
         </div>
       </div>
