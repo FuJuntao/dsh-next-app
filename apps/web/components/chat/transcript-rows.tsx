@@ -99,7 +99,7 @@ export function AttachmentImage({
       src={`/api/attachment?sessionId=${encodeURIComponent(sessionId)}&attachmentId=${encodeURIComponent(attachmentId)}`}
       alt={name ?? "image"}
       loading="lazy"
-      className="max-h-64 max-w-full rounded-lg border border-border/60 object-contain"
+      className="max-h-64 max-w-full rounded-md border border-border/60 object-contain"
     />
   );
 }
@@ -109,7 +109,7 @@ export function UserRow({ item, sessionId }: { item: UserItem; sessionId: string
   return (
     <div className="group/row flex flex-col items-end gap-0.5 py-1.5">
       <div
-        className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-sm leading-normal ${
+        className={`max-w-[85%] whitespace-pre-wrap break-words rounded-lg px-3.5 py-2 text-sm leading-normal ${
           item.failed
             ? "border border-destructive/40 bg-destructive/10 text-foreground"
             : "bg-primary/10 text-foreground"

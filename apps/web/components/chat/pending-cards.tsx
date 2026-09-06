@@ -79,7 +79,7 @@ export function ApprovalCard({ card }: CardProps) {
 
   return (
     <div
-      className="my-1.5 rounded-xl border border-warning/35 bg-warning/5 px-3 py-2.5 shadow-xs"
+      className="my-1.5 rounded-none border border-warning/35 bg-warning/5 px-3 py-2.5 shadow-xs"
       data-testid="approval-card"
     >
       <div className="flex items-center gap-2 text-sm">
@@ -243,7 +243,7 @@ function QuestionForm({
 
   return (
     <form
-      className="my-1.5 space-y-3.5 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2.5 shadow-xs"
+      className="my-1.5 space-y-3.5 rounded-none border border-primary/30 bg-primary/5 px-3 py-2.5 shadow-xs"
       data-testid="question-card"
       onSubmit={(e) => {
         e.preventDefault();
@@ -308,7 +308,7 @@ function QuestionForm({
             value={custom[q.id] ?? ""}
             onChange={(e) => setCustom((prev) => ({ ...prev, [q.id]: e.target.value }))}
             placeholder="Or type an answer…"
-            className="w-full rounded-lg border border-input bg-background/70 px-2.5 py-1.5 text-xs outline-none focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
+            className="w-full rounded-none border border-input bg-background/70 px-2.5 py-1.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
           />
         </fieldset>
       ))}

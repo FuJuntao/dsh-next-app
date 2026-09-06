@@ -726,7 +726,7 @@ function ComposerInner({
 
   return (
     <>
-      <div className="rounded-xl border border-input bg-card transition-colors focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15 dark:bg-input/25">
+      <div className="rounded-none border border-input bg-card transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50 dark:bg-input/25">
         <div className="relative">
           {!enabled && (
             // The locked affordance: the editor area becomes the trigger
