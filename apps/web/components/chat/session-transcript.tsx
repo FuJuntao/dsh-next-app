@@ -307,7 +307,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
         onClick={jumpToLatest}
         data-testid="approval-jump"
         title="An approval is waiting"
-        className="absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-warning/50 bg-warning/15 text-warning shadow-sm backdrop-blur"
+        className="absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-none border border-warning/50 bg-warning/15 text-warning shadow-sm backdrop-blur"
       >
         <RiShieldCheckLine className="h-4 w-4" />
       </button>
@@ -317,11 +317,11 @@ export function SessionTranscript(props: SessionTranscriptProps) {
         onClick={jumpToLatest}
         data-testid="jump-to-latest"
         aria-label={unseen > 0 ? `Jump to latest, ${unseen} new rows` : "Jump to latest"}
-        className="absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
+        className="absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-none border border-border bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
       >
         <RiArrowDownSLine className="h-4 w-4" />
         {unseen > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-mono text-2xs text-primary-foreground">
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-none bg-primary px-1 font-mono text-2xs text-primary-foreground">
             {unseen > 99 ? "99+" : unseen}
           </span>
         )}
@@ -329,7 +329,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     ) : status === "reconnecting" ? (
       <div
         data-testid="reconnecting"
-        className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs text-warning"
+        className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-none border border-warning/40 bg-warning/10 px-3 py-1 text-xs text-warning"
       >
         Reconnecting…
       </div>

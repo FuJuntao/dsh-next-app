@@ -137,7 +137,7 @@ export function EventRow({
     </>
   );
 
-  const lineClass = "flex min-w-0 items-start gap-2 rounded-md px-2 py-0.5 text-sm leading-5";
+  const lineClass = "flex min-w-0 items-start gap-2 rounded-none px-2 py-0.5 text-sm leading-5";
 
   if (children === undefined) {
     return <div className={cn("group/row", lineClass, className)}>{line}</div>;
@@ -184,7 +184,7 @@ export function DetailBlock({
       )}
       <div
         className={cn(
-          "max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 px-2.5 py-2 text-xs leading-normal",
+          "max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-none bg-muted/40 px-2.5 py-2 text-xs leading-normal",
           mono && "font-mono",
           tone === "error" && "bg-destructive/10 text-destructive",
         )}

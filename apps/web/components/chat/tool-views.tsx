@@ -49,7 +49,7 @@ function DiffBlock({
   return (
     <div className="mb-2 space-y-2 last:mb-0">
       {diffs.map((diff, index) => (
-        <div key={index} className="overflow-hidden rounded-md border border-border/60">
+        <div key={index} className="overflow-hidden rounded-none border border-border/60">
           <div className="truncate bg-muted/50 px-2.5 py-1 font-mono text-xs text-muted-foreground">
             {diff.path}
           </div>

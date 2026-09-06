@@ -189,13 +189,13 @@ export const ImageIntake = forwardRef<
               <img
                 src={image.previewUrl}
                 alt={image.name}
-                className="h-16 w-16 rounded-md border border-border/60 object-cover"
+                className="h-16 w-16 rounded-none border border-border/60 object-cover"
               />
               <button
                 type="button"
                 aria-label={`Remove ${image.name}`}
                 onClick={() => remove(index)}
-                className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-background p-0.5 text-muted-foreground hover:text-foreground"
+                className="absolute -right-1.5 -top-1.5 rounded-none border border-border bg-background p-0.5 text-muted-foreground hover:text-foreground"
               >
                 <RiCloseLine className="size-3" />
               </button>
@@ -213,7 +213,7 @@ export const ImageIntake = forwardRef<
         aria-label="Add image"
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
-        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+        className="rounded-none p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
       >
         <RiImageAddLine className="size-4" />
       </button>

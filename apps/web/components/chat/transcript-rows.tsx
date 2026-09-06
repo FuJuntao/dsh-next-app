@@ -99,7 +99,7 @@ export function AttachmentImage({
       src={`/api/attachment?sessionId=${encodeURIComponent(sessionId)}&attachmentId=${encodeURIComponent(attachmentId)}`}
       alt={name ?? "image"}
       loading="lazy"
-      className="max-h-64 max-w-full rounded-md border border-border/60 object-contain"
+      className="max-h-64 max-w-full rounded-none border border-border/60 object-contain"
     />
   );
 }
@@ -109,10 +109,10 @@ export function UserRow({ item, sessionId }: { item: UserItem; sessionId: string
   return (
     <div className="group/row flex flex-col items-end gap-0.5 py-1.5">
       <div
-        className={`max-w-[85%] whitespace-pre-wrap break-words rounded-lg px-3.5 py-2 text-sm leading-normal ${
+        className={`max-w-[85%] whitespace-pre-wrap break-words rounded-none border px-3.5 py-2 text-sm leading-normal ${
           item.failed
-            ? "border border-destructive/40 bg-destructive/10 text-foreground"
-            : "bg-primary/10 text-foreground"
+            ? "border-destructive/40 bg-destructive/10"
+            : "border-secondary/60 bg-secondary"
         } ${item.provisional ? "opacity-70" : ""}`}
       >
         {item.text}
@@ -273,7 +273,7 @@ export function CompactionRow({ item }: { item: CompactionItem }) {
         <span aria-hidden className="h-px flex-1 bg-border" />
       </div>
       <details className="group/row mt-1">
-        <summary className="list-none cursor-pointer rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/60 [&::-webkit-details-marker]:hidden">
+        <summary className="list-none cursor-pointer rounded-none px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/60 [&::-webkit-details-marker]:hidden">
           Read the summary
         </summary>
         <div
@@ -317,7 +317,7 @@ export function ContextRow({ item }: { item: ContextItem }) {
       <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground/60">
         {item.source}
       </div>
-      <pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 px-2.5 py-2 font-mono text-xs leading-normal">
+      <pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-none bg-muted/40 px-2.5 py-2 font-mono text-xs leading-normal">
         {item.text}
       </pre>
     </EventRow>

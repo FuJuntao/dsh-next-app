@@ -41,7 +41,7 @@ const SAFE = /^language-[\w+-]*$/;
 /** Escape a class-less HTML-free fallback render. */
 function Plain({ code }: { code: string }) {
   return (
-    <pre className="my-2 overflow-x-auto rounded-md bg-muted/60 p-3 font-mono text-xs whitespace-pre">
+    <pre className="my-2 overflow-x-auto rounded-none bg-muted/60 p-3 font-mono text-xs whitespace-pre">
       {code}
     </pre>
   );
@@ -86,7 +86,7 @@ export function CodeBlock({ code, lang }: { code: string; lang: string }) {
   if (failed || html === null) return <Plain code={code} />;
   return (
     <div
-      className="my-2 overflow-x-auto rounded-md text-xs [&>pre]:m-0 [&>pre]:bg-transparent [&>pre]:p-3"
+      className="my-2 overflow-x-auto rounded-none text-xs [&>pre]:m-0 [&>pre]:bg-transparent [&>pre]:p-3"
       // Shiki's own generated markup (spans with color variables) - no
       // model content survives into this string: it is produced from the
       // code text through the tokenizer.

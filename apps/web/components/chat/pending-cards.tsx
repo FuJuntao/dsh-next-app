@@ -35,7 +35,7 @@ export function ApprovalCard({ card }: CardProps) {
   if (card.state === "resolved") {
     return (
       <div
-        className="flex items-center gap-2 rounded-md px-2 py-0.5 text-sm leading-5 text-muted-foreground"
+        className="flex items-center gap-2 rounded-none px-2 py-0.5 text-sm leading-5 text-muted-foreground"
         data-testid="approval-resolved"
       >
         <span
@@ -130,7 +130,7 @@ export function QuestionCard({ card }: CardProps) {
   if (card.state === "resolved") {
     return (
       <div
-        className="flex items-center gap-2 rounded-md px-2 py-0.5 text-sm leading-5 text-muted-foreground"
+        className="flex items-center gap-2 rounded-none px-2 py-0.5 text-sm leading-5 text-muted-foreground"
         data-testid="question-resolved"
       >
         <span
@@ -291,7 +291,7 @@ function QuestionForm({
                     onClick={() => toggle(q, o.label)}
                     aria-pressed={active}
                     title={o.description}
-                    className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                    className={`rounded-none border px-2.5 py-1 text-xs transition-colors ${
                       active
                         ? "border-primary bg-primary text-primary-foreground"
                         : "border-border/70 bg-background/60 hover:bg-muted"

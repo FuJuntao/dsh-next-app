@@ -57,7 +57,7 @@ const components: Components = {
     const match = /language-([\w-]+)/.exec(String(className ?? ""));
     const raw = String(children ?? "").replace(/\n$/, "");
     if (inPre) return <CodeBlock code={raw} lang={match?.[1] ?? "text"} />;
-    return <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">{raw}</code>;
+    return <code className="bg-muted px-1 py-0.5 font-mono text-[0.85em]">{raw}</code>;
   },
   table: ({ children }) => (
     <div className="my-2 overflow-x-auto">
@@ -85,7 +85,7 @@ export function Markdown({ text, streaming = false }: { text: string; streaming?
         {markdown}
       </ReactMarkdown>
       {openTail !== "" && (
-        <pre className="my-2 overflow-x-auto rounded-md bg-muted/60 p-3 font-mono text-xs whitespace-pre">
+        <pre className="my-2 overflow-x-auto rounded-none bg-muted/60 p-3 font-mono text-xs whitespace-pre">
           {openTail}
         </pre>
       )}
