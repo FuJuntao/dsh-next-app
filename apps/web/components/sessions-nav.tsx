@@ -96,8 +96,7 @@ function RunningDot({ running }: { running: boolean }) {
       <span
         aria-hidden="true"
         className={
-          "size-1.5 shrink-0 rounded-full " +
-          (running ? "bg-emerald-500" : "bg-muted-foreground/30")
+          "size-1.5 shrink-0 rounded-full " + (running ? "bg-success" : "bg-muted-foreground/30")
         }
       />
       <span className="sr-only">{running ? "running" : "idle"}</span>
@@ -126,7 +125,7 @@ function RowButton({
       <time
         dateTime={new Date(session.updatedAt).toISOString()}
         suppressHydrationWarning
-        className="ml-auto shrink-0 text-[10px] tabular-nums text-sidebar-foreground/50"
+        className="ml-auto shrink-0 text-2xs tabular-nums text-sidebar-foreground/50"
       >
         {formatRelativeTime(session.updatedAt)}
       </time>
@@ -185,7 +184,7 @@ function RowGroup({
     <div data-testid={"session-group-" + group.key}>
       {group.label !== undefined && (
         <div
-          className="flex items-center gap-1 px-2 pt-2 pb-1 text-[11px] font-medium text-sidebar-foreground/50"
+          className="flex items-center gap-1 px-2 pt-2 pb-1 text-2xs font-medium text-sidebar-foreground/50"
           title={group.detail}
         >
           <RiFolderLine aria-hidden="true" className="size-3 shrink-0" />
