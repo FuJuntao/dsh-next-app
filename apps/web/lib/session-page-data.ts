@@ -19,6 +19,7 @@
  */
 import type {
   HistoryEntry,
+
   SessionProjectionsBlock,
   SessionSummary,
 } from "@deepseek-ai/dsh-host-apiproxy/api";
@@ -44,9 +45,15 @@ export interface SessionMeta {
   running: boolean;
 }
 
+
 /** Everything the page needs, or why it cannot show it. */
 export type SessionPageData =
-  | { status: "ok"; window: HistoryWindow; meta: SessionMeta | null; blank: boolean }
+  | {
+      status: "ok";
+      window: HistoryWindow;
+      meta: SessionMeta | null;
+      blank: boolean;
+    }
   | { status: "not-found" }
   | { status: "unavailable" };
 

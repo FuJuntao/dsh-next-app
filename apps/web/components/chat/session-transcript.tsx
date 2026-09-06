@@ -31,7 +31,11 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RiArrowDownSLine, RiShieldCheckLine } from "@remixicon/react";
-import type { HistoryEntry, SessionProjectionsBlock } from "@deepseek-ai/dsh-host-apiproxy/api";
+import type {
+  HistoryEntry,
+
+  SessionProjectionsBlock,
+} from "@deepseek-ai/dsh-host-apiproxy/api";
 
 import { ImageIntake, type ImageIntakeHandle } from "@/components/chat/image-intake";
 import { ApprovalCard, QuestionCard } from "@/components/chat/pending-cards";
@@ -50,6 +54,7 @@ import { navTitleOf, setNavTitle } from "@/lib/nav-live";
 import { loadOlderHistory } from "@/lib/session-history-action";
 import {
   createTranscript,
+
   foldHistoryPage,
   prependHistoryPage,
   seedProjections,
@@ -217,7 +222,12 @@ export function SessionTranscript(props: SessionTranscriptProps) {
 
   const onTitle = useCallback((next: string): void => setTitle(next), []);
 
-  const { status } = useSessionLive({ sessionId, foldRef, sync, onTitle, enabled: true });
+  const { status } = useSessionLive({
+    sessionId,
+    foldRef,
+    sync,
+    onTitle,
+  });
 
   // First paint: newest at the bottom (AC 1).
   useEffect(() => {
