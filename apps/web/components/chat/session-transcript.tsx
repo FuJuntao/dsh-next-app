@@ -49,13 +49,10 @@ import { cancelTurn, sendPrompt } from "@/lib/chat-send";
 import { navTitleOf, setNavTitle } from "@/lib/nav-live";
 import { loadOlderHistory } from "@/lib/session-history-action";
 import {
-  reconcileProvisional,
   createTranscript,
   foldHistoryPage,
-  markProvisional,
   prependHistoryPage,
   seedProjections,
-  withdrawProvisional,
   type PendingCard,
   type QueuedItem,
   type TranscriptItem,
@@ -182,18 +179,16 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     setPending([...foldRef.current.pending]);
   }, []);
 
-  // The write flow (AC 13/15). The provisional row is minted with a temp
-  // key, re-keyed to the prompt's rpcId when the action resolves (that is
-  // what the durable user/message will carry), and withdrawn on refusal -
-  // while the composer keeps the draft and the Alert shows the reason
-  // (throwing back is what tells the composer the send failed).
+  // The write flow (AC 13/15). The transcript does NOT mint an optimistic
+  // echo: a message is not in the session until the host says so, and a
+  // refused send should never have appeared in it at all. The durable
+  // `user/message` lands over the downlink (usually well under a second) and
+  // THAT row is the send's receipt; a queued prompt shows up in the queued
+  // strip from the host's own `session/queue` snapshot. On refusal the
+  // composer keeps the draft and the Alert carries the reason (throwing
+  // back is what tells the composer the send failed).
   const handleSend = useCallback(
     async (text: string, mode: "steer" | "queue"): Promise<void> => {
-      const state = foldRef.current;
-      if (state === null) return;
-      const tempKey = "tmp-" + Math.random().toString(36).slice(2);
-      markProvisional(state, { rpcId: tempKey, text: text.trim(), time: Date.now() });
-      sync();
       const images = intakeRef.current?.pending() ?? [];
       const result = await sendPrompt({
         sessionId,
@@ -203,19 +198,15 @@ export function SessionTranscript(props: SessionTranscriptProps) {
         clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       if (result.ok) {
-        reconcileProvisional(state, tempKey, result.rpcId);
         setSendError(null);
         intakeRef.current?.clear();
         setAttachmentCount(0);
       } else {
-        withdrawProvisional(state, tempKey);
         setSendError(result.error);
-        sync();
         throw new Error(result.error); // preserve the draft (composer contract)
       }
-      sync();
     },
-    [sessionId, sync],
+    [sessionId],
   );
 
   const handleStop = useCallback((): void => {
