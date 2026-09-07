@@ -230,12 +230,11 @@ function QuestionForm({
   };
   const complete = questions.every((q) => answerFor(q) !== null);
 
-  // The options and the free-text answer are mutually exclusive per
-  // question: the answer is ONE voice, so picking an option withdraws the
-  // typed text and starting to type withdraws the picks - otherwise the
-  // submit would carry both and nobody could tell which answer meant it.
+  // The free-text answer outranks the options, one-directionally: starting
+  // to type withdraws the picks (the typed words are the answer), but
+  // picking an option never destroys what was typed - the submit carries
+  // the picks AND the custom text together (the answer shape allows both).
   const toggle = (q: QuestionView, label: string): void => {
-    setCustom((prev) => ({ ...prev, [q.id]: "" }));
     setSelected((prev) => {
       const cur = prev[q.id] ?? [];
       if (!q.multi) return { ...prev, [q.id]: cur.includes(label) ? [] : [label] };
