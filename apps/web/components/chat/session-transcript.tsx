@@ -405,16 +405,10 @@ export function SessionTranscript(props: SessionTranscriptProps) {
                 the tail overlays, in that order, both settling from the
                 downlink - an item leaves the strip when the agent claims it,
                 a card settles when any client answers it. */}
-            {/* The live tail line: only while a turn runs AND nothing else in
-                the column already shows how it is busy (a streaming caret or
-                an open tool row says that better than a generic line can). */}
-            {running &&
-              runningSince !== null &&
-              !items.some(
-                (item) =>
-                  (item.kind === "assistant" && item.streaming) ||
-                  (item.kind === "tool" && item.result === undefined),
-              ) && <TurnLive since={runningSince} />}
+            {/* The live tail line: the one standing "the agent is on it"
+                signal while a turn runs - per-row spinners say HOW, this
+                says THAT, so it stays up for the whole turn. */}
+            {running && runningSince !== null && <TurnLive since={runningSince} />}
             <QueueStrip queue={queue} />
             {pending.map((card) =>
               card.kind === "approval" ? (

@@ -36,7 +36,6 @@ import {
   DetailBlock,
   EventRow,
   RAIL_BODY,
-  RAIL_TEXT,
   RowIcon,
   type RowState,
 } from "@/components/chat/event-row";
@@ -167,21 +166,17 @@ export function AssistantRow({ item }: { item: AssistantItem }) {
         </EventRow>
       )}
       {item.text !== "" && (
-        <div className={cn(RAIL_TEXT, "pr-1")}>
+        // Flush with the row icons: the answer is top-level content, not a
+        // child of the Thinking row above it.
+        <div className="pl-2 pr-1">
           <Markdown text={item.text} streaming={item.streaming} />
         </div>
       )}
-      <div className={cn(RAIL_TEXT, "flex min-h-5 items-center gap-2")}>
-        {item.streaming && (
-          <span
-            aria-hidden
-            className="inline-block h-3.5 w-0.5 animate-pulse rounded-full bg-primary motion-reduce:hidden"
-          />
-        )}
-        {item.interrupted === true && (
+      {item.interrupted === true && (
+        <div className="flex min-h-5 items-center pl-2">
           <span className="text-xs text-muted-foreground/70">Stopped mid-reply</span>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

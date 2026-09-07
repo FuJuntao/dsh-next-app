@@ -130,7 +130,7 @@ export function EventRow({
         {children !== undefined && (
           <RiArrowDownSLine
             aria-hidden
-            className="h-3.5 w-3.5 text-muted-foreground/45 opacity-0 transition-all group-hover/row:opacity-100 group-focus-within/row:opacity-100 group-open/row:opacity-100 group-open/row:rotate-180"
+            className="mt-0.5 h-3.5 w-3.5 text-muted-foreground/45 opacity-0 transition-all group-hover/row:opacity-100 group-focus-within/row:opacity-100 group-open/row:opacity-100 group-open/row:rotate-180"
           />
         )}
       </span>

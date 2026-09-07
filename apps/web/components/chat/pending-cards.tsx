@@ -230,7 +230,12 @@ function QuestionForm({
   };
   const complete = questions.every((q) => answerFor(q) !== null);
 
+  // The options and the free-text answer are mutually exclusive per
+  // question: the answer is ONE voice, so picking an option withdraws the
+  // typed text and starting to type withdraws the picks - otherwise the
+  // submit would carry both and nobody could tell which answer meant it.
   const toggle = (q: QuestionView, label: string): void => {
+    setCustom((prev) => ({ ...prev, [q.id]: "" }));
     setSelected((prev) => {
       const cur = prev[q.id] ?? [];
       if (!q.multi) return { ...prev, [q.id]: cur.includes(label) ? [] : [label] };
@@ -306,7 +311,11 @@ function QuestionForm({
           <input
             aria-label={`Custom answer for ${q.question}`}
             value={custom[q.id] ?? ""}
-            onChange={(e) => setCustom((prev) => ({ ...prev, [q.id]: e.target.value }))}
+            onChange={(e) => {
+              const value = e.target.value;
+              setCustom((prev) => ({ ...prev, [q.id]: value }));
+              if (value.trim() !== "") setSelected((prev) => ({ ...prev, [q.id]: [] }));
+            }}
             placeholder="Or type an answer…"
             className="w-full rounded-none border border-input bg-background/70 px-2.5 py-1.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
           />
