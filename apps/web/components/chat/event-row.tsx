@@ -137,7 +137,7 @@ export function EventRow({
     </>
   );
 
-  const lineClass = "flex min-w-0 items-start gap-2 rounded-none px-2 py-0.5 text-sm leading-5";
+  const lineClass = "flex min-w-0 items-start gap-2 rounded-none px-2 py-1 text-sm leading-5";
 
   if (children === undefined) {
     return <div className={cn("group/row", lineClass, className)}>{line}</div>;

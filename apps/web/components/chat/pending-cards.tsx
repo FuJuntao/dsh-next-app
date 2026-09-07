@@ -35,7 +35,7 @@ export function ApprovalCard({ card }: CardProps) {
   if (card.state === "resolved") {
     return (
       <div
-        className="flex items-center gap-2 rounded-none px-2 py-0.5 text-sm leading-5 text-muted-foreground"
+        className="flex items-center gap-2 rounded-none px-2 py-1 text-sm leading-5 text-muted-foreground"
         data-testid="approval-resolved"
       >
         <span
@@ -130,7 +130,7 @@ export function QuestionCard({ card }: CardProps) {
   if (card.state === "resolved") {
     return (
       <div
-        className="flex items-center gap-2 rounded-none px-2 py-0.5 text-sm leading-5 text-muted-foreground"
+        className="flex items-center gap-2 rounded-none px-2 py-1 text-sm leading-5 text-muted-foreground"
         data-testid="question-resolved"
       >
         <span

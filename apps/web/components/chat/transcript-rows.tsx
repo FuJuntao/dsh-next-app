@@ -146,7 +146,7 @@ export function UserRow({ item, sessionId }: { item: UserItem; sessionId: string
 export function AssistantRow({ item }: { item: AssistantItem }) {
   const reasoningFirst = item.reasoning.split("\n")[0] ?? "";
   return (
-    <div className="py-1">
+    <div className="py-1.5">
       {item.reasoning !== "" && (
         <EventRow
           icon={
@@ -268,7 +268,7 @@ export function CompactionRow({ item }: { item: CompactionItem }) {
         <span aria-hidden className="h-px flex-1 bg-border" />
       </div>
       <details className="group/row mt-1">
-        <summary className="list-none cursor-pointer rounded-none px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/60 [&::-webkit-details-marker]:hidden">
+        <summary className="list-none cursor-pointer rounded-none px-2 py-1 text-xs text-muted-foreground hover:bg-muted/60 [&::-webkit-details-marker]:hidden">
           Read the summary
         </summary>
         <div
