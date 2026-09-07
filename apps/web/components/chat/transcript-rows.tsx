@@ -25,7 +25,6 @@ import {
   RiInboxLine,
   RiLoaderLine,
   RiSearchLine,
-  RiServerLine,
   RiShieldCheckLine,
   RiStackLine,
   RiTerminalBoxLine,
@@ -46,7 +45,6 @@ import type {
   AssistantItem,
   CompactionItem,
   ContextItem,
-  RequestItem,
   TodoFoldItem,
   ToolItem,
   TranscriptItem,
@@ -106,7 +104,7 @@ export function AttachmentImage({
 /** A human prompt: the one bubble in the column, right-aligned like a reply. */
 export function UserRow({ item, sessionId }: { item: UserItem; sessionId: string }) {
   return (
-    <div className="group/row flex flex-col items-end gap-0.5 py-1.5">
+    <div className="group/row flex flex-col items-end gap-0.5 px-2 py-1.5">
       <div
         className={`max-w-[85%] whitespace-pre-wrap break-words rounded-none border px-3.5 py-2 text-sm leading-normal ${
           item.failed
@@ -284,26 +282,6 @@ export function CompactionRow({ item }: { item: CompactionItem }) {
   );
 }
 
-/** The request disclosure (AC 3): what was asked of the provider, in one line. */
-export function RequestRow({ item }: { item: RequestItem }) {
-  const model =
-    item.context !== undefined ? `${item.context.provider}/${item.context.model}` : undefined;
-  const window =
-    item.context?.contextWindow !== undefined
-      ? ` · ${Math.round(item.context.contextWindow / 1000)}k ctx`
-      : "";
-  return (
-    <EventRow
-      icon={<RiServerLine />}
-      label="Request"
-      detail={[item.header?.reason, model !== undefined ? model + window : undefined]
-        .filter((part): part is string => part !== undefined)
-        .join(" · ")}
-      className="opacity-80"
-    />
-  );
-}
-
 /** A synthetic context injection (AGENTS.md, notices): a labelled line. */
 export function ContextRow({ item }: { item: ContextItem }) {
   const label = item.summary ?? (item.form !== undefined ? item.form : item.source);
@@ -467,7 +445,9 @@ export function TranscriptRow({ item, sessionId }: { item: TranscriptItem; sessi
     case "compaction":
       return <CompactionRow item={item} />;
     case "request":
-      return <RequestRow item={item} />;
+      // Session info (provider/model/ctx), not conversation: it renders in
+      // the page header, never as a chat row.
+      return null;
     case "context":
       return <ContextRow item={item} />;
     case "turn":

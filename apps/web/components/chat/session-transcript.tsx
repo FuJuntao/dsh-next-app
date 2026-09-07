@@ -345,12 +345,32 @@ export function SessionTranscript(props: SessionTranscriptProps) {
       </div>
     ) : null;
 
+  // The session's model info rides the request/context events; it is
+  // session info, not conversation, so the header carries it instead of a
+  // chat row.
+  const sessionModel = (() => {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      if (item !== undefined && item.kind === "request" && item.context !== undefined)
+        return item.context;
+    }
+    return null;
+  })();
+
   return (
     <>
-      <header className="flex items-baseline gap-2 border-b border-border/60 px-4 py-2.5 sm:px-6">
+      <header className="flex items-baseline gap-2 border-b border-border/60 px-2 py-2.5 sm:px-4">
         <h1 className="min-w-0 truncate text-base font-medium">
           {title ?? navTitleOf(sessionId) ?? "New Session"}
         </h1>
+        {sessionModel !== null && (
+          <span className="shrink-0 font-mono text-2xs text-muted-foreground/60">
+            {sessionModel.provider}/{sessionModel.model}
+            {sessionModel.contextWindow !== undefined
+              ? ` · ${Math.round(sessionModel.contextWindow / 1000)}k ctx`
+              : ""}
+          </span>
+        )}
         {meta !== null && (
           <span className="hidden shrink-0 text-xs text-muted-foreground/60 sm:inline">
             updated {formatDate(meta.updatedAt)}
@@ -361,7 +381,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
             <span className="hidden max-w-[24ch] truncate font-mono lg:inline">{meta.cwd}</span>
           )}
           <span className="font-mono opacity-70">
-            {sessionId.slice("session-".length, 8 + "session-".length)}
+            {sessionId.replace(/^session-/, "").slice(0, 8)}
           </span>
         </span>
       </header>
@@ -369,7 +389,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
         <div
           ref={scrollerRef}
           onScroll={onScroll}
-          className="flex-1 overflow-y-auto px-4 py-3 sm:px-6"
+          className="flex-1 overflow-y-auto py-3"
           data-testid="transcript-scroll"
         >
           {items.length === 0 && (
@@ -424,7 +444,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
       {/* The composer (island of its own chrome): steer/queue gestures, the
           stop control while a turn runs, and the inline send Alert (AC 13's
           failure keeps the draft). */}
-      <div className="border-t border-border/60 px-4 py-3 sm:px-6">
+      <div className="border-t border-border/60 py-3">
         <div className="mx-auto w-full max-w-3xl space-y-2">
           {sendError !== null && (
             <Alert variant="destructive">
