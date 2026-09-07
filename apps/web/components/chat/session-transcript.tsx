@@ -48,6 +48,7 @@ import { useSessionLive } from "@/components/chat/use-session-live";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SessionComposer } from "@/components/session-composer";
+import { useSessionHeaderPublisher } from "@/components/session-header";
 import { SLASH_MENU_ENTRIES } from "@/lib/slash-commands";
 import { cancelTurn, sendPrompt } from "@/lib/chat-send";
 import { navTitleOf, setNavTitle } from "@/lib/nav-live";
@@ -103,10 +104,6 @@ function oldestSeq(state: TranscriptState): number | null {
 function titleFrom(fold: TranscriptState): string | null {
   const cell = fold.projections["title"];
   return typeof cell?.value === "string" && cell.value !== "" ? cell.value : null;
-}
-
-function formatDate(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 16).replace("T", " ");
 }
 
 export function SessionTranscript(props: SessionTranscriptProps) {
@@ -345,9 +342,10 @@ export function SessionTranscript(props: SessionTranscriptProps) {
       </div>
     ) : null;
 
-  // The session's model info rides the request/context events; it is
-  // session info, not conversation, so the header carries it instead of a
-  // chat row.
+  // The session's model info rides the request/context events; it is session
+  // info, not conversation, so the app shell's top bar carries it instead of
+  // a chat row. The whole identity publishes up through the header seam -
+  // the page does not render a second header under the shell's own.
   const sessionModel = (() => {
     for (let i = items.length - 1; i >= 0; i--) {
       const item = items[i];
@@ -356,35 +354,28 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     }
     return null;
   })();
+  const displayTitle = title ?? navTitleOf(sessionId) ?? "New Session";
+  const publishHeader = useSessionHeaderPublisher();
+  useEffect(() => {
+    publishHeader({
+      title: displayTitle,
+      ...(sessionModel !== null
+        ? {
+            model: `${sessionModel.provider}/${sessionModel.model}`,
+            ...(sessionModel.contextWindow !== undefined
+              ? { contextWindow: sessionModel.contextWindow }
+              : {}),
+          }
+        : {}),
+      ...(meta?.cwd !== undefined ? { cwd: meta.cwd } : {}),
+      ...(meta !== null ? { updatedAt: meta.updatedAt } : {}),
+      shortId: sessionId.replace(/^session-/, "").slice(0, 8),
+    });
+    return () => publishHeader(null);
+  }, [publishHeader, displayTitle, sessionModel, meta, sessionId]);
 
   return (
     <>
-      <header className="flex items-baseline gap-2 border-b border-border/60 px-2 py-2.5 sm:px-4">
-        <h1 className="min-w-0 truncate text-base font-medium">
-          {title ?? navTitleOf(sessionId) ?? "New Session"}
-        </h1>
-        {sessionModel !== null && (
-          <span className="shrink-0 font-mono text-2xs text-muted-foreground/60">
-            {sessionModel.provider}/{sessionModel.model}
-            {sessionModel.contextWindow !== undefined
-              ? ` · ${Math.round(sessionModel.contextWindow / 1000)}k ctx`
-              : ""}
-          </span>
-        )}
-        {meta !== null && (
-          <span className="hidden shrink-0 text-xs text-muted-foreground/60 sm:inline">
-            updated {formatDate(meta.updatedAt)}
-          </span>
-        )}
-        <span className="ml-auto flex shrink-0 items-center gap-2 text-xs text-muted-foreground/60">
-          {meta?.cwd !== undefined && (
-            <span className="hidden max-w-[24ch] truncate font-mono lg:inline">{meta.cwd}</span>
-          )}
-          <span className="font-mono opacity-70">
-            {sessionId.replace(/^session-/, "").slice(0, 8)}
-          </span>
-        </span>
-      </header>
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div
           ref={scrollerRef}
