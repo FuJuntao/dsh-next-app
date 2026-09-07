@@ -86,8 +86,8 @@ export function ApprovalCard({ card }: CardProps) {
         <span aria-hidden className="text-warning">
           <RiShieldCheckLine className="h-4 w-4" />
         </span>
-        <span className="font-medium">Needs your call</span>
-        <span aria-hidden className="text-muted-foreground/40">
+        <span className="shrink-0 font-medium">Needs your call</span>
+        <span aria-hidden className="shrink-0 text-muted-foreground/40">
           ·
         </span>
         <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{toolName}</span>
@@ -259,6 +259,9 @@ function QuestionForm({
         }
       }}
     >
+      {/* The identity gets its own line; the note sits under it. Side by side,
+          the note wrapped mid-sentence at phone width and the row read as two
+          columns fighting for the same line. */}
       <div className="flex items-center gap-2 text-sm">
         <span aria-hidden className="text-primary">
           <RiQuestionLine className="h-4 w-4" />
@@ -266,13 +269,8 @@ function QuestionForm({
         <span className="font-medium">
           {questions.length > 1 ? `${questions.length} questions` : "A question"}
         </span>
-        <span aria-hidden className="text-muted-foreground/40">
-          ·
-        </span>
-        <span className="text-xs text-muted-foreground">
-          the agent is waiting on this to continue
-        </span>
       </div>
+      <p className="pl-6 text-xs text-muted-foreground">the agent is waiting on this to continue</p>
       {questions.map((q) => (
         <fieldset key={q.id} disabled={submitting} className="space-y-1.5 pl-6">
           {q.header !== undefined && q.header !== "" && (
@@ -321,16 +319,20 @@ function QuestionForm({
         </fieldset>
       ))}
       {refused !== null && <p className="pl-6 text-xs text-destructive">{refused}</p>}
-      <div className="flex items-center gap-2 pl-6">
-        <Button type="submit" size="xs" disabled={!complete || submitting}>
-          {submitting ? "Sending…" : "Submit answers"}
-        </Button>
-        <Button type="button" size="xs" variant="ghost" onClick={onDismiss} disabled={submitting}>
-          Dismiss
-        </Button>
-        <span className="ml-auto text-xs text-muted-foreground/70">
+      <div className="pl-6">
+        <div className="flex items-center gap-2">
+          <Button type="submit" size="xs" disabled={!complete || submitting}>
+            {submitting ? "Sending…" : "Submit answers"}
+          </Button>
+          <Button type="button" size="xs" variant="ghost" onClick={onDismiss} disabled={submitting}>
+            Dismiss
+          </Button>
+        </div>
+        {/* Same rule as the header: the hint is its own line, not a second
+            column sharing the buttons' row. */}
+        <p className="mt-1 text-2xs text-muted-foreground/70">
           {questions.length > 1 ? "answer all to submit" : "pick or type"}
-        </span>
+        </p>
       </div>
     </form>
   );
