@@ -380,7 +380,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
         <div
           ref={scrollerRef}
           onScroll={onScroll}
-          className="flex-1 overflow-y-auto py-3"
+          className="flex-1 overflow-y-auto px-2 py-3"
           data-testid="transcript-scroll"
         >
           {items.length === 0 && (
@@ -435,7 +435,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
       {/* The composer (island of its own chrome): steer/queue gestures, the
           stop control while a turn runs, and the inline send Alert (AC 13's
           failure keeps the draft). */}
-      <div className="border-t border-border/60 py-3">
+      <div className="border-t border-border/60 px-2 py-3">
         <div className="mx-auto w-full max-w-3xl space-y-2">
           {sendError !== null && (
             <Alert variant="destructive">
