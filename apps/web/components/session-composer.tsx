@@ -106,8 +106,9 @@ export type SessionComposerProps = {
    */
   onLockedActivate?: () => void;
   /**
-   * Visible text on the send button (design packet: home's submit is
-   * "Start session" - the one first-screen action that says its name).
+   * Visible text on the send button (#134's Design packet, Gestures: home's
+   * submit is "Start session" - the one first-screen action that says its
+   * name).
    * Absent on a surface with no modes and no label of its own, the control
    * is then the icon-only square carrying the "Send message" accessible name.
    */
@@ -376,7 +377,8 @@ function submitWithEnter(
   }
   // In flight: swallow the Enter - no submit, no newline.
   if (pendingRef.current) return true;
-  // The queue chord (AC 13, packet Q2): Cmd/Ctrl+Enter queues on a
+  // The queue chord (AC 13; #134's Design packet, Gestures): Cmd/Ctrl+Enter
+  // queues on a
   // mode-aware surface; elsewhere plain Enter submits whatever it means.
   if (sendModes && (event.metaKey || event.ctrlKey)) {
     submit("queue");
@@ -762,7 +764,8 @@ function ComposerInner({
         </div>
         <div className="flex items-center justify-between gap-2 border-t border-border/50 px-2.5 py-1.5">
           {/* While locked the footer states the remedy, not the shortcuts of
-              an editor that does not accept typing yet (design packet). */}
+              an editor that does not accept typing yet (#134's Design
+              packet, Copy). */}
           <p className="min-w-0 flex-1 text-xs leading-4 text-muted-foreground/70">
             {enabled || lockedHint === undefined ? hint : lockedHint}
           </p>
@@ -772,11 +775,14 @@ function ComposerInner({
               onStop !== undefined && (
                 // AC 15: while a turn runs, the stop control joins the two
                 // mode gestures - the one moment cancelling is as meaningful
-                // as steering.
+                // as steering. min-h-11/min-w-11 is AC 25's 44px touch floor
+                // scoped to the island; the shared `icon-xs` preset stays as
+                // the dense preset the rest of the app uses.
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-xs"
+                  className="min-h-11 min-w-11"
                   aria-label="Stop current turn"
                   title="Stop the running turn"
                   onClick={onStop}

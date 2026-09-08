@@ -9,9 +9,11 @@
  * the door, so an empty draft is refused locally, a transport failure or an
  * RPC business error folds into a displayable string the composer shows in
  * its inline Alert (draft preserved - the composer only clears on success),
- * and success carries the prompt's rpcId: the same id the host records on
- * the durable `user/message` (MessageSource 'user-rpc'), which is what lets
- * the provisional row settle in place instead of duplicating.
+ * and success carries the prompt's rpcId: the same id the host stamps on the
+ * durable `user/message` it will eventually append (source.kind 'user' +
+ * rpcId), which is what ties a send to its row for logging and any future
+ * reconciliation. The row itself is the host's - the page mints none, and the
+ * wait is covered by the tail strip's steering placement (AC 13 as amended).
  *
  * AC 15's cancel is fire-and-settle: `session.cancel` stops the ACTIVE
  * turn; the transcript settles on the resulting `turn/end` (aborted) over
