@@ -32,6 +32,7 @@
     "tailwind-merge": "catalog:"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-attachment-local": "catalog:",
     "@tailwindcss/postcss": "catalog:",
     "@tsconfig/next": "catalog:",
     "@tsconfig/strictest": "catalog:",

@@ -14,11 +14,16 @@
 import { AttachmentId } from "@deepseek-ai/dsh-attachment";
 import { SessionId } from "@deepseek-ai/dsh-session/types";
 import { getBridgeClient } from "@/lib/bridge";
+import { ATTACHMENT_MEDIA_TYPES } from "@/lib/body-limit";
 
 export const dynamic = "force-dynamic";
 
-/** Media types the route will echo; anything else is served as octet-stream. */
-const MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+/**
+ * Media types the route will echo; anything else is served as octet-stream.
+ * Read from the one copy this app keeps (finding #8) - a fourth literal here
+ * was a fact that could drift from the intake pre-check beside it.
+ */
+const MEDIA_TYPES = new Set<string>(ATTACHMENT_MEDIA_TYPES);
 
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
