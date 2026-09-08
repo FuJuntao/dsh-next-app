@@ -115,11 +115,13 @@ export function SessionTranscript(props: SessionTranscriptProps) {
   const [hasMore, setHasMore] = useState(props.initialHasMore);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderError, setOlderError] = useState<string | null>(null);
+  /** What Load older just landed, for assistive tech (the button is gone
+   * from the viewport by then, so the region says it instead). */
+  const [pageNotice, setPageNotice] = useState<string | null>(null);
   const [title, setTitle] = useState<string | null>(() => titleFrom(fold));
   // Scroll follow (AC 9): stick-to-bottom + an unseen count while away.
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const stickBottom = useRef(true);
-  const lastHeight = useRef(0);
   const [unseen, setUnseen] = useState(0);
   const [atBottom, setAtBottom] = useState(true);
 
@@ -181,12 +183,14 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     setPending([...foldRef.current.pending]);
   }, []);
 
-  // The write flow (AC 13/15). The transcript does NOT mint an optimistic
-  // echo: a message is not in the session until the host says so, and a
-  // refused send should never have appeared in it at all. The durable
-  // `user/message` lands over the downlink (usually well under a second) and
-  // THAT row is the send's receipt; a queued prompt shows up in the queued
-  // strip from the host's own `session/queue` snapshot. On refusal the
+  // The write flow (AC 13/15 as amended on #134). The transcript mints no row
+  // of its own: a message is in the session when the host says so, and a
+  // refused send should never have appeared in it at all. What covers the
+  // in-between window is the host's own inbox projection - `session/queue`
+  // announces a steer the moment it is spliced (transcript rows only when the
+  // loop claims it at a step boundary, which a blocked turn can hold for
+  // minutes), so the strip shows it as pending work immediately and the
+  // durable `user/message` replaces it when the row lands. On refusal the
   // composer keeps the draft and the Alert carries the reason (throwing
   // back is what tells the composer the send failed).
   const handleSend = useCallback(
@@ -229,24 +233,30 @@ export function SessionTranscript(props: SessionTranscriptProps) {
   // First paint: newest at the bottom (AC 1).
   useEffect(() => {
     const el = scrollerRef.current;
-    if (el !== null) {
-      el.scrollTop = el.scrollHeight;
-      lastHeight.current = el.scrollHeight;
-    }
+    if (el !== null) el.scrollTop = el.scrollHeight;
   }, []);
 
-  // Follow new content while pinned to the bottom; counting unseen while
-  // the reader is away.
+  // Follow new content while pinned to the bottom; count unseen rows while the
+  // reader is away. The count is DURABLE ROWS the reader has not acknowledged
+  // (by seq), not scroll growth: a streaming bubble grows the column on every
+  // chunk - a height-based badge would climb by dozens for one reply - and a
+  // replace-fold that changes content without growing height would not move it
+  // at all.
+  const seenSeq = useRef(-1);
+  const maxSeq = useRef(-1);
   useEffect(() => {
     const el = scrollerRef.current;
-    if (el === null) return;
-    const grew = el.scrollHeight > lastHeight.current;
+    let newest = maxSeq.current;
+    for (const item of items) if (item.seq !== null && item.seq > newest) newest = item.seq;
+    maxSeq.current = newest;
     if (stickBottom.current) {
-      el.scrollTop = el.scrollHeight;
-    } else if (grew) {
-      setUnseen((n) => n + 1);
+      if (el !== null) el.scrollTop = el.scrollHeight;
+      seenSeq.current = newest; // at the bottom, everything landed is seen
+      return;
     }
-    lastHeight.current = el.scrollHeight;
+    let unseenRows = 0;
+    for (const item of items) if (item.seq !== null && item.seq > seenSeq.current) unseenRows++;
+    setUnseen(unseenRows);
   }, [items]);
 
   const onScroll = useCallback((): void => {
@@ -255,7 +265,10 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
     stickBottom.current = bottom;
     setAtBottom(bottom);
-    if (bottom) setUnseen(0);
+    if (bottom) {
+      seenSeq.current = maxSeq.current; // arriving back reads everything
+      setUnseen(0);
+    }
   }, []);
 
   const jumpToLatest = useCallback((): void => {
@@ -282,6 +295,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     const before = el !== null ? { height: el.scrollHeight, top: el.scrollTop } : null;
     const result = await loadOlderHistory(sessionId, oldest);
     if (result.ok) {
+      const beforeCount = state.items.length;
       prependHistoryPage(state, result.entries, { hasMore: result.hasMore });
       sync();
       // Scroll preservation: the viewport stays anchored to the row it was
@@ -289,6 +303,11 @@ export function SessionTranscript(props: SessionTranscriptProps) {
       if (el !== null && before !== null) {
         el.scrollTop = before.top + (el.scrollHeight - before.height);
       }
+      // ...and the reader moves with it: the button that fired is now far
+      // above the viewport, so focus goes to the region that grew and the
+      // landed page is spoken once.
+      if (el !== null) el.focus({ preventScroll: true });
+      setPageNotice(`Loaded ${String(state.items.length - beforeCount)} older messages.`);
     } else {
       setOlderError(
         result.reason === "not-found"
@@ -313,8 +332,9 @@ export function SessionTranscript(props: SessionTranscriptProps) {
         type="button"
         onClick={jumpToLatest}
         data-testid="approval-jump"
+        aria-label="An approval is waiting below - jump to it"
         title="An approval is waiting"
-        className="absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-none border border-warning/50 bg-warning/15 text-warning shadow-sm backdrop-blur"
+        className="absolute bottom-3 left-1/2 z-10 flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-none border border-warning/50 bg-warning/15 text-warning shadow-sm backdrop-blur"
       >
         <RiShieldCheckLine className="h-4 w-4" />
       </button>
@@ -324,7 +344,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
         onClick={jumpToLatest}
         data-testid="jump-to-latest"
         aria-label={unseen > 0 ? `Jump to latest, ${unseen} new rows` : "Jump to latest"}
-        className="absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-none border border-border bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
+        className="absolute bottom-3 left-1/2 z-10 flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-none border border-border bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
       >
         <RiArrowDownSLine className="h-4 w-4" />
         {unseen > 0 && (
@@ -377,12 +397,29 @@ export function SessionTranscript(props: SessionTranscriptProps) {
   return (
     <>
       <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* AT ground for the island (AC 9/10/12): `role=log` is the transcript
+            as a living record. `aria-relevant=additions` keeps it honest -
+            a streamed chunk rewrites an existing bubble, and announcing that
+            on every token would drown the reader; a NEW row is the addition
+            worth speaking. tabIndex=-1 makes it a focus target for Load older
+            without adding a stop to the tab order. */}
         <div
           ref={scrollerRef}
           onScroll={onScroll}
-          className="flex-1 overflow-y-auto px-2 py-3"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-label="Conversation"
+          tabIndex={-1}
+          className="flex-1 overflow-y-auto px-2 py-3 outline-none"
           data-testid="transcript-scroll"
         >
+          {pageNotice !== null && (
+            // The one thing Load older says out loud: where the reader landed.
+            <span className="sr-only" role="status">
+              {pageNotice}
+            </span>
+          )}
           {items.length === 0 && (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm text-muted-foreground">
