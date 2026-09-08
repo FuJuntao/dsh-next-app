@@ -45,19 +45,31 @@ a server action), under these rules:
   every candidate must land inside the realpath of the root: parent
   segments, absolute paths, and symlinked directories escaping the root are
   refused before a candidate is ever listed.
-- **Git first.** When the root is a git working tree, candidates come from
+- **Git first, and bounded like everything else.** When the root is a git
+  working tree, candidates come from
   `git ls-files --cached --others --exclude-standard -z`: ignore-correct
-  (respects `.gitignore`, so `node_modules` and build output never appear),
-  bounded by the repo's own rules, and NUL-delimited for exotic names.
-  Directory candidates are derived from the file paths' ancestors. Git
-  output is still containment-checked before listing.
-- **Bounded readdir fallback.** Without git, a recursive walk with depth
+  (respects `.gitignore`, so `node_modules` and build output never appear) and
+  NUL-delimited for exotic names. The stream is read through an incremental
+  record counter with a hard ceiling (`LIST_MAX_ENTRIES` records,
+  `LIST_MAX_BYTES` of output): at either ceiling the child is killed, the
+  result is marked `partial`, and the cost stops there. "Bounded by the repo's
+  own rules" is not a bound - `.gitignore` says what may be *listed*, not what
+  a listing may *cost*. Directory candidates are derived from the file paths'
+  ancestors, and that expansion counts toward the same ceiling. Git output is
+  still containment-checked before listing.
+- **Bounded readdir fallback.** Without git, an async recursive walk with depth
   (10) and entry (20k) caps skips `.git`, `node_modules`, `dist`, and
   dot-directories, and partial results are simply partial.
 - **Brief cache, hard cancel.** The candidate list is cached per root for 5
-  seconds; a newer search for the same root aborts the older scan (the
-  child process dies with its signal), and the client's latest-wins guard
-  drops stale arrivals - a fast typist is never overtaken by a slow walk.
+  seconds, and the cache holds at most `CACHE_MAX_ROOTS` roots - expired
+  records are dropped on every write, and the oldest go first. A TTL bounds
+  how stale a listing may be; only a count bounds how many full-tree listings a
+  long-lived process can accumulate. A newer search for the same root aborts
+  the older scan: the child process dies with its signal, and the fallback
+  walk is async `fs/promises` so the abort lands MID-scan - a synchronous walk
+  can poll `signal.aborted` a thousand times and never observe it, because
+  nothing else runs inside one Node turn. The client's latest-wins guard drops
+  stale arrivals - a fast typist is never overtaken by a slow walk.
 - **Paths only, host grammar only.** The response is session-relative
   paths plus the insertion text produced by the vendored
   `@deepseek-ai/dsh-file-reference/grammar` (`formatFileMention`); the
