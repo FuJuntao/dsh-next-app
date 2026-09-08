@@ -19,12 +19,8 @@ import {
   foldEvent,
   foldFrame,
   foldHistoryPage,
-  markProvisional,
-  markProvisionalFailed,
   prependHistoryPage,
-  reconcileProvisional,
   seedProjections,
-  withdrawProvisional,
   type WireEvent,
 } from "./transcript";
 
@@ -325,12 +321,10 @@ describe("fail-loud unknowns (AC 7)", () => {
   });
 });
 
-describe("provisional echo (AC 13)", () => {
-  it("reconciles the durable event in place and withdraws on discard", () => {
+describe("send receipt (AC 13, as amended on #134)", () => {
+  it("appends exactly one row, from the host's durable event, stamped with its rpcId", () => {
     const state = createTranscript();
     foldEvent(state, userMsg(1, "first", humanSource));
-    markProvisional(state, { rpcId: "rpc-9", text: "second", time: 1 });
-    expect(state.items).toHaveLength(2);
     foldEvent(
       state,
       ev("user/message", 2, {
@@ -340,17 +334,24 @@ describe("provisional echo (AC 13)", () => {
         source: { kind: "user", rpcId: "rpc-9" },
       }),
     );
-    expect(state.items).toHaveLength(2); // replaced, not appended
-    const settled = state.items[1];
-    expect(settled?.kind === "user" && settled.provisional).toBeUndefined();
-    expect(settled?.kind === "user" && settled.rpcId).toBe("rpc-9");
+    const users = state.items.filter((item) => item.kind === "user");
+    expect(users).toHaveLength(2);
+    const row = users[1];
+    expect(row?.kind === "user" && row.rpcId).toBe("rpc-9");
+    expect(row?.kind === "user" && row.seq).toBe(2); // durable, always
+  });
 
-    markProvisional(state, { rpcId: "rpc-10", text: "third", time: 1 });
-    markProvisionalFailed(state, "rpc-10");
-    const failed = state.items[2];
-    expect(failed?.kind === "user" && failed.failed).toBe(true);
-    withdrawProvisional(state, "rpc-10");
-    expect(state.items).toHaveLength(2);
+  it("a re-delivered echo (resync overlap) still produces one row", () => {
+    const state = createTranscript();
+    const echo = ev("user/message", 5, {
+      role: "user",
+      id: "m5",
+      content: [{ type: "text", text: "twice" }],
+      source: { kind: "user", rpcId: "rpc-9" },
+    });
+    foldEvent(state, echo);
+    foldEvent(state, echo);
+    expect(state.items.filter((item) => item.kind === "user")).toHaveLength(1);
   });
 });
 
@@ -381,7 +382,7 @@ describe("live frames", () => {
     expect(state.subscribedLastSeq).toBe(7);
   });
 
-  it("replaces the queued strip wholesale, queued placement only (AC 14)", () => {
+  it("keeps both human placements in the strip and hides context items (AC 13/14)", () => {
     const state = createTranscript();
     const message = (text: string): unknown => ({
       id: "x",
@@ -398,7 +399,12 @@ describe("live frames", () => {
         { id: "i3", placement: "context", message: message("context") },
       ],
     } as unknown as MuxFrame);
-    expect(state.queue).toEqual([{ id: "i1", text: "queued one" }]);
+    // The steer is the case that used to be invisible: the host claims it at
+    // the NEXT STEP, so a steer into a blocked turn had no row anywhere.
+    expect(state.queue).toEqual([
+      { id: "i1", text: "queued one", placement: "queued" },
+      { id: "i2", text: "steering", placement: "steering" },
+    ]);
     foldFrame(state, {
       type: "session/queue",
       sessionId: "sess-a",
@@ -472,7 +478,7 @@ describe("live frames", () => {
     expect(state.pending[0]?.outcome).toBe("answered");
   });
 
-  it("records stream/error and consumes out-of-story frames", () => {
+  it("consumes out-of-story and error frames without a row or state", () => {
     const state = createTranscript();
     foldFrame(state, {
       type: "session/jobs",
@@ -480,11 +486,14 @@ describe("live frames", () => {
       jobs: [],
     } as unknown as MuxFrame);
     expect(state.items).toHaveLength(0);
+    // `stream/error` rides the same path: the reader's throw is what drives
+    // the reconnect (use-session-live), so the fold keeps no copy of it.
     foldFrame(state, {
       type: "stream/error",
       error: { code: "internal", message: "boom", details: {} },
     } as unknown as MuxFrame);
-    expect(state.streamError?.message).toBe("boom");
+    expect(state.items).toHaveLength(0);
+    expect(state.subscribedLastSeq).toBeNull();
   });
 });
 
@@ -541,33 +550,54 @@ describe("tool views (AC 4)", () => {
   });
 });
 
-describe("provisional/durable convergence", () => {
-  const durableUser = (seq: number, rpcId: string): WireEvent =>
-    ev("user/message", seq, {
-      role: "user",
-      id: `m${String(seq)}`,
-      content: [{ type: "text", text: "typed" }],
-      source: { kind: "user", rpcId },
-    });
+describe("a steer converges from strip to row exactly once (AC 13/14)", () => {
+  const steerFrame = (text: string): MuxFrame =>
+    ({
+      type: "session/queue",
+      sessionId: "sess-a",
+      items: [
+        {
+          id: "s1",
+          placement: "steering",
+          message: { role: "user", content: [{ type: "text", text }] },
+        },
+      ],
+    }) as unknown as MuxFrame;
 
-  it("durable-lands-first: reconcile withdraws the provisional, leaving one row", () => {
+  it("strip first, then the durable row: one row, and the strip drains", () => {
     const state = createTranscript();
-    markProvisional(state, { rpcId: "tmp-1", text: "typed", time: 1 });
-    foldEvent(state, durableUser(2, "real-9")); // beat the action
-    reconcileProvisional(state, "tmp-1", "real-9");
-    const users = state.items.filter((item) => item.kind === "user");
-    expect(users).toHaveLength(1);
-    expect(users[0]?.kind === "user" && users[0].provisional).toBeUndefined();
+    foldFrame(state, steerFrame("hold on, change of plan"));
+    expect(state.queue).toHaveLength(1); // visible the moment the host took it
+    expect(state.items).toHaveLength(0); // and no transcript row yet
+
+    foldEvent(
+      state,
+      ev("user/message", 9, {
+        role: "user",
+        id: "m9",
+        content: [{ type: "text", text: "hold on, change of plan" }],
+        source: { kind: "user", rpcId: "rpc-3" },
+      }),
+    );
+    foldFrame(state, {
+      type: "session/queue",
+      sessionId: "sess-a",
+      items: [],
+    } as unknown as MuxFrame);
+    expect(state.items).toHaveLength(1); // the row it was always going to be
+    expect(state.queue).toHaveLength(0);
   });
 
-  it("action-lands-first: reconcile re-keys so the echo replaces in place", () => {
+  it("a discarded steer leaves nothing behind", () => {
     const state = createTranscript();
-    markProvisional(state, { rpcId: "tmp-2", text: "typed", time: 1 });
-    reconcileProvisional(state, "tmp-2", "real-8");
-    foldEvent(state, durableUser(3, "real-8"));
-    const users = state.items.filter((item) => item.kind === "user");
-    expect(users).toHaveLength(1);
-    expect(users[0]?.kind === "user" && users[0].seq).toBe(3);
+    foldFrame(state, steerFrame("never claimed"));
+    foldFrame(state, {
+      type: "session/queue",
+      sessionId: "sess-a",
+      items: [],
+    } as unknown as MuxFrame);
+    expect(state.items).toHaveLength(0); // it was never in the session
+    expect(state.queue).toHaveLength(0);
   });
 });
 

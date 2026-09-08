@@ -18,11 +18,11 @@
  *     messages, `assistant/message`, `tool/call` + `tool/result` paired by
  *     callId, `turn/start`/`turn/end` boundaries (failed/aborted turns
  *     marked visibly), `todo/write` as ONE live checklist (snapshot
- *     semantics: a later write updates the card in place), `request/header`
- *     / `request/context` as disclosure rows (an adjacent context row
- *     joins its header), and `compaction/summary` as the divider.
- *     `assistant/chunk` never renders as its own row - it extends the
- *     streaming bubble for its `turn:step`, which the finalized
+ *     semantics: a later write updates the card in place), `compaction/summary`
+ *     as the divider. `request/header` + `request/context` fold into one
+ *     session-identity record the shell header reads - never a chat row (AC 3
+ *     as amended on #134). `assistant/chunk` never renders as its own row - it
+ *     extends the streaming bubble for its `turn:step`, which the finalized
  *     `assistant/message` then replaces in place; `step/*` never rows.
  *   - The surface fold: a surface event carrying
  *     `surfaceOp: {op: 'replace', ...}` removes the transcript items of the
@@ -36,16 +36,16 @@
  *     applies. The vocabulary is EXPLICIT and drift-guarded against the
  *     pinned host catalog by the unit tests - never "everything else
  *     renders nothing".
- *   - Optimistic echoes (AC 13): a provisional user row keyed by the
- *     prompt's rpcId is reconciled in place by the durable `user/message`
- *     carrying that rpcId, marked failed when the send failed, and
- *     withdrawn when the host discards it.
- *   - Live control frames: `session/queue` replaces the queued strip
- *     wholesale (`queued` placement only - steering rides the provisional
- *     row), `session/projection` cells win by seq, `session/subscribed
- *     .lastSeq` is recorded for the caller's gap check, answerable
- *     approval/question frames become cards settling from their resolved
- *     frames (any client's answer included), and `stream/error` is
+ *   - Send receipts: a send's row is the durable `user/message` the host
+ *     appends when the loop claims the message, never one the page minted
+ *     (see AC 13 on #134). The in-between window is covered by the host's
+ *     own inbox projection: `session/queue` carries the pending work.
+ *   - Live control frames: `session/queue` replaces the tail strip wholesale
+ *     (`queued` and `steering` placements - the synthetic `context` items
+ *     stay invisible until claimed), `session/projection` cells win by seq,
+ *     `session/subscribed.lastSeq` is recorded for the caller's gap check,
+ *     answerable approval/question frames become cards settling from their
+ *     resolved frames (any client's answer included), and `stream/error` is
  *     recorded for the caller's reconnect path.
  *
  * Purity contract: no node imports, no react, no fetch - the only package
@@ -111,21 +111,17 @@ export interface TranscriptImage {
   name?: string;
 }
 
-/** A durable or provisional human prompt row. */
+/** A human prompt, as the host recorded it (a send's row is never minted here). */
 export interface UserItem {
   kind: "user";
-  /** Stable item id: `e<seq>` durable, `p<rpcId>` provisional. */
+  /** Stable item id: `e<seq>`. */
   id: string;
   seq: number | null;
   time: number;
   text: string;
   images: TranscriptImage[];
-  /** The prompt's rpcId when recorded (reconciles the provisional echo). */
+  /** The rpcId of the prompt that produced this row, when the host recorded one. */
   rpcId?: string;
-  /** True while the durable event has not replaced the optimistic echo. */
-  provisional?: boolean;
-  /** True when the send itself failed (kept visible; AC 13). */
-  failed?: boolean;
 }
 
 /** A synthetic (non-human) context message (injected instructions, notices...). */
@@ -221,13 +217,17 @@ export interface RequestItem {
   context?: { provider: string; model: string; contextWindow?: number };
 }
 
-/** Turn boundary; non-completed endings carry the visible mark (AC 3). */
+/**
+ * Turn boundary; non-completed endings carry the visible mark (AC 3). A turn
+ * item lands only with `turn/end` - a running turn is liveness state
+ * (`runningTurn`), not a row, so no `running` shape exists here.
+ */
 export interface TurnItem {
   kind: "turn";
   id: string;
   seq: number;
   turn: number;
-  state: "running" | "completed" | "aborted" | "blocked" | "error" | "max-tokens" | "interrupted";
+  state: "completed" | "aborted" | "blocked" | "error" | "max-tokens" | "interrupted";
   /** Displayable failure detail for `error`/`aborted` endings. */
   detail?: string;
 }
@@ -270,10 +270,17 @@ export type TranscriptItem =
 // Tail overlays (live surfaces, not durable rows)
 // ---------------------------------------------------------------------------
 
-/** One pending `queued` inbox item (AC 14; read-only in this story). */
+/**
+ * One message waiting in the host's inbox, as the `session/queue` projection
+ * reports it (AC 13/14 as amended on #134; read-only in this story). This is
+ * the send's visible receipt before the durable `user/message` lands: a
+ * steer sits here until the loop claims it at the next step boundary, a
+ * queued follow-up until the next turn.
+ */
 export interface QueuedItem {
   id: string;
   text: string;
+  placement: "queued" | "steering";
 }
 
 /** A pending answerable card (approval ask or question batch). */
@@ -316,8 +323,6 @@ export interface TranscriptState {
   runningSince: number | null;
   /** Latest `session/subscribed.lastSeq` control value, once seen. */
   subscribedLastSeq: number | null;
-  /** The last `stream/error` frame (the island's reconnect trigger reads it). */
-  streamError: Extract<MuxFrame, { type: "stream/error" }>["error"] | null;
   pending: PendingCard[];
   queue: QueuedItem[];
   /** Per-projection-unit cells (title, imageLimits, ...). */
@@ -335,7 +340,6 @@ export function createTranscript(): TranscriptState {
     runningTurn: null,
     runningSince: null,
     subscribedLastSeq: null,
-    streamError: null,
     pending: [],
     queue: [],
     projections: {},
@@ -536,7 +540,10 @@ export function foldEvent(
       }
       if (source["kind"] === "user") {
         const rpcId = optStr(source["rpcId"]);
-        const item: UserItem = {
+        // The durable row IS the send's receipt (AC 13 as amended on #134):
+        // it appends, and the matching item leaves the tail strip with the
+        // next `session/queue` frame. The page never mints a row of its own.
+        state.items.push({
           kind: "user",
           id: durableId(seq),
           seq,
@@ -544,19 +551,7 @@ export function foldEvent(
           text: parsed.text,
           images: parsed.images,
           ...(rpcId !== undefined ? { rpcId } : {}),
-        };
-        const provisionalIndex =
-          rpcId !== undefined
-            ? state.items.findIndex(
-                (existing) =>
-                  existing.kind === "user" &&
-                  existing.provisional === true &&
-                  existing.rpcId === rpcId,
-              )
-            : -1;
-        if (provisionalIndex !== -1)
-          state.items[provisionalIndex] = item; // AC 13 settle
-        else state.items.push(item);
+        });
       } else {
         const form = optStr(source["form"]);
         const summary = optStr(source["summary"]);
@@ -965,12 +960,18 @@ export function foldFrame(state: TranscriptState, frame: MuxFrame): void {
       state.subscribedLastSeq = frame.lastSeq;
       break;
     case "session/queue": {
-      // AC 14: queued placement only; steering rides the provisional row,
-      // context items stay invisible until claimed.
-      const queued = frame.items.filter((item) => item.placement === "queued");
-      state.queue = queued.map((item) => ({
+      // AC 13/14 as amended on #134: the host's own inbox projection is the
+      // send's receipt, so BOTH human placements render - `queued` waits for
+      // the next turn, `steering` for the next step (a steer into a blocked
+      // turn would otherwise be visible nowhere). The synthetic `context`
+      // placement stays invisible until claimed.
+      const human = frame.items.filter(
+        (item) => item.placement === "queued" || item.placement === "steering",
+      );
+      state.queue = human.map((item) => ({
         id: String(item.id),
         text: parseContentBlocks(item.message.content).text,
+        placement: item.placement === "steering" ? ("steering" as const) : ("queued" as const),
       }));
       break;
     }
@@ -1016,7 +1017,9 @@ export function foldFrame(state: TranscriptState, frame: MuxFrame): void {
       // Explicitly out of this story (Non-Goals); consume silently.
       break;
     case "stream/error":
-      state.streamError = frame.error;
+      // Recorded nowhere: a broken stream makes the reader throw, and the
+      // island reconnects on THAT, not on a polled field (nothing here ever
+      // read it, so keeping it would be state with no observer).
       break;
   }
 }
@@ -1049,69 +1052,4 @@ export function foldDownlinkEvent(
     return;
   }
   foldFrame(state, frame);
-}
-
-// ---------------------------------------------------------------------------
-// Optimistic echo (AC 13)
-// ---------------------------------------------------------------------------
-
-/**
- * Add the provisional user row for a send whose durable echo has not
- * arrived; keyed by the prompt's rpcId, replaced in place by the matching
- * `user/message`, withdrawn on discard.
- */
-export function markProvisional(
-  state: TranscriptState,
-  input: { rpcId: string; text: string; images?: TranscriptImage[]; time?: number },
-): void {
-  state.items.push({
-    kind: "user",
-    id: `p${input.rpcId}`,
-    seq: null,
-    time: input.time ?? Date.now(),
-    text: input.text,
-    images: input.images ?? [],
-    rpcId: input.rpcId,
-    provisional: true,
-  });
-}
-
-/**
- * Converge the provisional row with its durable echo once the send action
- * resolves - BOTH orders, because the downlink can beat the action's
- * response: if the durable `user/message` (carrying the RPC's rpcId) has
- * already landed, the provisional row is simply withdrawn (the durable one
- * IS the row); if it has not, the provisional row is re-keyed so the
- * arriving echo replaces it in place. Either order settles to exactly one.
- */
-export function reconcileProvisional(state: TranscriptState, tempKey: string, rpcId: string): void {
-  const durable = state.items.some(
-    (item) => item.kind === "user" && item.provisional !== true && item.rpcId === rpcId,
-  );
-  if (durable) {
-    withdrawProvisional(state, tempKey);
-    return;
-  }
-  for (const item of state.items) {
-    if (item.kind === "user" && item.provisional === true && item.rpcId === tempKey) {
-      item.rpcId = rpcId;
-      return;
-    }
-  }
-}
-
-/** Flag the provisional row failed (a refused send keeps the draft, AC 13). */
-export function markProvisionalFailed(state: TranscriptState, rpcId: string): void {
-  const item = state.items.find(
-    (candidate) =>
-      candidate.kind === "user" && candidate.provisional === true && candidate.rpcId === rpcId,
-  );
-  if (item !== undefined && item.kind === "user") item.failed = true;
-}
-
-/** Withdraw the provisional row entirely (the host discarded the prompt). */
-export function withdrawProvisional(state: TranscriptState, rpcId: string): void {
-  state.items = state.items.filter(
-    (item) => !(item.kind === "user" && item.provisional === true && item.rpcId === rpcId),
-  );
 }

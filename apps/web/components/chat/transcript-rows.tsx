@@ -45,6 +45,7 @@ import type {
   AssistantItem,
   CompactionItem,
   ContextItem,
+  QueuedItem,
   TodoFoldItem,
   ToolItem,
   TranscriptItem,
@@ -101,17 +102,16 @@ export function AttachmentImage({
   );
 }
 
-/** A human prompt: the one bubble in the column, right-aligned like a reply. */
+/**
+ * A human prompt: the one bubble in the column, right-aligned like a reply.
+ * Only the host's durable row reaches here, so there is no in-flight or
+ * refused shape - a send that has not landed is a tail-strip item, and a
+ * refused one never left the composer's draft.
+ */
 export function UserRow({ item, sessionId }: { item: UserItem; sessionId: string }) {
   return (
     <div className="group/row flex flex-col items-end gap-0.5 px-2 py-1.5">
-      <div
-        className={`max-w-[85%] whitespace-pre-wrap break-words rounded-none border px-3.5 py-2 text-sm leading-normal ${
-          item.failed
-            ? "border-destructive/40 bg-destructive/10"
-            : "border-secondary/60 bg-secondary"
-        } ${item.provisional ? "opacity-70" : ""}`}
-      >
+      <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-none border border-secondary/60 bg-secondary px-3.5 py-2 text-sm leading-normal">
         {item.text}
         {item.images.length > 0 && (
           <div className="mt-1.5 flex flex-wrap justify-end gap-1">
@@ -127,8 +127,6 @@ export function UserRow({ item, sessionId }: { item: UserItem; sessionId: string
         )}
       </div>
       <div className="flex items-center gap-1.5 pr-1 text-2xs text-muted-foreground/60">
-        {item.failed === true && <span className="text-destructive">Not sent</span>}
-        {item.provisional === true && item.failed !== true && <span>Sending…</span>}
         <span className="font-mono">{clockOf(item.time)}</span>
       </div>
     </div>
@@ -266,7 +264,7 @@ export function CompactionRow({ item }: { item: CompactionItem }) {
         <span aria-hidden className="h-px flex-1 bg-border" />
       </div>
       <details className="group/row mt-1">
-        <summary className="list-none cursor-pointer rounded-none px-2 py-1 text-xs text-muted-foreground hover:bg-muted/60 [&::-webkit-details-marker]:hidden">
+        <summary className="list-none cursor-pointer rounded-none px-2 py-1 text-xs text-muted-foreground hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
           Read the summary
         </summary>
         <div
@@ -300,24 +298,12 @@ export function ContextRow({ item }: { item: ContextItem }) {
 /**
  * Turn boundary (AC 3). A completed turn needs no row - the assistant's
  * reply already says the work ended - so it renders as nothing; an
- * interrupted one says what stopped it, in the colour of the fact.
+ * interrupted one says what stopped it, in the colour of the fact. A turn
+ * that is merely running is not a boundary row at all: the tail's live line
+ * says that (`TurnLive`), and the fold lands no item until `turn/end`.
  */
 export function TurnRow({ item }: { item: TurnItem }) {
   if (item.state === "completed") return null;
-  if (item.state === "running") {
-    return (
-      <div className="flex items-center gap-2 py-1 pl-2 text-sm text-primary">
-        <RowIcon state="running">
-          <RiLoaderLine className="animate-spin motion-reduce:animate-none" />
-        </RowIcon>
-        Working
-        <span
-          aria-hidden
-          className="h-1 w-1 animate-pulse rounded-full bg-primary motion-reduce:hidden"
-        />
-      </div>
-    );
-  }
   const label =
     item.state === "aborted"
       ? "Turn stopped"
@@ -365,33 +351,50 @@ export function ApprovalRow({ item }: { item: ApprovalRowItem }) {
 }
 
 /**
- * The queued strip (AC 14): the pending `queued` items at the tail, muted
- * and read-only. One row of chrome over a list of first lines - an item
- * leaves when the agent claims it, so nothing here is editable.
+ * The pending-work strip (AC 13/14 as amended on #134): the host's own inbox
+ * projection at the tail, muted and read-only. It carries both human
+ * placements, because each covers a window the durable transcript row has not
+ * opened yet - a steer is claimed at the NEXT STEP (which a blocked turn can
+ * hold for minutes), a follow-up at the next turn - and it is where a send
+ * becomes visible before its `user/message` lands. An item leaves when the
+ * agent claims it, so nothing here is editable.
  */
-export function QueueStrip({ queue }: { queue: readonly { id: string; text: string }[] }) {
+export function QueueStrip({ queue }: { queue: readonly QueuedItem[] }) {
   if (queue.length === 0) return null;
+  // Steering is claimed sooner, so it leads; one row of chrome per group.
+  const groups = [
+    { placement: "steering", label: "Steering", waits: "the next step" },
+    { placement: "queued", label: "Queued", waits: "the next turn" },
+  ] as const;
   return (
     <div className="mt-2">
-      <EventRow
-        icon={<RiInboxLine />}
-        label="Queued"
-        detail={
-          queue.length === 1
-            ? "one message waiting for the turn"
-            : `${queue.length} messages waiting for the turn`
-        }
-        state="idle"
-        className="opacity-90"
-      />
-      {/* The items hang off the same rail an expanded row uses. */}
-      <ul className={cn("space-y-0.5", RAIL_BODY)}>
-        {queue.map((q) => (
-          <li key={q.id} className="truncate text-xs text-muted-foreground/80">
-            {q.text.split("\n")[0]}
-          </li>
-        ))}
-      </ul>
+      {groups.map((group) => {
+        const items = queue.filter((q) => q.placement === group.placement);
+        if (items.length === 0) return null;
+        return (
+          <div key={group.placement}>
+            <EventRow
+              icon={<RiInboxLine />}
+              label={group.label}
+              detail={
+                items.length === 1
+                  ? `one message waiting for ${group.waits}`
+                  : `${String(items.length)} messages waiting for ${group.waits}`
+              }
+              state="idle"
+              className="opacity-90"
+            />
+            {/* The items hang off the same rail an expanded row uses. */}
+            <ul className={cn("space-y-0.5", RAIL_BODY)}>
+              {items.map((q) => (
+                <li key={q.id} className="truncate text-xs text-muted-foreground/80">
+                  {q.text.split("\n")[0]}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -445,8 +448,13 @@ export function TranscriptRow({ item, sessionId }: { item: TranscriptItem; sessi
     case "compaction":
       return <CompactionRow item={item} />;
     case "request":
-      // Session info (provider/model/ctx), not conversation: it renders in
-      // the page header, never as a chat row.
+      // AC 3 as amended on #134: provider/model/context-window are session
+      // identity, and the app shell's top header carries them (the page reads
+      // `item.context` and publishes it up the header seam) - never a chat
+      // row. Known residual of that decision: a `request/header` arriving
+      // WITHOUT its `request/context` pair carries only `{reason}`, which
+      // nothing renders; the paired case - every case the host emits today -
+      // is covered. Recorded on the issue rather than left to disagree here.
       return null;
     case "context":
       return <ContextRow item={item} />;

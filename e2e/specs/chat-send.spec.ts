@@ -75,7 +75,7 @@ test("Cmd/Ctrl+Enter queues while a turn runs and the queued strip settles", asy
   const box = page.getByRole("textbox", { name: "Message the session" });
   await box.click();
   await box.pressSequentially("queued second message");
-  await box.press("Control+Enter"); // the queue chord (packet Q2)
+  await box.press("Control+Enter"); // the queue chord (#134's Design packet, Gestures)
   const scroller = page.getByTestId("transcript-scroll");
   await expect(scroller.getByText("queued second message", { exact: false })).toBeVisible({
     timeout: 10_000,
@@ -86,6 +86,50 @@ test("Cmd/Ctrl+Enter queues while a turn runs and the queued strip settles", asy
   await expect(scroller.getByText("queued second message", { exact: false })).toHaveCount(1, {
     timeout: 60_000,
   });
+});
+
+test("a steer into a blocked turn shows up at once, as the host's own fact (AC 13)", async ({
+  page,
+}) => {
+  // The regression this closes: a steer is only recorded as a durable
+  // `user/message` when the loop claims it at the NEXT STEP, and a turn
+  // blocked on an approval never reaches that boundary until someone
+  // answers. The optimistic echo used to cover the window and was removed, so
+  // at one point a steered message was visible NOWHERE - draft cleared, no
+  // row, no strip (the strip filtered `queued` only). It now renders from the
+  // host's own `steering` placement, which the splice broadcasts immediately.
+  const sessionId = await createSession();
+  await page.goto(profile.baseURL + "/sessions/" + sessionId);
+  await envelopeCall("session.prompt", {
+    sessionId,
+    mode: "queue",
+    content: [{ type: "text", text: "scripted-approval block the step" }],
+  });
+  const card = page.getByTestId("approval-card");
+  await expect(card).toBeVisible({ timeout: 30_000 }); // the step is now parked
+
+  const box = page.getByRole("textbox", { name: "Message the session" });
+  await box.click();
+  await box.pressSequentially("steer while blocked");
+  await box.press("Enter"); // Enter = steer
+
+  const scroller = page.getByTestId("transcript-scroll");
+  const stripLine = scroller.getByText("steer while blocked", { exact: false });
+  const steeringGroup = scroller.getByText("Steering", { exact: false });
+  await expect(steeringGroup).toBeVisible({ timeout: 10_000 });
+  await expect(stripLine).toBeVisible();
+  // Pending work, not a message in the session: the strip is the ONE
+  // rendering of this text while the step is parked - no durable row yet.
+  await expect(stripLine).toHaveCount(1);
+
+  // Unblock: the loop claims the steer, its durable row lands, the strip
+  // drains, and the text exists exactly once on the whole page.
+  await card.getByRole("button", { name: "Allow once" }).click();
+  await expect(scroller.getByText("Approval round complete", { exact: false })).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(stripLine).toHaveCount(1, { timeout: 30_000 });
+  await expect(steeringGroup).toHaveCount(0);
 });
 
 test("an approval ask renders an answerable card that settles from the client answer", async ({
