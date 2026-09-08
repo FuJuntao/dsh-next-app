@@ -9,7 +9,7 @@
  * The scripted provider's timing knobs (delayed chunked replies) are what
  * make "live" observable rather than a race against a settled turn.
  */
-import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -146,4 +146,85 @@ test("an unknown id gets the distinct unknown-session state", async ({ page }) =
   await expect(page.getByRole("link", { name: "Back to sessions" })).toBeVisible();
   // The shell and nav keep working around it (AC 23).
   await expect(page.getByTestId("sessions-unavailable")).toHaveCount(0);
+});
+
+test("a bridge-down session page renders its own state, shell intact (AC 23/27)", async ({
+  page,
+}) => {
+  // Finding #20: AC 27 names the bridge-down state, and until now only the
+  // NAV's version was pinned - the session page's own read path never was.
+  // Same transport trick as sessions.spec: rename the socket aside, so every
+  // connect fails while the host keeps running.
+  const sessionId = await createSession();
+  const moved = socket + ".e2e-page-down";
+  renameSync(socket, moved);
+  let restored = false;
+  try {
+    await page.goto(profile.baseURL + "/sessions/" + sessionId);
+    await expect(page.getByRole("heading", { name: "Can't reach the dsh host" })).toBeVisible();
+    // The shell survives it in the sense AC 23 means: the nav renders its
+    // OWN bridge-down state rather than vanishing, and the session page is a
+    // clean state - not a half-built transcript or a composer waiting on a
+    // dead host.
+    await expect(page.getByTestId("sessions-unavailable")).toBeVisible();
+    await expect(page.getByTestId("transcript-scroll")).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Message the session" })).toHaveCount(0);
+
+    // And the page recovers on a reload once the channel is back - the state
+    // is a render, not a wedged island.
+    renameSync(moved, socket);
+    restored = true;
+    await page.reload();
+    await expect(page.getByRole("textbox", { name: "Message the session" })).toBeVisible({
+      timeout: 20_000,
+    });
+  } finally {
+    if (!restored && existsSync(moved)) renameSync(moved, socket);
+  }
+});
+
+test("an image already in the transcript renders through the attachment door (AC 20/27)", async ({
+  page,
+}) => {
+  // Finding #20: the display path had no automated assertion at all (the PR
+  // body recorded it as manual-probe only). A prompt carrying an image is
+  // admitted by the host, recorded as a durable `attachment` reference, and
+  // the transcript must fetch those bytes back through OUR route - never a
+  // host path, with private caching.
+  const sessionId = await createSession();
+  const png =
+    "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mP4z8CAFTEMLQkAKP8/wc53yE8AAAAASUVORK5CYII=";
+  await envelopeCall("session.prompt", {
+    sessionId,
+    mode: "queue",
+    content: [
+      { type: "text", text: "scripted-stream here is the screenshot" },
+      { type: "image", mediaType: "image/png", data: png, name: "shot.png" },
+    ],
+  });
+  await page.goto(profile.baseURL + "/sessions/" + sessionId);
+  const img = page.getByTestId("transcript-scroll").getByRole("img", { name: "shot.png" });
+  await expect(img).toBeVisible({ timeout: 30_000 });
+
+  const src = await img.getAttribute("src");
+  expect(src ?? "").toContain("/api/attachment?");
+  expect(src ?? "").toContain("sessionId=" + sessionId);
+  // No host path crosses to the browser: the URL carries opaque ids only.
+  expect(src ?? "").not.toContain("/home/");
+  expect(src ?? "").not.toContain(profile.profileDir);
+
+  // The door itself: authenticated bytes, private cache, real content type.
+  const served = await page.evaluate(async (url: string) => {
+    const res = await fetch(url);
+    return {
+      status: res.status,
+      type: res.headers.get("content-type"),
+      cache: res.headers.get("cache-control"),
+      bytes: (await res.arrayBuffer()).byteLength,
+    };
+  }, src ?? "");
+  expect(served.status).toBe(200);
+  expect(served.type).toBe("image/png");
+  expect(served.cache).toContain("private");
+  expect(served.bytes).toBeGreaterThan(0);
 });
