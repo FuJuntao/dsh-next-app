@@ -169,13 +169,17 @@ export function AppSidebar({
  *
  * A session page fills the column edge to edge - its transcript owns the
  * scroll and the 48rem cap, so the shell adds no padding or second scroll
- * box; every other page keeps the padded, centered reading column.
+ * box; every other page keeps the padded, centered reading column. The
+ * session column also pins itself to the viewport: the shell row is only
+ * `min-h-svh`, so without a definite height the transcript's flex-1 would
+ * size to its content, the composer would ride the document scroll, and the
+ * whole page would move instead of just the chat.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const isSession = usePathname().startsWith("/sessions/");
   return (
     <SessionHeaderProvider>
-      <SidebarInset>
+      <SidebarInset className={isSession ? "h-svh" : undefined}>
         {/* The header sits inside the inset's <main> column, so its implicit
             banner role would be lost (header->banner only outside main);
             the explicit role keeps the page landmark. */}
