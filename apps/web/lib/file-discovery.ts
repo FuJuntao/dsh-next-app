@@ -77,7 +77,14 @@ interface Listing {
 interface RootCache {
   at: number;
   entries: DiscoveredEntry[];
-  /** True when a ceiling cut the listing short (huge repo) - score anyway. */
+  /**
+   * True when a ceiling cut the listing short. Recorded, NOT yet surfaced:
+   * the menu has no channel for it, so a search through a truncated listing
+   * can miss a file the operator knows is there and say nothing. That is the
+   * honest state of this field - see #139 for giving it a line in the menu -
+   * and the cache carries it so the caller never has to re-ask which leg
+   * produced the entries.
+   */
   partial: boolean;
 }
 
