@@ -17,10 +17,12 @@
  * crash - the same fail-visible posture as the fold's unknown-record row.
  */
 import type { ToolCallView, ToolResultView } from "@deepseek-ai/dsh-host-apiproxy/api";
+import { safeHref } from "@/lib/safe-href";
 import type { ToolResultFold } from "@/lib/transcript";
 import { DetailBlock } from "@/components/chat/event-row";
 import { Markdown } from "@/components/chat/markdown";
 
+/** Read a string field of an unparsed view part as text (empty when absent). */
 function str(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
@@ -237,17 +239,25 @@ export function ResultBody({
     }
     case "web":
       if (view.kind === "fetch") {
+        const href = safeHref(view.url);
         return (
           <div className="mb-2 space-y-1.5 last:mb-0">
             <div className="flex min-w-0 items-baseline gap-2 text-xs">
-              <a
-                className="min-w-0 truncate font-mono text-primary underline-offset-2 hover:underline"
-                href={view.url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {view.url}
-              </a>
+              {href === null ? (
+                // A refused URL stays on screen as plain text: the fetch
+                // result is still the information, and a row that silently
+                // loses its target looks like a bug, not a refusal.
+                <span className="min-w-0 truncate font-mono text-muted-foreground">{view.url}</span>
+              ) : (
+                <a
+                  className="min-w-0 truncate font-mono text-primary underline-offset-2 hover:underline"
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {view.url}
+                </a>
+              )}
               <span
                 className={`shrink-0 font-mono text-2xs ${
                   view.statusCode >= 400 ? "text-destructive" : "text-muted-foreground/70"
@@ -269,23 +279,32 @@ export function ResultBody({
         <div className="mb-2 space-y-1.5 last:mb-0">
           {view.answer !== undefined && view.answer !== "" && <Markdown text={view.answer} />}
           <ul className="space-y-0.5">
-            {view.sources.map((source, index) => (
-              <li key={index} className="flex min-w-0 items-baseline gap-2 text-xs">
-                <a
-                  className="min-w-0 truncate text-primary underline-offset-2 hover:underline"
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {source.title ?? source.url}
-                </a>
-                {source.snippet !== undefined && (
-                  <span className="hidden min-w-0 truncate text-muted-foreground sm:inline">
-                    {source.snippet}
-                  </span>
-                )}
-              </li>
-            ))}
+            {view.sources.map((source, index) => {
+              const href = safeHref(source.url);
+              return (
+                <li key={index} className="flex min-w-0 items-baseline gap-2 text-xs">
+                  {href === null ? (
+                    <span className="min-w-0 truncate text-muted-foreground">
+                      {source.title ?? source.url}
+                    </span>
+                  ) : (
+                    <a
+                      className="min-w-0 truncate text-primary underline-offset-2 hover:underline"
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {source.title ?? source.url}
+                    </a>
+                  )}
+                  {source.snippet !== undefined && (
+                    <span className="hidden min-w-0 truncate text-muted-foreground sm:inline">
+                      {source.snippet}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       );
