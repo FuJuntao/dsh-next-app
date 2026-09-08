@@ -96,19 +96,37 @@ export function ApprovalCard({ card }: CardProps) {
         <p className="mt-1 pl-6 text-sm leading-normal text-muted-foreground">{reason}</p>
       )}
       {refused !== null && <p className="mt-1.5 pl-6 text-xs text-destructive">{refused}</p>}
-      <div className="mt-2.5 flex gap-2 pl-6">
-        <Button size="xs" onClick={() => void answer("allowed-once")} disabled={submitting}>
-          Allow once
-        </Button>
-        <Button
-          size="xs"
-          variant="outline"
-          onClick={() => void answer("rejected")}
-          disabled={submitting}
-        >
-          Reject
-        </Button>
-      </div>
+      {card.answerToken === undefined ? (
+        /* No token means no way back to the ask, so the card says that
+           instead of offering buttons that would sit there doing nothing.
+           Unreachable through the route (every answerable frame is issued a
+           token); it is the dead-card guard AC 16 is about. */
+        <p className="mt-2.5 pl-6 text-xs text-muted-foreground">
+          This request carries no answer token - approve it from the terminal.
+        </p>
+      ) : (
+        // min-h-11 (44px) is AC 25's touch floor, scoped to the chat island:
+        // the shared `xs` preset stays as dense dialogs need it.
+        <div className="mt-2.5 flex gap-2 pl-6">
+          <Button
+            size="xs"
+            className="min-h-11"
+            onClick={() => void answer("allowed-once")}
+            disabled={submitting}
+          >
+            Allow once
+          </Button>
+          <Button
+            size="xs"
+            variant="outline"
+            className="min-h-11"
+            onClick={() => void answer("rejected")}
+            disabled={submitting}
+          >
+            Reject
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -188,6 +206,7 @@ export function QuestionCard({ card }: CardProps) {
       }}
       submitting={submitting}
       refused={refused}
+      canAnswer={card.answerToken !== undefined}
     />
   );
 }
@@ -208,6 +227,7 @@ function QuestionForm({
   onDismiss,
   submitting,
   refused,
+  canAnswer,
 }: {
   questions: QuestionView[];
   onSubmit: (
@@ -216,6 +236,8 @@ function QuestionForm({
   onDismiss: () => void;
   submitting: boolean;
   refused: string | null;
+  /** False when the frame carries no token: nothing to answer with. */
+  canAnswer: boolean;
 }) {
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [custom, setCustom] = useState<Record<string, string>>({});
@@ -230,19 +252,23 @@ function QuestionForm({
   };
   const complete = questions.every((q) => answerFor(q) !== null);
 
-  // The free-text answer outranks the options, one-directionally: starting
-  // to type withdraws the picks (the typed words are the answer), but
-  // picking an option never destroys what was typed - the submit carries
-  // the picks AND the custom text together (the answer shape allows both).
+  // Last gesture wins, per question. Typing withdraws the picks; picking
+  // withdraws the typed text. The asymmetry is deliberate and follows the
+  // host's own shape rule (`matchesQuestions` in the respond leg): a
+  // non-multiSelect answer may carry custom text OR one pick, never both -
+  // sending both is refused as `bad-response` every time. A multiSelect
+  // answer may carry both, so there the text survives a click.
   const toggle = (q: QuestionView, label: string): void => {
-    setSelected((prev) => {
-      const cur = prev[q.id] ?? [];
-      if (!q.multi) return { ...prev, [q.id]: cur.includes(label) ? [] : [label] };
-      return {
-        ...prev,
-        [q.id]: cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label],
-      };
-    });
+    const cur = selected[q.id] ?? [];
+    const picking = !cur.includes(label);
+    setSelected((prev) => ({
+      ...prev,
+      [q.id]: picking ? (q.multi ? [...(prev[q.id] ?? []), label] : [label]) : [],
+    }));
+    // A fresh pick on a single-select withdraws the typed text: the host
+    // refuses an answer that carries both (`matchesQuestions` in the respond
+    // leg). Multi-select may carry both, so there the note survives.
+    if (picking && !q.multi) setCustom((prev) => ({ ...prev, [q.id]: "" }));
   };
 
   return (
@@ -320,14 +346,30 @@ function QuestionForm({
       ))}
       {refused !== null && <p className="pl-6 text-xs text-destructive">{refused}</p>}
       <div className="pl-6">
-        <div className="flex items-center gap-2">
-          <Button type="submit" size="xs" disabled={!complete || submitting}>
-            {submitting ? "Sending…" : "Submit answers"}
-          </Button>
-          <Button type="button" size="xs" variant="ghost" onClick={onDismiss} disabled={submitting}>
-            Dismiss
-          </Button>
-        </div>
+        {canAnswer ? (
+          <div className="flex items-center gap-2">
+            <Button type="submit" size="xs" className="min-h-11" disabled={!complete || submitting}>
+              {submitting ? "Sending…" : "Submit answers"}
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              className="min-h-11"
+              onClick={onDismiss}
+              disabled={submitting}
+            >
+              Dismiss
+            </Button>
+          </div>
+        ) : (
+          // The same dead-card guard as the approval: without a token there is
+          // nothing to answer with, so the card does not offer a submit that
+          // would sit there doing nothing.
+          <p className="text-xs text-muted-foreground">
+            This request carries no answer token - answer it from the terminal.
+          </p>
+        )}
         {/* Same rule as the header: the hint is its own line, not a second
             column sharing the buttons' row. */}
         <p className="mt-1 text-2xs text-muted-foreground/70">
