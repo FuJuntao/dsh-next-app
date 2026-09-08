@@ -403,6 +403,14 @@ export function SessionTranscript(props: SessionTranscriptProps) {
             on every token would drown the reader; a NEW row is the addition
             worth speaking. tabIndex=-1 makes it a focus target for Load older
             without adding a stop to the tab order. */}
+        {pageNotice !== null && (
+          // The one thing Load older says out loud: where the reader landed.
+          // Deliberately a sibling of the log, not a child - inside `role=log`
+          // this node would itself read as an added row.
+          <span className="sr-only" role="status">
+            {pageNotice}
+          </span>
+        )}
         <div
           ref={scrollerRef}
           onScroll={onScroll}
@@ -414,12 +422,6 @@ export function SessionTranscript(props: SessionTranscriptProps) {
           className="flex-1 overflow-y-auto px-2 py-3 outline-none"
           data-testid="transcript-scroll"
         >
-          {pageNotice !== null && (
-            // The one thing Load older says out loud: where the reader landed.
-            <span className="sr-only" role="status">
-              {pageNotice}
-            </span>
-          )}
           {items.length === 0 && (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm text-muted-foreground">
