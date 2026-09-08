@@ -22,6 +22,7 @@ import { RiCloseLine, RiImageAddLine } from "@remixicon/react";
 import type { PromptImage } from "@/lib/chat-send";
 import {
   refuseImageIntake,
+  reserveImageBudget,
   type ImageAttachmentLimits,
   type ImageCandidate,
 } from "@/lib/image-intake";
@@ -92,48 +93,99 @@ export const ImageIntake = forwardRef<
   // set while computing the running-total pre-check.
   const imagesRef = useRef<StagedImage[]>(images);
   imagesRef.current = images;
+  // Spec #19: the synchronous budget. Measuring a file is async, and each
+  // paste/drop fires an independent accept, so the committed array alone is
+  // stale mid-batch: two quick batches would both pass the count/total
+  // pre-check against the same `current` and land a combined set over the
+  // caps. Every accepted image - in-flight or staged - holds a slot and its
+  // bytes here, claimed BEFORE any await and released when it turns out to
+  // be refused or unmeasurable; once committed it stays counted through
+  // imagesRef (the visible set). The host still refuses at admission
+  // (AC 18's backstop); this keeps the pre-check UX honest.
+  const budgetRef = useRef<{ count: number; bytes: number }>({ count: 0, bytes: 0 });
 
   const acceptFiles = useCallback(
     (files: readonly File[]): void => {
       const candidates = files.filter((f) => f.type.startsWith("image/"));
       if (candidates.length === 0) return;
+      // Claim the batch's SLOTS synchronously, before any await: measuring a
+      // file is async and every paste/drop fires its own accept, so the
+      // committed array alone is stale mid-batch - two quick batches would
+      // both pre-check against the same `current` and land a combined set
+      // over the count cap. Bytes join as each file is measured, and a
+      // committed image stays counted here until it is dropped, so THIS
+      // ledger - never `images` alone - is what a pre-check reads.
+      budgetRef.current.count += candidates.length;
       void (async () => {
         const staged: StagedImage[] = [];
+        let settled = 0; // candidates this loop has accounted for, one way or another
+        const releaseUnaccounted = (): void => {
+          // A candidate this batch abandoned without reaching its own check
+          // still holds a slot. Give all of them back, or a refusal leaks
+          // budget permanently and the picker starts refusing images that
+          // were never attached.
+          budgetRef.current.count -= candidates.length - settled;
+          settled = candidates.length;
+        };
         for (const file of candidates) {
           const next = await stage(file);
-          if (next === null) continue;
-          const reason = refuseImageIntake(
-            limits,
-            [
-              ...imagesRef.current.map(({ name, mediaType, bytes, width, height }) => ({
-                name,
-                mediaType,
-                bytes,
-                width,
-                height,
-              })),
-              ...staged,
-            ].map((c) => c as ImageCandidate),
-            {
+          settled += 1;
+          if (next === null) {
+            budgetRef.current.count -= 1; // undecodable: its slot was never used
+            continue;
+          }
+          // Per-candidate rules run against the committed set plus this
+          // batch's own staged prefix (the in-batch running total).
+          const others: ImageCandidate[] = [
+            ...imagesRef.current.map(({ name, mediaType, bytes, width, height }) => ({
+              name,
+              mediaType,
+              bytes,
+              width,
+              height,
+            })),
+            ...staged,
+          ];
+          const reason =
+            refuseImageIntake(limits, others, {
               name: next.name,
               mediaType: next.mediaType,
               bytes: next.bytes,
               width: next.width,
               height: next.height,
-            },
-          );
+            }) ??
+            // The cross-batch half, read off the synchronous ledger. Note the
+            // deliberate asymmetry that the slot claim above buys: this
+            // candidate's SLOT is already counted (so it is subtracted here
+            // and added back by the helper), but its BYTES are not - they
+            // join only once it is admitted, below - so usedBytes is the
+            // ledger exactly as it stands.
+            reserveImageBudget(
+              limits,
+              { usedCount: budgetRef.current.count - 1, usedBytes: budgetRef.current.bytes },
+              next.bytes,
+            );
           if (reason !== null) {
             setRefusal(reason); // visible refusal BEFORE submit (AC 18)
+            // The batch withdraws together (the contract here from the
+            // start): this candidate's slot, the staged prefix's slots AND
+            // bytes, and anything the unread tail still holds.
+            budgetRef.current.count -= 1 + staged.length;
+            budgetRef.current.bytes -= staged.reduce((sum, s) => sum + s.bytes, 0);
             staged.forEach((s) => URL.revokeObjectURL(s.previewUrl));
+            releaseUnaccounted();
             return;
           }
+          budgetRef.current.bytes += next.bytes; // measured: hold the real bytes
           staged.push(next);
         }
+        releaseUnaccounted();
         if (staged.length > 0) {
           setRefusal(null);
           setImages((prev) => {
-            imagesRef.current = [...prev, ...staged];
-            return imagesRef.current;
+            const nextImages = [...prev, ...staged];
+            imagesRef.current = nextImages;
+            return nextImages;
           });
         }
       })();
@@ -149,6 +201,10 @@ export const ImageIntake = forwardRef<
         images.map(({ mediaType, base64, name }) => ({ mediaType, data: base64, name })),
       clear: () => {
         images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
+        // Dropping committed images returns their slots/bytes (spec #19):
+        // pending claims stay reserved because they are not being dropped.
+        budgetRef.current.count -= images.length;
+        budgetRef.current.bytes -= images.reduce((sum, img) => sum + img.bytes, 0);
         imagesRef.current = [];
         setImages([]);
         setRefusal(null);
@@ -160,8 +216,14 @@ export const ImageIntake = forwardRef<
 
   const remove = (index: number): void => {
     setImages((prev) => {
+      const dropped = prev[index];
       const next = prev.filter((_, i) => i !== index);
-      URL.revokeObjectURL(prev[index]?.previewUrl ?? "");
+      if (dropped !== undefined) {
+        URL.revokeObjectURL(dropped.previewUrl);
+        // The removed image leaves the committed set, so give its budget back.
+        budgetRef.current.count -= 1;
+        budgetRef.current.bytes -= dropped.bytes;
+      }
       imagesRef.current = next;
       return next;
     });
@@ -195,9 +257,16 @@ export const ImageIntake = forwardRef<
                 type="button"
                 aria-label={`Remove ${image.name}`}
                 onClick={() => remove(index)}
-                className="absolute -right-1.5 -top-1.5 rounded-none border border-border bg-background p-0.5 text-muted-foreground hover:text-foreground"
+                // AC 25: the hit target must reach 44px. The shared `xs`
+                // preset is sized for dense dialogs, so the bump is scoped
+                // here: an h-11 w-11 flex box centers the same size-3 icon
+                // and overhangs the thumb by ~12px on top/right only — the
+                // visible mark stays small, the touch area does not.
+                className="absolute -right-3 -top-3 flex h-11 w-11 items-center justify-center rounded-none text-muted-foreground hover:text-foreground"
               >
-                <RiCloseLine className="size-3" />
+                <span className="flex size-5 items-center justify-center rounded-none border border-border bg-background p-0.5">
+                  <RiCloseLine className="size-3" />
+                </span>
               </button>
             </div>
           ))}

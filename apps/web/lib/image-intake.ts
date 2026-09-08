@@ -65,6 +65,40 @@ export function refuseImageIntake(
   return null;
 }
 
+/** The per-message budget a caller holds: committed images plus pending reservations. */
+export interface ImageBudget {
+  /** Slots already taken (staged and/or reserved before any await). */
+  usedCount: number;
+  /** Bytes already taken (staged and/or reserved before any await). */
+  usedBytes: number;
+}
+
+/**
+ * The count/total half of the pre-check as a pure step over a running
+ * budget (spec #19): the caller folds its pending batch into the budget
+ * SYNCHRONOUSLY at intake time, so two quick paste/drop batches can never
+ * both evaluate against the same stale committed set. Per-candidate rules
+ * stay in refuseImageIntake; this owns only "does it fit yet".
+ * Returns null when the image fits (the caller then adds it to the budget),
+ * or the refusal copy - identical to refuseImageIntake's - when it does not.
+ * Absent limits means no pre-check (AC 18): always admit.
+ */
+export function reserveImageBudget(
+  limits: ImageAttachmentLimits | undefined,
+  budget: ImageBudget,
+  incomingBytes: number,
+): string | null {
+  if (limits === undefined) return null; // no attachment service: the host answers
+  if (budget.usedCount + 1 > limits.maxImagesPerMessage) {
+    return `at most ${limits.maxImagesPerMessage} images per message`;
+  }
+  const total = budget.usedBytes + incomingBytes;
+  if (total > limits.maxMessageImageBytes) {
+    return `images total ${fmtBytes(total)} - the limit is ${fmtBytes(limits.maxMessageImageBytes)} per message`;
+  }
+  return null;
+}
+
 function fmtNum(n: number): string {
   return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n.toLocaleString("en-US");
 }
