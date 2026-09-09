@@ -775,14 +775,15 @@ function ComposerInner({
               onStop !== undefined && (
                 // AC 15: while a turn runs, the stop control joins the two
                 // mode gestures - the one moment cancelling is as meaningful
-                // as steering. min-h-11/min-w-11 is AC 25's 44px touch floor
-                // scoped to the island; the shared `icon-xs` preset stays as
-                // the dense preset the rest of the app uses.
+                // as steering. AC 25's 44px floor applies under a coarse
+                // pointer only: on a mouse the preset's own size is right,
+                // and a 44px square beside two `xs` buttons is not a better
+                // target, it is a layout accident.
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-xs"
-                  className="min-h-11 min-w-11"
+                  className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                   aria-label="Stop current turn"
                   title="Stop the running turn"
                   onClick={onStop}

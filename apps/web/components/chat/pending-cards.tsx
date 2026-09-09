@@ -105,12 +105,15 @@ export function ApprovalCard({ card }: CardProps) {
           This request carries no answer token - approve it from the terminal.
         </p>
       ) : (
-        // min-h-11 (44px) is AC 25's touch floor, scoped to the chat island:
-        // the shared `xs` preset stays as dense dialogs need it.
+        // AC 25's 44px floor is a TOUCH requirement, so it applies under a
+        // coarse pointer only. Applied unconditionally it made a desktop card
+        // action 44px tall against a scale whose largest button is 36px -
+        // the row stopped reading as the preset and started reading as a
+        // slab. The shared `xs` preset stays as dense dialogs need it.
         <div className="mt-2.5 flex gap-2 pl-6">
           <Button
             size="xs"
-            className="min-h-11"
+            className="pointer-coarse:min-h-11"
             onClick={() => void answer("allowed-once")}
             disabled={submitting}
           >
@@ -119,7 +122,7 @@ export function ApprovalCard({ card }: CardProps) {
           <Button
             size="xs"
             variant="outline"
-            className="min-h-11"
+            className="pointer-coarse:min-h-11"
             onClick={() => void answer("rejected")}
             disabled={submitting}
           >
@@ -348,14 +351,19 @@ function QuestionForm({
       <div className="pl-6">
         {canAnswer ? (
           <div className="flex items-center gap-2">
-            <Button type="submit" size="xs" className="min-h-11" disabled={!complete || submitting}>
+            <Button
+              type="submit"
+              size="xs"
+              className="pointer-coarse:min-h-11"
+              disabled={!complete || submitting}
+            >
               {submitting ? "Sending…" : "Submit answers"}
             </Button>
             <Button
               type="button"
               size="xs"
               variant="ghost"
-              className="min-h-11"
+              className="pointer-coarse:min-h-11"
               onClick={onDismiss}
               disabled={submitting}
             >

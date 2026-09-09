@@ -323,6 +323,10 @@ export function SessionTranscript(props: SessionTranscriptProps) {
   // built-in surface's shape - a round icon button riding the bottom of the
   // column - with the unseen count as its badge, because the number is the
   // reason to press it.
+
+  // Both pills are h-8 w-8 on a pointer and h-11 w-11 under touch (AC 25's
+  // 44px floor is a touch requirement, and 44px floats over the column on a
+  // desktop for no reason).
   const awaitingApproval = pending.some(
     (card) => card.kind === "approval" && card.state === "pending",
   );
@@ -334,7 +338,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
         data-testid="approval-jump"
         aria-label="An approval is waiting below - jump to it"
         title="An approval is waiting"
-        className="absolute bottom-3 left-1/2 z-10 flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-none border border-warning/50 bg-warning/15 text-warning shadow-sm backdrop-blur"
+        className="absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 pointer-coarse:h-11 pointer-coarse:w-11 items-center justify-center rounded-none border border-warning/50 bg-warning/15 text-warning shadow-sm backdrop-blur"
       >
         <RiShieldCheckLine className="h-4 w-4" />
       </button>
@@ -344,7 +348,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
         onClick={jumpToLatest}
         data-testid="jump-to-latest"
         aria-label={unseen > 0 ? `Jump to latest, ${unseen} new rows` : "Jump to latest"}
-        className="absolute bottom-3 left-1/2 z-10 flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-none border border-border bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
+        className="absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 pointer-coarse:h-11 pointer-coarse:w-11 items-center justify-center rounded-none border border-border bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
       >
         <RiArrowDownSLine className="h-4 w-4" />
         {unseen > 0 && (
