@@ -105,15 +105,17 @@ export function ApprovalCard({ card }: CardProps) {
           This request carries no answer token - approve it from the terminal.
         </p>
       ) : (
-        // AC 25's 44px floor is a TOUCH requirement, so it applies under a
-        // coarse pointer only. Applied unconditionally it made a desktop card
-        // action 44px tall against a scale whose largest button is 36px -
-        // the row stopped reading as the preset and started reading as a
-        // slab. The shared `xs` preset stays as dense dialogs need it.
+        // AC 25's 44px floor is about the TARGET a finger has to hit, not
+        // the ink, so the buttons keep the preset's 24px height and gain an
+        // invisible 10px band above and below (44px total). Growing min-height
+        // instead put a 44px slab in a scale whose largest button is 36px -
+        // and hung the result off a `@media (pointer: coarse)` bet about the
+        // reader's hardware, which is not a thing this card needs to know.
+        // Vertical only: the row's 8px gap keeps neighbours' targets apart.
         <div className="mt-2.5 flex gap-2 pl-6">
           <Button
             size="xs"
-            className="pointer-coarse:min-h-11"
+            className="relative after:absolute after:-top-2.5 after:-bottom-2.5 after:inset-x-0 after:content-['']"
             onClick={() => void answer("allowed-once")}
             disabled={submitting}
           >
@@ -122,7 +124,7 @@ export function ApprovalCard({ card }: CardProps) {
           <Button
             size="xs"
             variant="outline"
-            className="pointer-coarse:min-h-11"
+            className="relative after:absolute after:-top-2.5 after:-bottom-2.5 after:inset-x-0 after:content-['']"
             onClick={() => void answer("rejected")}
             disabled={submitting}
           >
@@ -354,7 +356,7 @@ function QuestionForm({
             <Button
               type="submit"
               size="xs"
-              className="pointer-coarse:min-h-11"
+              className="relative after:absolute after:-top-2.5 after:-bottom-2.5 after:inset-x-0 after:content-['']"
               disabled={!complete || submitting}
             >
               {submitting ? "Sending…" : "Submit answers"}
@@ -363,7 +365,7 @@ function QuestionForm({
               type="button"
               size="xs"
               variant="ghost"
-              className="pointer-coarse:min-h-11"
+              className="relative after:absolute after:-top-2.5 after:-bottom-2.5 after:inset-x-0 after:content-['']"
               onClick={onDismiss}
               disabled={submitting}
             >

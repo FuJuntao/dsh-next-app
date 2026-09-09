@@ -775,15 +775,16 @@ function ComposerInner({
               onStop !== undefined && (
                 // AC 15: while a turn runs, the stop control joins the two
                 // mode gestures - the one moment cancelling is as meaningful
-                // as steering. AC 25's 44px floor applies under a coarse
-                // pointer only: on a mouse the preset's own size is right,
-                // and a 44px square beside two `xs` buttons is not a better
-                // target, it is a layout accident.
+                // as steering. AC 25's floor again as a target, not as ink:
+                // the 24px glyph keeps its size and the hit band grows
+                // vertically, so it still reads as the `icon-xs` preset it is.
+                // Horizontal stays put - the 4px gap to the send controls is
+                // smaller than the band would be.
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-xs"
-                  className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                  className="relative after:absolute after:-top-2.5 after:-bottom-2.5 after:inset-x-0 after:content-['']"
                   aria-label="Stop current turn"
                   title="Stop the running turn"
                   onClick={onStop}
