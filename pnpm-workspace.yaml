@@ -6,11 +6,21 @@ packages:
 # Workspace-wide toolchain pins: members reference these via `catalog:`
 # so every package builds with the same versions.
 catalog:
-  # The dsh host surface this bundle targets - the host packages resolve
-  # from the user's dsh installation at runtime, so the pins track the
-  # tested dsh version (0.1.1-rc.2) in one place.
+  # The dsh host surface this bundle targets. Cordis resolves a row by its
+  # package name from the profile's own tree first, so whatever the bundle
+  # drags in wins over the user's dsh installation: the pins track one dsh
+  # version (0.1.1-rc.2) in one place, and the profile has to carry each row
+  # package together with the rows that talk to it. The tool runtime is where
+  # that bites; the bundle patch header carries the mechanism (#138).
   "@deepseek-ai/cordis": 4.0.1
   "@deepseek-ai/schemastery": 3.18.1
+  # Deps rather than peers, and paired on purpose: the profile install runs
+  # with autoInstallPeers off, and these two must land in the same tree or
+  # tool execution crosses module instances (#138). The whole base layer
+  # (`@deepseek-ai/dsh-base`) is deliberately NOT pulled in - it drags the
+  # native tool packages (node-pty, koffi) whose install scripts pnpm 11
+  # blocks by default, and `dsh plugin add` forwards straight to pnpm.
+  "@deepseek-ai/dsh-agent-loop": 0.1.1-rc.2
   "@deepseek-ai/dsh-cmdline": 0.1.1-rc.2
   "@deepseek-ai/dsh-host-apiproxy": 0.1.1-rc.2
   "@deepseek-ai/dsh-file-reference": 0.1.1-rc.2
@@ -20,6 +30,7 @@ catalog:
   "@deepseek-ai/dsh-attachment-local": 0.1.1-rc.2
   "@deepseek-ai/dsh-session": 0.1.1-rc.2
   "@deepseek-ai/dsh-subprocess": 0.1.1-rc.2
+  "@deepseek-ai/dsh-tools": 0.1.1-rc.2
   "@deepseek-ai/dsh": 0.1.1-rc.2
   "@base-ui/react": 1.7.0
   "@playwright/test": 1.62.1

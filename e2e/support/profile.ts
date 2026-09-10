@@ -1,5 +1,6 @@
 import { randomBytes, scryptSync } from "node:crypto";
-import { createWriteStream, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { freePort } from "./port";
@@ -122,34 +123,63 @@ export function writeRuntimePatch(profileDir: string, config?: ProfileRuntimeCon
 }
 
 /**
- * Prune the profile-local copy of `@deepseek-ai/dsh-tools` after a fresh
- * `dsh plugin add` (story #134 task #135 commit 2).
+ * Assert that an installed profile resolves ONE copy of the tool runtime
+ * (#138) - the composition every tool call depends on.
  *
- * Why: installing the bundle hoists apiproxy's host graph into the profile,
- * so the profile root carries its own dsh-tools while `dsh-agent-loop` (not
- * in the bundle graph) loads from the host's global install and imports
- * THAT copy. Tool execution crosses the two through
- * `TOOL_RUNTIME_SCHEDULER` - a module-scoped `Symbol()`, not `Symbol.for` -
- * so the agent loop reads `ctx.tools[SYM_global]` on the instance built
- * from `SYM_profile`: undefined, and every tool call dies with "Cannot
- * read properties of undefined (reading 'prepare')". Verified empirically
- * against two independent installs (preview + e2e layout): pruning the
- * profile root copy makes base rows and agent-loop share one instance, and
- * tool execution completes.
+ * The mechanism: `TOOL_RUNTIME_SCHEDULER` is a module-scoped `Symbol()`, not
+ * `Symbol.for`. The agent-loop row registers the scheduler on the
+ * `@deepseek-ai/dsh-tools` copy it imports, then reads it back through that
+ * symbol - so when the boot holds two physical copies, the registry key and
+ * the lookup key are different Symbols, the read is `undefined`, and the turn
+ * dies with "Cannot read properties of undefined (reading 'prepare')". This
+ * suite used to work around exactly that by pruning the profile's copy; the
+ * bundle now carries `dsh-tools` and `dsh-agent-loop` as dependencies, so one
+ * instance answers every importer in the profile.
  *
- * This is a test-fixture seam for a PRODUCT gap - see the follow-up issue
- * ("next-app profile: duplicated host graph breaks tool execution"); the
- * production profile composes the same collision and is fixed in the
- * product, not here. The apiproxy client keeps working because its own
- * nested (`.pnpm`) resolution still finds its dependencies; only the
- * hoisted root copy that shadows the global for CORDIS ROW resolution is
- * removed.
+ * The guard states the invariant itself rather than a proxy for it: the
+ * package resolved from the profile root and from inside the agent loop must
+ * be the same realpath, because Node's module cache keys on realpath and a
+ * Symbol's identity follows the instance. A future bundle that drops either
+ * dependency, or a resolver that reintroduces a second copy, fails here with
+ * the mechanism named - instead of surfacing as a broken tool call in a spec
+ * three layers away.
+ *
+ * @param profileDir The installed profile directory (holds `node_modules`).
  */
-export function pruneProfileHostDupes(profileDir: string): void {
-  rmSync(join(profileDir, "node_modules", "@deepseek-ai", "dsh-tools"), {
-    recursive: true,
-    force: true,
-  });
+export function assertSharedToolRuntimeGraph(profileDir: string): void {
+  const scoped = join(profileDir, "node_modules", "@deepseek-ai");
+  for (const row of ["dsh-tools", "dsh-agent-loop"]) {
+    if (!existsSync(join(scoped, row))) {
+      throw new Error(
+        `@deepseek-ai/${row} is missing from the installed profile (${scoped}), so its row ` +
+          `resolves from the dsh installation and crosses module instances with the rest of ` +
+          `the boot (#138); the bundle must depend on it, not merely peer it`,
+      );
+    }
+  }
+  const forRows = resolveFrom(profileDir, "@deepseek-ai/dsh-tools");
+  const forAgentLoop = resolveFrom(join(scoped, "dsh-agent-loop"), "@deepseek-ai/dsh-tools");
+  if (forRows !== forAgentLoop) {
+    throw new Error(
+      `the boot holds two @deepseek-ai/dsh-tools instances: the profile's rows resolve it to ` +
+        `${forRows} while dsh-agent-loop resolves it to ${forAgentLoop}. Tool execution crosses ` +
+        `the two through a module-scoped Symbol, so every tool call fails reading "prepare" ` +
+        `(#138)`,
+    );
+  }
+}
+
+/** The realpath one directory resolves a package to, without loading it. */
+function resolveFrom(fromDir: string, packageName: string): string {
+  // Node resolves a bare specifier from the requiring module's own location,
+  // so the probe path below only fixes the start of the walk; nothing is
+  // executed, which keeps the check free of the package's own imports.
+  const probe = join(fromDir, "dsh-graph-probe.cjs");
+  try {
+    return realpathSync(createRequire(probe).resolve(packageName));
+  } catch (error) {
+    return `unresolved (${(error as Error).message})`;
+  }
 }
 
 /**

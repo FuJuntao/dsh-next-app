@@ -7,6 +7,16 @@
 # only what the gateway's service chain requires, not the web-app transport
 # layer (the browser roster and the transport rows are the UI stories').
 #
+# Row packages resolve by name from the profile's own node_modules first, so
+# the bundle has to carry the packages whose instances meet at runtime. The
+# tool runtime is the sharp edge: `dsh-agent-loop` registers the scheduler on
+# the `@deepseek-ai/dsh-tools` copy it imports and reads it back through a
+# module-scoped Symbol, so if one of those two resolves from the profile and
+# the other from the user's dsh install, the read is `undefined` and every
+# tool call in the boot dies (#138). Both are therefore dependencies of this
+# bundle - not peers, since the profile install runs with autoInstallPeers
+# off and a peer never lands here.
+#
 # A patch replaces the targeted row's whole `config`, so each row below
 # restates every key it owns; these rows carry no config of their own.
 
