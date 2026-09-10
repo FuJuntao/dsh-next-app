@@ -61,7 +61,8 @@ async function assertAppDepsMirrored(): Promise<void> {
   }
 }
 
-/** The packed app build: .next + package.json + next.config.ts (no rebuild cache). */
+/** The packed app build: .next + package.json + next.config.ts (no rebuild
+ * cache, no dev-server output). */
 const stageWebBuild = () => ({
   name: "stage-web-build",
   async writeBundle() {
@@ -74,8 +75,26 @@ const stageWebBuild = () => ({
     await rm(webDir, { recursive: true, force: true });
     await cp(nextDir, join(webDir, ".next"), {
       recursive: true,
-      filter: (src) => !src.includes(`${sep}.next${sep}cache`),
+      // Two pieces of build-machine state, both excluded:
+      //   - `.next/cache` is the rebuild cache;
+      //   - `.next/dev` is Next 16's DEV-server output, which sits alongside
+      //     the production build in any worktree that has run `next dev`.
+      // The dev tree is hundreds of MB of chunks and source maps whose
+      // `sources` fields carry absolute paths from the machine that built
+      // them, so shipping it both tripled the packed tarball and re-opened
+      // the personal-path leak review finding #15 was about. Naming only
+      // `.next/cache` missed it: `.next/dev/cache` has no such substring.
+      filter: (src) =>
+        !src.includes(`${sep}.next${sep}cache`) && !src.includes(`${sep}.next${sep}dev`),
     });
+    // Loud rather than subtle: if this filter ever stops matching (a Next
+    // layout change, different path separators), the staged app silently
+    // grows back to hundreds of megabytes.
+    if (existsSync(join(webDir, ".next", "dev"))) {
+      throw new Error(
+        `stage-web-build: dev-server output leaked into the staged app at ${join(webDir, ".next", "dev")}`,
+      );
+    }
     await cp(join(appDir, "package.json"), join(webDir, "package.json"));
     await cp(join(appDir, "next.config.ts"), join(webDir, "next.config.ts"));
     // next.config.ts keeps ZERO app-runtime imports except the self-
