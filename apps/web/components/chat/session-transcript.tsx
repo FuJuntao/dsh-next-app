@@ -307,7 +307,17 @@ export function SessionTranscript(props: SessionTranscriptProps) {
       // above the viewport, so focus goes to the region that grew and the
       // landed page is spoken once.
       if (el !== null) el.focus({ preventScroll: true });
-      setPageNotice(`Loaded ${String(state.items.length - beforeCount)} older messages.`);
+      // Say what landed, twice honestly:
+      // (a) ROWS, not messages - the delta counts turn marks, compaction
+      //     dividers and unsupported rows alongside the kinds a reader would
+      //     call a message.
+      // (b) A live region announces on a CHANGE: two pages that produce the
+      //     identical sentence would leave the DOM text untouched and the
+      //     second load would be silent. Clear first, speak on the next
+      //     macrotask - a microtask would batch with the clear and render once.
+      const landed = state.items.length - beforeCount;
+      setPageNotice(null);
+      setTimeout(() => setPageNotice(`Loaded ${String(landed)} older rows.`), 0);
     } else {
       setOlderError(
         result.reason === "not-found"
