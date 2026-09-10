@@ -1,0 +1,548 @@
+"use client";
+
+/**
+ * The session transcript island (story #134 task #135; commit 4 built the
+ * read path, commit 6 the live island).
+ *
+ * It owns one fold (lib/transcript.ts) - built server-render-consistently
+ * from the RSC-delivered tail page, then grown LIVE by the page-scoped
+ * downlink (use-session-live): streamed chunks extend the in-flight
+ * bubble, finalized messages settle over it, projections update the page
+ * header AND the side nav row (AC 11), and a dropped stream reconnects
+ * with backoff + a tail re-fetch (AC 12). Server and client run the
+ * identical pure fold over identical raw entries, so the hydrated rows
+ * match the first paint exactly (AC 1: no client fetch precedes content).
+ *
+ * Read + scroll behavior owned here:
+ *   - newest content at the bottom; the view follows new content while the
+ *     reader is at the bottom, ANY manual scroll-up releases the follow,
+ *     and one floating pill restores it ("Jump to latest", counting unseen
+ *     rows while away; AC 9);
+ *   - Load older (AC 8): the page before the oldest loaded seq, fetched
+ *     through the server action and PREPENDED with scroll preservation -
+ *     the viewport keeps pointing at the same row across the insertion -
+ *     gone when the fold reports no more;
+ *   - the distinct `reconnecting` state while the downlink is between
+ *     attempts (AC 12), and the blank-session surface (AC 23).
+ *
+ * The floating pill is one slot by priority: an off-screen approval (AC
+ * 16, commit 8) will outrank the jump control, which outranks the
+ * reconnect notice.
+ */
+import { useCallback, useEffect, useRef, useState } from "react";
+import { RiArrowDownSLine, RiShieldCheckLine } from "@remixicon/react";
+import type {
+  HistoryEntry,
+
+  SessionProjectionsBlock,
+} from "@deepseek-ai/dsh-host-apiproxy/api";
+
+import { ImageIntake, type ImageIntakeHandle } from "@/components/chat/image-intake";
+import { ApprovalCard, QuestionCard } from "@/components/chat/pending-cards";
+import { QueueStrip, TranscriptRow, TurnLive } from "@/components/chat/transcript-rows";
+import type { ImageAttachmentLimits } from "@/lib/image-intake";
+import { searchFileReferences } from "@/lib/file-discovery";
+import { searchSessionReferences } from "@/lib/session-references";
+import type { ComposerEntry, ComposerSearch } from "@/components/session-composer";
+import { useSessionLive } from "@/components/chat/use-session-live";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SessionComposer } from "@/components/session-composer";
+import { useSessionHeaderPublisher } from "@/components/session-header";
+import { SLASH_MENU_ENTRIES } from "@/lib/slash-commands";
+import { cancelTurn, sendPrompt } from "@/lib/chat-send";
+import { navTitleOf, setNavTitle } from "@/lib/nav-live";
+import { loadOlderHistory } from "@/lib/session-history-action";
+import {
+  createTranscript,
+
+  foldHistoryPage,
+  prependHistoryPage,
+  seedProjections,
+  type PendingCard,
+  type QueuedItem,
+  type TranscriptItem,
+  type TranscriptState,
+} from "@/lib/transcript";
+
+export interface SessionTranscriptProps {
+  sessionId: string;
+  initialEntries: HistoryEntry[];
+  initialHasMore: boolean;
+  initialProjections?: SessionProjectionsBlock;
+  /** True while no turn has run (session.list blank bit). */
+  blank: boolean;
+  /** Header meta from session.list (title rides the live projection). */
+  meta: { cwd?: string; updatedAt: number } | null;
+}
+
+/** Build the fold once from the server-delivered tail page. */
+function initialFold(props: SessionTranscriptProps): TranscriptState {
+  const state = createTranscript();
+  foldHistoryPage(state, props.initialEntries, { hasMore: props.initialHasMore });
+  seedProjections(
+    state,
+    props.initialProjections
+      ? {
+          asOfSeq: props.initialProjections.asOfSeq,
+          values: { ...props.initialProjections.values },
+        }
+      : undefined,
+  );
+  return state;
+}
+
+/** Lowest seq across the loaded window (the beforeSeq for Load older). */
+function oldestSeq(state: TranscriptState): number | null {
+  let min: number | null = null;
+  for (const item of state.items) {
+    if (item.seq !== null && (min === null || item.seq < min)) min = item.seq;
+  }
+  return min;
+}
+
+function titleFrom(fold: TranscriptState): string | null {
+  const cell = fold.projections["title"];
+  return typeof cell?.value === "string" && cell.value !== "" ? cell.value : null;
+}
+
+export function SessionTranscript(props: SessionTranscriptProps) {
+  const { sessionId, blank, meta } = props;
+  const foldRef = useRef<TranscriptState | null>(null);
+  foldRef.current ??= initialFold(props);
+  const fold = foldRef.current;
+  const [items, setItems] = useState<TranscriptItem[]>(() => [...fold.items]);
+  const [hasMore, setHasMore] = useState(props.initialHasMore);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderError, setOlderError] = useState<string | null>(null);
+  /** What Load older just landed, for assistive tech (the button is gone
+   * from the viewport by then, so the region says it instead). */
+  const [pageNotice, setPageNotice] = useState<string | null>(null);
+  const [title, setTitle] = useState<string | null>(() => titleFrom(fold));
+  // Scroll follow (AC 9): stick-to-bottom + an unseen count while away.
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const stickBottom = useRef(true);
+  const [unseen, setUnseen] = useState(0);
+  const [atBottom, setAtBottom] = useState(true);
+
+  const [running, setRunning] = useState<boolean>(() => fold.runningTurn !== null);
+  const [runningSince, setRunningSince] = useState<number | null>(() => fold.runningSince);
+  const [queue, setQueue] = useState<QueuedItem[]>(() => [...fold.queue]);
+  const [pending, setPending] = useState<PendingCard[]>(() => [...fold.pending]);
+  const intakeRef = useRef<ImageIntakeHandle | null>(null);
+
+  // The `@` trigger mounts BOTH sources on a session page (AC 21): file
+  // candidates from the session-cwd discovery walk first, then the
+  // session.search hits home already offers. Either source failing yields
+  // its empty half - the draft and the send never wait on discovery.
+  const referenceSearch = useCallback(
+    async (query: string): Promise<ComposerSearch> => {
+      const [files, sessions] = await Promise.all([
+        searchFileReferences(sessionId, query).catch(() => ({ ok: false }) as const),
+        searchSessionReferences(query).catch(
+          () => ({ ok: false, error: "search failed" }) as const,
+        ),
+      ]);
+      const entries: ComposerEntry[] = [];
+      if (files.ok) {
+        for (const candidate of files.items.slice(0, 6)) {
+          entries.push({
+            kind: "file",
+            label: candidate.path,
+            description: candidate.kind === "directory" ? "Folder" : "File",
+            key: `f:${candidate.path}`,
+            insertText: candidate.mention,
+          });
+        }
+      }
+      if (sessions.ok) {
+        for (const hit of sessions.items.slice(0, 4)) {
+          entries.push({
+            kind: "session",
+            label: hit.label,
+            description: hit.snippet,
+            key: `s:${hit.sessionId}`,
+            insertText: hit.mention,
+          });
+        }
+      }
+      return { entries };
+    },
+    [sessionId],
+  );
+  const [, setAttachmentCount] = useState(0); // render pulse only; the count itself is read via the handle
+  const [sendError, setSendError] = useState<string | null>(null);
+
+  const sync = useCallback((): void => {
+    if (foldRef.current === null) return;
+    setItems([...foldRef.current.items]);
+    setHasMore(foldRef.current.hasMore);
+    setRunning(foldRef.current.runningTurn !== null);
+    setRunningSince(foldRef.current.runningSince);
+    setQueue([...foldRef.current.queue]);
+    setPending([...foldRef.current.pending]);
+  }, []);
+
+  // The write flow (AC 13/15 as amended on #134). The transcript mints no row
+  // of its own: a message is in the session when the host says so, and a
+  // refused send should never have appeared in it at all. What covers the
+  // in-between window is the host's own inbox projection - `session/queue`
+  // announces a steer the moment it is spliced (transcript rows only when the
+  // loop claims it at a step boundary, which a blocked turn can hold for
+  // minutes), so the strip shows it as pending work immediately and the
+  // durable `user/message` replaces it when the row lands. On refusal the
+  // composer keeps the draft and the Alert carries the reason (throwing
+  // back is what tells the composer the send failed).
+  const handleSend = useCallback(
+    async (text: string, mode: "steer" | "queue"): Promise<void> => {
+      const images = intakeRef.current?.pending() ?? [];
+      const result = await sendPrompt({
+        sessionId,
+        text,
+        mode,
+        ...(images.length > 0 ? { images } : {}),
+        clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      if (result.ok) {
+        setSendError(null);
+        intakeRef.current?.clear();
+        setAttachmentCount(0);
+      } else {
+        setSendError(result.error);
+        throw new Error(result.error); // preserve the draft (composer contract)
+      }
+    },
+    [sessionId],
+  );
+
+  const handleStop = useCallback((): void => {
+    void cancelTurn(sessionId).then((result) => {
+      if (!result.ok) setSendError(result.error);
+    });
+  }, [sessionId]);
+
+  const onTitle = useCallback((next: string): void => setTitle(next), []);
+
+  const { status } = useSessionLive({
+    sessionId,
+    foldRef,
+    sync,
+    onTitle,
+  });
+
+  // First paint: newest at the bottom (AC 1).
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (el !== null) el.scrollTop = el.scrollHeight;
+  }, []);
+
+  // Follow new content while pinned to the bottom; count unseen rows while the
+  // reader is away. The count is DURABLE ROWS the reader has not acknowledged
+  // (by seq), not scroll growth: a streaming bubble grows the column on every
+  // chunk - a height-based badge would climb by dozens for one reply - and a
+  // replace-fold that changes content without growing height would not move it
+  // at all.
+  const seenSeq = useRef(-1);
+  const maxSeq = useRef(-1);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    let newest = maxSeq.current;
+    for (const item of items) if (item.seq !== null && item.seq > newest) newest = item.seq;
+    maxSeq.current = newest;
+    if (stickBottom.current) {
+      if (el !== null) el.scrollTop = el.scrollHeight;
+      seenSeq.current = newest; // at the bottom, everything landed is seen
+      return;
+    }
+    let unseenRows = 0;
+    for (const item of items) if (item.seq !== null && item.seq > seenSeq.current) unseenRows++;
+    setUnseen(unseenRows);
+  }, [items]);
+
+  const onScroll = useCallback((): void => {
+    const el = scrollerRef.current;
+    if (el === null) return;
+    const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+    stickBottom.current = bottom;
+    setAtBottom(bottom);
+    if (bottom) {
+      seenSeq.current = maxSeq.current; // arriving back reads everything
+      setUnseen(0);
+    }
+  }, []);
+
+  const jumpToLatest = useCallback((): void => {
+    const el = scrollerRef.current;
+    if (el !== null) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    stickBottom.current = true;
+    setUnseen(0);
+  }, []);
+
+  // The nav row picks up the live title too (AC 11) - including a title
+  // that was already projected when this page first painted.
+  useEffect(() => {
+    if (title !== null) setNavTitle(sessionId, title);
+  }, [sessionId, title]);
+
+  const loadOlder = useCallback(async (): Promise<void> => {
+    const state = foldRef.current;
+    if (state === null || loadingOlder) return;
+    const oldest = oldestSeq(state);
+    if (oldest === null) return;
+    setLoadingOlder(true);
+    setOlderError(null);
+    const el = scrollerRef.current;
+    const before = el !== null ? { height: el.scrollHeight, top: el.scrollTop } : null;
+    const result = await loadOlderHistory(sessionId, oldest);
+    if (result.ok) {
+      const beforeCount = state.items.length;
+      prependHistoryPage(state, result.entries, { hasMore: result.hasMore });
+      sync();
+      // Scroll preservation: the viewport stays anchored to the row it was
+      // showing (AC 8 "in place without a scroll jump").
+      if (el !== null && before !== null) {
+        el.scrollTop = before.top + (el.scrollHeight - before.height);
+      }
+      // ...and the reader moves with it: the button that fired is now far
+      // above the viewport, so focus goes to the region that grew and the
+      // landed page is spoken once.
+      if (el !== null) el.focus({ preventScroll: true });
+      // Say what landed, twice honestly:
+      // (a) ROWS, not messages - the delta counts turn marks, compaction
+      //     dividers and unsupported rows alongside the kinds a reader would
+      //     call a message.
+      // (b) A live region announces on a CHANGE: two pages that produce the
+      //     identical sentence would leave the DOM text untouched and the
+      //     second load would be silent. Clear first, speak on the next
+      //     macrotask - a microtask would batch with the clear and render once.
+      const landed = state.items.length - beforeCount;
+      setPageNotice(null);
+      setTimeout(() => setPageNotice(`Loaded ${String(landed)} older rows.`), 0);
+    } else {
+      setOlderError(
+        result.reason === "not-found"
+          ? "this session no longer exists"
+          : "the bridge is unavailable",
+      );
+    }
+    setLoadingOlder(false);
+  }, [sessionId, loadingOlder, sync]);
+
+  // One floating pill slot by priority: an unanswered approval (AC 16's
+  // jump affordance) > new content > reconnect. The jump control is the
+  // built-in surface's shape - a round icon button riding the bottom of the
+  // column - with the unseen count as its badge, because the number is the
+  // reason to press it.
+
+  // Both pills are the built-in surface's 32px circle. They float alone, so
+  // AC 25's 44px floor goes on all four sides as an invisible band - and no
+  // hardware sniffing is involved, because ink and target never had to move.
+  const pillHit = "relative after:absolute after:-inset-1.5 after:content-['']";
+  const awaitingApproval = pending.some(
+    (card) => card.kind === "approval" && card.state === "pending",
+  );
+  const pill =
+    !atBottom && awaitingApproval ? (
+      <button
+        type="button"
+        onClick={jumpToLatest}
+        data-testid="approval-jump"
+        aria-label="An approval is waiting below - jump to it"
+        title="An approval is waiting"
+        className={`absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-none border border-warning/50 bg-warning/15 text-warning shadow-sm backdrop-blur ${pillHit}`}
+      >
+        <RiShieldCheckLine className="h-4 w-4" />
+      </button>
+    ) : !atBottom ? (
+      <button
+        type="button"
+        onClick={jumpToLatest}
+        data-testid="jump-to-latest"
+        aria-label={unseen > 0 ? `Jump to latest, ${unseen} new rows` : "Jump to latest"}
+        className={`absolute bottom-3 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-none border border-border bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground ${pillHit}`}
+      >
+        <RiArrowDownSLine className="h-4 w-4" />
+        {unseen > 0 && (
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-none bg-primary px-1 font-mono text-2xs text-primary-foreground">
+            {unseen > 99 ? "99+" : unseen}
+          </span>
+        )}
+      </button>
+    ) : status === "reconnecting" ? (
+      <div
+        data-testid="reconnecting"
+        className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-none border border-warning/40 bg-warning/10 px-3 py-1 text-xs text-warning"
+      >
+        Reconnecting…
+      </div>
+    ) : null;
+
+  // The session's model info rides the request/context events; it is session
+  // info, not conversation, so the app shell's top bar carries it instead of
+  // a chat row. The whole identity publishes up through the header seam -
+  // the page does not render a second header under the shell's own.
+  const sessionModel = (() => {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      if (item !== undefined && item.kind === "request" && item.context !== undefined)
+        return item.context;
+    }
+    return null;
+  })();
+  const displayTitle = title ?? navTitleOf(sessionId) ?? "New Session";
+  const publishHeader = useSessionHeaderPublisher();
+  useEffect(() => {
+    publishHeader({
+      title: displayTitle,
+      ...(sessionModel !== null
+        ? {
+            model: `${sessionModel.provider}/${sessionModel.model}`,
+            ...(sessionModel.contextWindow !== undefined
+              ? { contextWindow: sessionModel.contextWindow }
+              : {}),
+          }
+        : {}),
+      ...(meta?.cwd !== undefined ? { cwd: meta.cwd } : {}),
+      ...(meta !== null ? { updatedAt: meta.updatedAt } : {}),
+      shortId: sessionId.replace(/^session-/, "").slice(0, 8),
+    });
+    return () => publishHeader(null);
+  }, [publishHeader, displayTitle, sessionModel, meta, sessionId]);
+
+  return (
+    <>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* AT ground for the island (AC 9/10/12): `role=log` is the transcript
+            as a living record. `aria-relevant=additions` keeps it honest -
+            a streamed chunk rewrites an existing bubble, and announcing that
+            on every token would drown the reader; a NEW row is the addition
+            worth speaking. tabIndex=-1 makes it a focus target for Load older
+            without adding a stop to the tab order. */}
+        {pageNotice !== null && (
+          // The one thing Load older says out loud: where the reader landed.
+          // Deliberately a sibling of the log, not a child - inside `role=log`
+          // this node would itself read as an added row.
+          <span className="sr-only" role="status">
+            {pageNotice}
+          </span>
+        )}
+        <div
+          ref={scrollerRef}
+          onScroll={onScroll}
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-label="Conversation"
+          tabIndex={-1}
+          className="flex-1 overflow-y-auto px-2 py-3 outline-none"
+          data-testid="transcript-scroll"
+        >
+          {items.length === 0 && (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-sm text-muted-foreground">
+                {blank
+                  ? "No conversation yet - send the first message below."
+                  : "Nothing loaded yet."}
+              </p>
+            </div>
+          )}
+          {hasMore && (
+            <div className="mb-2 flex justify-center">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void loadOlder()}
+                disabled={loadingOlder}
+              >
+                {loadingOlder ? "Loading…" : "Load older"}
+              </Button>
+            </div>
+          )}
+          {olderError !== null && (
+            <div className="mb-2 text-center text-xs text-destructive">{olderError}</div>
+          )}
+          <div className="mx-auto flex w-full max-w-3xl flex-col">
+            {items.map((item) => (
+              <TranscriptRow key={item.id} item={item} sessionId={sessionId} />
+            ))}
+            {/* The queued strip (AC 14) and the answerable cards (AC 16/17):
+                the tail overlays, in that order, both settling from the
+                downlink - an item leaves the strip when the agent claims it,
+                a card settles when any client answers it. */}
+            {/* The live tail line: the one standing "the agent is on it"
+                signal while a turn runs - per-row spinners say HOW, this
+                says THAT, so it stays up for the whole turn. */}
+            {running && runningSince !== null && <TurnLive since={runningSince} />}
+            <QueueStrip queue={queue} />
+            {pending.map((card) =>
+              card.kind === "approval" ? (
+                <ApprovalCard key={card.id} card={card} />
+              ) : (
+                <QuestionCard key={card.id} card={card} />
+              ),
+            )}
+          </div>
+        </div>
+        {pill}
+      </div>
+      {/* The composer (island of its own chrome): steer/queue gestures, the
+          stop control while a turn runs, and the inline send Alert (AC 13's
+          failure keeps the draft). */}
+      <div className="border-t border-border/60 px-2 py-3">
+        <div className="mx-auto w-full max-w-3xl space-y-2">
+          {sendError !== null && (
+            <Alert variant="destructive">
+              <AlertDescription>{sendError}</AlertDescription>
+            </Alert>
+          )}
+          {/* Image intake (AC 18): paste/drop forward to the same staged set
+              the picker button opens; limits ride the imageLimits projection
+              (absent = no pre-check, the host answers). */}
+          <div
+            onPasteCapture={(event) => {
+              const files = Array.from(event.clipboardData?.files ?? []);
+              if (files.some((f) => f.type.startsWith("image/"))) {
+                event.preventDefault();
+                event.stopPropagation();
+                intakeRef.current?.acceptFiles(files);
+                setAttachmentCount(intakeRef.current?.count() ?? 0);
+              }
+            }}
+            onDrop={(event) => {
+              const files = Array.from(event.dataTransfer?.files ?? []);
+              if (files.some((f) => f.type.startsWith("image/"))) {
+                event.preventDefault();
+                intakeRef.current?.acceptFiles(files);
+                setAttachmentCount(intakeRef.current?.count() ?? 0);
+              }
+            }}
+            onDragOver={(event) => {
+              if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+            }}
+          >
+            <ImageIntake
+              ref={intakeRef}
+              limits={
+                foldRef.current?.projections["imageLimits"]?.value as
+                  | ImageAttachmentLimits
+                  | undefined
+              }
+            />
+          </div>
+          <SessionComposer
+            hasAttachments={() => (intakeRef.current?.count() ?? 0) > 0}
+            referenceSearch={referenceSearch}
+            referenceHint="@ files & sessions"
+            commands={[...SLASH_MENU_ENTRIES]}
+            references={[]}
+            sendModes
+            running={running}
+            onStop={handleStop}
+            onSubmit={handleSend}
+          />
+        </div>
+      </div>
+    </>
+  );
+}

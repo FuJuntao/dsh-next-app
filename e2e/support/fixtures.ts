@@ -2,8 +2,15 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import { test as base, expect } from "@playwright/test";
-import { bootProfile, scryptValue, writeRuntimePatch, type BootedProfile } from "./profile";
+import {
+  bootProfile,
+  pruneProfileHostDupes,
+  scryptValue,
+  writeRuntimePatch,
+  type BootedProfile,
+} from "./profile";
 import { run } from "./process";
+import { scriptedSettingsYaml } from "./scripted-model";
 import { readState } from "./state";
 
 const state = readState();
@@ -44,6 +51,11 @@ async function installScratchInstance(instanceName: string): Promise<BootedProfi
     user: state.auth.user,
     passwordHash: scryptValue(state.auth.password),
   });
+  // The tool-execution duplicate-graph prune (see profile.ts for why).
+  pruneProfileHostDupes(join(home, "profiles", PROFILE));
+  // Every scratch instance defaults its sessions onto the run's scripted
+  // provider (task #135 commit 2), like the shared boot.
+  writeFileSync(join(home, "settings.yaml"), scriptedSettingsYaml(state.scriptedModel.baseURL));
   const profile = await bootProfile(home, join(state.scratchDir, instance));
   writeFileSync(
     join(state.scratchDir, "instances", instance + ".json"),
@@ -65,6 +77,7 @@ export const test = base.extend<
     supervisionProfile: BootedProfile;
     sessionsProfile: BootedProfile;
     homeProfile: BootedProfile;
+    liveProfile: BootedProfile;
   }
 >({
   supervisionProfile: [
@@ -110,6 +123,21 @@ export const test = base.extend<
       // real session through the UI, and that row must not skew the
       // sessions suite's seeded-listing counts (or vice versa).
       const profile = await installScratchInstance("home");
+      try {
+        await use(profile);
+      } finally {
+        await profile.stop();
+      }
+    },
+    { scope: "worker" },
+  ],
+  liveProfile: [
+    // eslint-disable-next-line no-empty-pattern -- the fixture needs no other worker fixtures; Playwright requires the destructuring form.
+    async ({}, use) => {
+      // The chat-island live specs (task #135) own this instance: its
+      // sessions are created and prompted against the scripted model
+      // provider, and none of that may skew the other suites' listings.
+      const profile = await installScratchInstance("live");
       try {
         await use(profile);
       } finally {

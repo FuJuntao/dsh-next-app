@@ -20,7 +20,7 @@
  * sort control added, so it was dropped before review).
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { RiCloudOffLine, RiFolderLine } from "@remixicon/react";
@@ -40,6 +40,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { navSnapshot, navTitleOf, subscribeNavLive } from "../lib/nav-live";
 import { updatePreferences } from "../lib/preferences";
 import type { SessionsResult } from "../lib/sessions";
 import {
@@ -95,8 +96,7 @@ function RunningDot({ running }: { running: boolean }) {
       <span
         aria-hidden="true"
         className={
-          "size-1.5 shrink-0 rounded-full " +
-          (running ? "bg-emerald-500" : "bg-muted-foreground/30")
+          "size-1.5 shrink-0 rounded-full " + (running ? "bg-success" : "bg-muted-foreground/30")
         }
       />
       <span className="sr-only">{running ? "running" : "idle"}</span>
@@ -125,7 +125,7 @@ function RowButton({
       <time
         dateTime={new Date(session.updatedAt).toISOString()}
         suppressHydrationWarning
-        className="ml-auto shrink-0 text-[10px] tabular-nums text-sidebar-foreground/50"
+        className="ml-auto shrink-0 text-2xs tabular-nums text-sidebar-foreground/50"
       >
         {formatRelativeTime(session.updatedAt)}
       </time>
@@ -184,7 +184,7 @@ function RowGroup({
     <div data-testid={"session-group-" + group.key}>
       {group.label !== undefined && (
         <div
-          className="flex items-center gap-1 px-2 pt-2 pb-1 text-[11px] font-medium text-sidebar-foreground/50"
+          className="flex items-center gap-1 px-2 pt-2 pb-1 text-2xs font-medium text-sidebar-foreground/50"
           title={group.detail}
         >
           <RiFolderLine aria-hidden="true" className="size-3 shrink-0" />
@@ -225,10 +225,22 @@ export function SessionsNav({
   const { isMobile, setOpenMobile } = useSidebar();
   const [group, setGroup] = useState<SessionGroupMode>(sessionGroup ?? DEFAULT_GROUP);
 
+  // Live title overrides published by an open chat page's downlink (AC 11,
+  // commit 6): the request-time rows are the baseline, the store only
+  // replaces title cells - a nav refresh re-baselines from session.list.
+  // The version snapshot changes ONLY on a publish (server snapshot: no
+  // browser store, so SSR renders the request-time rows untouched).
+  const navVersion = useSyncExternalStore(subscribeNavLive, navSnapshot, () => 0);
+
   const groups = useMemo(() => {
     if (sessions.status !== "ok") return [];
-    return arrangeSessions(sessions.sessions, group);
-  }, [sessions, group]);
+    void navVersion; // recompute when a live title lands
+    const rows = sessions.sessions.map((session) => {
+      const override = navTitleOf(session.id);
+      return override === undefined ? session : { ...session, title: override };
+    });
+    return arrangeSessions(rows, group);
+  }, [sessions, group, navVersion]);
 
   if (sessions.status === "unavailable") {
     return (

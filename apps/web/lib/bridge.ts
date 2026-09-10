@@ -1,5 +1,5 @@
 /**
- * Unary envelope bridge client (server-only) - reuses the shipped apiproxy
+ * Envelope bridge client (server-only) - reuses the shipped apiproxy
  * client (ADR-0010).
  *
  * The gateway package already defines the client the bridge needs
@@ -9,8 +9,17 @@
  * client leaves abstract: a doFetch that speaks HTTP over the runtime row's
  * unix socket (node:http with socketPath) instead of the network. The
  * bridge defines no routes - the app calls the standard IApiClient domain
- * face (client.sessions.list(...)) and every unary method the gateway
- * serves works without a bundle change.
+ * face (client.sessions.list(...), client.events.mux(...)) and every
+ * method the gateway serves works without a bundle change.
+ *
+ * The transport has two response disciplines, split by request method
+ * exactly like the row's own timeout (ADR-0003: each live downlink is its
+ * own connection, ADR-0010: streams ride GETs): a unary POST is buffered
+ * whole (the shipped client parses one ServerResponse off the body), while
+ * a downlink GET resolves as soon as the headers are in, its body a live
+ * ReadableStream over the socket - the shipped readSse path feeds its
+ * frame loop off that stream for the life of the connection, so buffering
+ * here would hang the stream on an `end` that never comes.
  *
  * This module imports node:http and must only be imported from server
  * components or other server-only code - the client bundle cannot build it.
@@ -19,6 +28,8 @@
  * build) every call fails with {@link BridgeUnavailableError}.
  */
 import { Agent, request as httpRequest } from "node:http";
+import type { IncomingHttpHeaders } from "node:http";
+import { Readable } from "node:stream";
 import { AbstractApiClient } from "@deepseek-ai/dsh-host-apiproxy/client";
 
 /** The socket path the runtime row forwards to this process. */
@@ -68,6 +79,25 @@ function abortError(signal: AbortSignal): Error {
 }
 
 /**
+ * Normalize Node's IncomingHttpHeaders (values may be string[], e.g.
+ * set-cookie, or undefined) onto the WHATWG Headers the Response
+ * constructor accepts - the row-side adapter does the same in reverse; a
+ * multi-value header must not throw here.
+ */
+function toFetchHeaders(raw: IncomingHttpHeaders): Headers {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(raw)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const entry of value) headers.append(name, entry);
+    } else {
+      headers.set(name, value);
+    }
+  }
+  return headers;
+}
+
+/**
  * The shipped fetch-carrier client over the unix-socket bridge. Each call
  * opens its own socket connection (HTTP request/response correlation), so
  * no connection state is shared - the instance is stateless beyond the
@@ -86,9 +116,21 @@ export class BridgeApiClient extends AbstractApiClient {
     super(timeoutMs);
   }
 
-  /** Transport aspect: one HTTP request over the unix socket. */
+  /**
+   * Transport aspect: one HTTP request over the unix socket, in one of two
+   * response disciplines. GETs are the downlink legs (readSse calls
+   * doFetch with no method); their Response resolves as soon as the headers
+   * arrive, the body a live ReadableStream over the socket so the shipped
+   * frame loop sees each event the moment the host emits it. POSTs are
+   * unary calls and keep the buffering path: one ServerResponse parsed
+   * whole at `end`. Both share the disabled keep-alive (a downlink is one
+   * dedicated connection, and a dead bridge must fail fast, never answer
+   * from a pooled socket).
+   */
   protected doFetch(input: URL, init?: RequestInit): Promise<Response> {
     const signal = init?.signal;
+    const method = init?.method ?? "GET";
+    const streaming = method === "GET";
     return new Promise<Response>((resolve, reject) => {
       if (this.socketPath === undefined) {
         reject(new BridgeUnavailableError("DSH_NEXT_APP_BRIDGE_SOCKET is not set"));
@@ -102,7 +144,7 @@ export class BridgeApiClient extends AbstractApiClient {
         {
           socketPath: this.socketPath,
           path: input.pathname + input.search,
-          method: init?.method ?? "GET",
+          method,
           agent: noKeepAliveAgent,
           // exactOptionalPropertyTypes: optional RequestOptions keys are
           // omitted, never set to undefined.
@@ -112,6 +154,24 @@ export class BridgeApiClient extends AbstractApiClient {
           ...(signal !== undefined && signal !== null && { signal }),
         },
         (res) => {
+          const headers = toFetchHeaders(res.headers);
+          const status = res.statusCode ?? 500;
+          const statusInit =
+            res.statusMessage !== undefined ? { statusText: res.statusMessage } : {};
+          if (streaming) {
+            // Node's web-stream adapter keeps backpressure honest: the
+            // socket is only drained as fast as the SSE reader consumes it,
+            // and an abort (a page close, the route's teardown) surfaces as
+            // a stream error the reader turns into its own end.
+            resolve(
+              new Response(Readable.toWeb(res) as unknown as ReadableStream<Uint8Array>, {
+                status,
+                ...statusInit,
+                headers,
+              }),
+            );
+            return;
+          }
           const chunks: Buffer[] = [];
           res.on("data", (chunk: Buffer) => {
             chunks.push(chunk);
@@ -122,30 +182,17 @@ export class BridgeApiClient extends AbstractApiClient {
             );
           });
           res.on("end", () => {
-            // Normalize Node's IncomingHttpHeaders (values may be string[],
-            // e.g. set-cookie, or undefined) onto the WHATWG Headers the
-            // Response constructor accepts - the row-side adapter does the
-            // same in reverse; a multi-value header must not throw here.
-            const headers = new Headers();
-            for (const [name, value] of Object.entries(res.headers)) {
-              if (value === undefined) continue;
-              if (Array.isArray(value)) {
-                for (const entry of value) headers.append(name, entry);
-              } else {
-                headers.set(name, value);
-              }
-            }
-            resolve(
-              new Response(Buffer.concat(chunks), {
-                status: res.statusCode ?? 500,
-                ...(res.statusMessage !== undefined && { statusText: res.statusMessage }),
-                headers,
-              }),
-            );
+            resolve(new Response(Buffer.concat(chunks), { status, ...statusInit, headers }));
           });
         },
       );
       req.on("error", (error: Error) => {
+        // A streaming Response already resolved is owned by its body
+        // stream from here on; a post-resolve request error (an abort, the
+        // bridge dropping the connection) surfaces through the reader, not
+        // this promise - and rejecting a settled promise would be a no-op
+        // anyway. Unary calls still fold into the transport error.
+        if (streaming) return;
         // The client aborted the call (its own timeout or an external
         // signal): mirror fetch's abort rejection instead of a transport
         // error, exactly like the in-box in-process client.
@@ -167,6 +214,7 @@ export class BridgeApiClient extends AbstractApiClient {
 /** The shared clients for the server's lifetime (the class holds no connection state). */
 let shared: BridgeApiClient | undefined;
 let sharedAction: BridgeApiClient | undefined;
+let sharedStream: BridgeApiClient | undefined;
 
 /** The bridge client; calls fail with BridgeUnavailableError when the bridge is down. */
 export function getBridgeClient(): BridgeApiClient {
@@ -184,4 +232,18 @@ export function getBridgeClient(): BridgeApiClient {
 export function getActionBridgeClient(): BridgeApiClient {
   sharedAction ??= new BridgeApiClient(SOCKET_PATH);
   return sharedAction;
+}
+
+/**
+ * The bridge client for the live downlink (the /api/events route's mux
+ * subscription). Streams never expire by construction - the instance
+ * timeout governs unary calls only, and each mux() consumes under the
+ * caller's own signal - but the stream keeps its own instance so the
+ * downlink's long-lived iterator never shares state with the nav's
+ * first-paint-budget client. Each mux() call is still its own socket
+ * connection (ADR-0003: one connection per live downlink).
+ */
+export function getStreamBridgeClient(): BridgeApiClient {
+  sharedStream ??= new BridgeApiClient(SOCKET_PATH);
+  return sharedStream;
 }

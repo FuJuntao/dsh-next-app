@@ -1,0 +1,391 @@
+"use client";
+
+/**
+ * Answerable tail cards (story #134 task #135 commit 8; AC 16/17).
+ *
+ * `approval/requested` and `question/requested` frames render as inline
+ * cards at the conversation tail. The answer rides the respond relay
+ * echoing the frame's own token (lib/respond.ts) - the browser mints
+ * nothing; the card settles from the broadcast resolved frame, which
+ * also covers a second tab or the terminal answering it (the fold flips
+ * the card state when that frame lands, whatever answered).
+ *
+ * A `bad-response` refusal keeps the card answerable (AC 17: never dead),
+ * showing a quiet retry note; a transport failure likewise keeps it.
+ */
+import { useState } from "react";
+import { RiQuestionLine, RiShieldCheckLine } from "@remixicon/react";
+import type { PendingCard } from "@/lib/transcript";
+import { answerApproval, answerQuestions, cancelQuestion } from "@/lib/respond";
+import { Button } from "@/components/ui/button";
+
+type CardProps = {
+  card: PendingCard;
+  onSettled?: () => void;
+};
+
+export function ApprovalCard({ card }: CardProps) {
+  const [submitting, setSubmitting] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
+  const frame = card.frame;
+  const approvalId = frame.type === "approval/requested" ? frame.approvalId : "";
+  const toolName = frame.type === "approval/requested" ? frame.toolName : "tool";
+  const reason = frame.type === "approval/requested" ? frame.reason : undefined;
+
+  if (card.state === "resolved") {
+    return (
+      <div
+        className="flex items-center gap-2 rounded-none px-2 py-1 text-sm leading-5 text-muted-foreground"
+        data-testid="approval-resolved"
+      >
+        <span
+          aria-hidden
+          className={`flex h-4 w-4 shrink-0 items-center justify-center ${
+            card.outcome === "rejected" ? "text-warning" : "text-primary"
+          }`}
+        >
+          <RiShieldCheckLine className="h-4 w-4" />
+        </span>
+        <span className="shrink-0 font-medium text-foreground/70">Approval</span>
+        <span aria-hidden className="shrink-0 text-muted-foreground/40">
+          ·
+        </span>
+        <span className="min-w-0 truncate">
+          <span className="font-mono">{toolName}</span> {outcomeLabel(card.outcome)}
+        </span>
+      </div>
+    );
+  }
+
+  const answer = async (outcome: "allowed-once" | "rejected"): Promise<void> => {
+    if (card.answerToken === undefined || submitting) return;
+    setSubmitting(true);
+    setRefused(null);
+    const result = await answerApproval({
+      answerToken: card.answerToken,
+      sessionId: frame.sessionId,
+      approvalId,
+      outcome,
+    });
+    if (result.status === "transport") {
+      setRefused("the host is unreachable - try again");
+      setSubmitting(false);
+    } else if (result.status === "rejected") {
+      setRefused("the host refused this answer - try again");
+      setSubmitting(false);
+    }
+    // accepted / not-pending: the resolved frame settles the card.
+  };
+
+  return (
+    <div
+      className="my-1.5 rounded-none border border-warning/35 bg-warning/5 px-3 py-2.5 shadow-xs"
+      data-testid="approval-card"
+    >
+      <div className="flex items-center gap-2 text-sm">
+        <span aria-hidden className="text-warning">
+          <RiShieldCheckLine className="h-4 w-4" />
+        </span>
+        <span className="shrink-0 font-medium">Needs your call</span>
+        <span aria-hidden className="shrink-0 text-muted-foreground/40">
+          ·
+        </span>
+        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{toolName}</span>
+      </div>
+      {reason !== undefined && reason !== "" && (
+        <p className="mt-1 pl-6 text-sm leading-normal text-muted-foreground">{reason}</p>
+      )}
+      {refused !== null && <p className="mt-1.5 pl-6 text-xs text-destructive">{refused}</p>}
+      {card.answerToken === undefined ? (
+        /* No token means no way back to the ask, so the card says that
+           instead of offering buttons that would sit there doing nothing.
+           Unreachable through the route (every answerable frame is issued a
+           token); it is the dead-card guard AC 16 is about. */
+        <p className="mt-2.5 pl-6 text-xs text-muted-foreground">
+          This request carries no answer token - approve it from the terminal.
+        </p>
+      ) : (
+        // AC 25's 44px floor is about the TARGET a finger has to hit, not
+        // the ink, so the buttons keep the preset's 24px height and gain an
+        // invisible 10px band above and below (44px total). Growing min-height
+        // instead put a 44px slab in a scale whose largest button is 36px -
+        // and hung the result off a `@media (pointer: coarse)` bet about the
+        // reader's hardware, which is not a thing this card needs to know.
+        // Vertical only: the row's 8px gap keeps neighbours' targets apart.
+        <div className="mt-2.5 flex gap-2 pl-6">
+          <Button
+            size="xs"
+            className="relative after:absolute after:-top-2.5 after:-bottom-2.5 after:inset-x-0 after:content-['']"
+            onClick={() => void answer("allowed-once")}
+            disabled={submitting}
+          >
+            Allow once
+          </Button>
+          <Button
+            size="xs"
+            variant="outline"
+            className="relative after:absolute after:-top-2.5 after:-bottom-2.5 after:inset-x-0 after:content-['']"
+            onClick={() => void answer("rejected")}
+            disabled={submitting}
+          >
+            Reject
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The settled wording of an approval, in the reader's words not the wire's. */
+function outcomeLabel(outcome: string | undefined): string {
+  if (outcome === "allowed-once") return "allowed";
+  if (outcome === "rejected") return "rejected";
+  return String(outcome ?? "resolved");
+}
+
+export function QuestionCard({ card }: CardProps) {
+  const [submitting, setSubmitting] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
+  const frame = card.frame;
+  if (frame.type !== "question/requested") return null;
+  const questions = frame.questions;
+
+  if (card.state === "resolved") {
+    return (
+      <div
+        className="flex items-center gap-2 rounded-none px-2 py-1 text-sm leading-5 text-muted-foreground"
+        data-testid="question-resolved"
+      >
+        <span
+          aria-hidden
+          className="flex h-4 w-4 shrink-0 items-center justify-center text-primary"
+        >
+          <RiQuestionLine className="h-4 w-4" />
+        </span>
+        <span className="shrink-0 font-medium text-foreground/70">Questions</span>
+        <span aria-hidden className="shrink-0 text-muted-foreground/40">
+          ·
+        </span>
+        <span className="min-w-0 truncate">
+          {card.outcome === "answered" ? "answered" : "dismissed"}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <QuestionForm
+      key={questions.map((q) => q.id).join("-")}
+      questions={questions.map((q) => ({
+        id: q.id,
+        question: q.question,
+        header: q.header,
+        detail: q.detail,
+        options: (q.options ?? []).map((o) => ({ label: o.label, description: o.description })),
+        multi: q.multiSelect === true,
+      }))}
+      onSubmit={async (answers) => {
+        if (card.answerToken === undefined) return;
+        setSubmitting(true);
+        setRefused(null);
+        const result = await answerQuestions({
+          answerToken: card.answerToken,
+          sessionId: frame.sessionId,
+          answers,
+        });
+        if (result.status === "transport") {
+          setRefused("the host is unreachable - try again");
+          setSubmitting(false);
+        } else if (result.status === "rejected") {
+          setRefused("the answer was refused - adjust and retry");
+          setSubmitting(false);
+        }
+        // accepted / not-pending: the resolved frame settles the card.
+      }}
+      onDismiss={async () => {
+        if (card.answerToken === undefined) return;
+        const result = await cancelQuestion({ answerToken: card.answerToken });
+        if (result.status === "transport" || result.status === "rejected") {
+          setRefused("could not dismiss - try again");
+        }
+      }}
+      submitting={submitting}
+      refused={refused}
+      canAnswer={card.answerToken !== undefined}
+    />
+  );
+}
+
+/** Local question-view shape (widened option list), validated as a BATCH. */
+interface QuestionView {
+  id: string;
+  question: string;
+  header?: string | undefined;
+  detail?: string | undefined;
+  options: { label: string; description?: string | undefined }[];
+  multi: boolean;
+}
+
+function QuestionForm({
+  questions,
+  onSubmit,
+  onDismiss,
+  submitting,
+  refused,
+  canAnswer,
+}: {
+  questions: QuestionView[];
+  onSubmit: (
+    answers: { id: string; selected: string[]; custom?: string }[],
+  ) => Promise<void> | void;
+  onDismiss: () => void;
+  submitting: boolean;
+  refused: string | null;
+  /** False when the frame carries no token: nothing to answer with. */
+  canAnswer: boolean;
+}) {
+  const [selected, setSelected] = useState<Record<string, string[]>>({});
+  const [custom, setCustom] = useState<Record<string, string>>({});
+
+  const answerFor = (
+    q: QuestionView,
+  ): { id: string; selected: string[]; custom?: string } | null => {
+    const picks = selected[q.id] ?? [];
+    const free = (custom[q.id] ?? "").trim();
+    if (picks.length === 0 && free === "") return null;
+    return { id: q.id, selected: picks, ...(free !== "" ? { custom: free } : {}) };
+  };
+  const complete = questions.every((q) => answerFor(q) !== null);
+
+  // Last gesture wins, per question. Typing withdraws the picks; picking
+  // withdraws the typed text. The asymmetry is deliberate and follows the
+  // host's own shape rule (`matchesQuestions` in the respond leg): a
+  // non-multiSelect answer may carry custom text OR one pick, never both -
+  // sending both is refused as `bad-response` every time. A multiSelect
+  // answer may carry both, so there the text survives a click.
+  const toggle = (q: QuestionView, label: string): void => {
+    const cur = selected[q.id] ?? [];
+    const picking = !cur.includes(label);
+    setSelected((prev) => ({
+      ...prev,
+      [q.id]: picking ? (q.multi ? [...(prev[q.id] ?? []), label] : [label]) : [],
+    }));
+    // A fresh pick on a single-select withdraws the typed text: the host
+    // refuses an answer that carries both (`matchesQuestions` in the respond
+    // leg). Multi-select may carry both, so there the note survives.
+    if (picking && !q.multi) setCustom((prev) => ({ ...prev, [q.id]: "" }));
+  };
+
+  return (
+    <form
+      className="my-1.5 space-y-3.5 rounded-none border border-primary/30 bg-primary/5 px-3 py-2.5 shadow-xs"
+      data-testid="question-card"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (complete && !submitting) {
+          const answers = questions
+            .map((q) => answerFor(q))
+            .filter((a): a is { id: string; selected: string[]; custom?: string } => a !== null);
+          void onSubmit(answers);
+        }
+      }}
+    >
+      {/* The identity gets its own line; the note sits under it. Side by side,
+          the note wrapped mid-sentence at phone width and the row read as two
+          columns fighting for the same line. */}
+      <div className="flex items-center gap-2 text-sm">
+        <span aria-hidden className="text-primary">
+          <RiQuestionLine className="h-4 w-4" />
+        </span>
+        <span className="font-medium">
+          {questions.length > 1 ? `${questions.length} questions` : "A question"}
+        </span>
+      </div>
+      <p className="pl-6 text-xs text-muted-foreground">the agent is waiting on this to continue</p>
+      {questions.map((q) => (
+        <fieldset key={q.id} disabled={submitting} className="space-y-1.5 pl-6">
+          {q.header !== undefined && q.header !== "" && (
+            <legend className="mb-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
+              {q.header}
+            </legend>
+          )}
+          <div className="text-sm font-medium">{q.question}</div>
+          {q.detail !== undefined && q.detail !== "" && (
+            <p className="text-xs leading-normal text-muted-foreground">{q.detail}</p>
+          )}
+          {q.options.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {q.options.map((o) => {
+                const active = (selected[q.id] ?? []).includes(o.label);
+                return (
+                  <button
+                    key={o.label}
+                    type="button"
+                    onClick={() => toggle(q, o.label)}
+                    aria-pressed={active}
+                    title={o.description}
+                    className={`rounded-none border px-2.5 py-1 text-xs transition-colors ${
+                      active
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border/70 bg-background/60 hover:bg-muted"
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <input
+            aria-label={`Custom answer for ${q.question}`}
+            value={custom[q.id] ?? ""}
+            onChange={(e) => {
+              const value = e.target.value;
+              setCustom((prev) => ({ ...prev, [q.id]: value }));
+              if (value.trim() !== "") setSelected((prev) => ({ ...prev, [q.id]: [] }));
+            }}
+            placeholder="Or type an answer…"
+            className="w-full rounded-none border border-input bg-background/70 px-2.5 py-1.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
+          />
+        </fieldset>
+      ))}
+      {refused !== null && <p className="pl-6 text-xs text-destructive">{refused}</p>}
+      <div className="pl-6">
+        {canAnswer ? (
+          <div className="flex items-center gap-2">
+            <Button
+              type="submit"
+              size="xs"
+              className="relative after:absolute after:-top-2.5 after:-bottom-2.5 after:inset-x-0 after:content-['']"
+              disabled={!complete || submitting}
+            >
+              {submitting ? "Sending…" : "Submit answers"}
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              className="relative after:absolute after:-top-2.5 after:-bottom-2.5 after:inset-x-0 after:content-['']"
+              onClick={onDismiss}
+              disabled={submitting}
+            >
+              Dismiss
+            </Button>
+          </div>
+        ) : (
+          // The same dead-card guard as the approval: without a token there is
+          // nothing to answer with, so the card does not offer a submit that
+          // would sit there doing nothing.
+          <p className="text-xs text-muted-foreground">
+            This request carries no answer token - answer it from the terminal.
+          </p>
+        )}
+        {/* Same rule as the header: the hint is its own line, not a second
+            column sharing the buttons' row. */}
+        <p className="mt-1 text-2xs text-muted-foreground/70">
+          {questions.length > 1 ? "answer all to submit" : "pick or type"}
+        </p>
+      </div>
+    </form>
+  );
+}

@@ -2,7 +2,14 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { run } from "./process";
-import { bootProfile, scryptValue, writeRuntimePatch, type BootedProfile } from "./profile";
+import {
+  bootProfile,
+  pruneProfileHostDupes,
+  scryptValue,
+  writeRuntimePatch,
+  type BootedProfile,
+} from "./profile";
+import { scriptedSettingsYaml, startScriptedModel, type ScriptedModel } from "./scripted-model";
 import { STATE_PATH, type E2EState } from "./state";
 
 const REPO_ROOT = resolve(__dirname, "../..");
@@ -43,7 +50,14 @@ async function phase<T>(label: string, work: () => Promise<T>): Promise<T> {
 export default async function globalSetup(): Promise<void> {
   const scratchDir = mkdtempSync(join(tmpdir(), "dsh-next-app-e2e-"));
   let booted: BootedProfile | undefined;
+  let scripted: ScriptedModel | undefined;
   try {
+    // The scripted model provider (task #135 commit 2) starts first and
+    // serves for the whole run (workers reach it over loopback; the run is
+    // serial). Its URL is baked into every scratch DSH_HOME's
+    // settings.yaml, so every session defaults onto deterministic answers.
+    scripted = await phase("starting the scripted model provider", () => startScriptedModel());
+    (globalThis as Record<string, unknown>)["__dshE2EScriptedModel"] = scripted;
     // 1. Pack the bundle (prepack = fresh, dependency-first build).
     const packDir = join(scratchDir, "pack");
     mkdirSync(packDir);
@@ -74,6 +88,8 @@ export default async function globalSetup(): Promise<void> {
       }),
     );
     const profileDir = join(dshHome, "profiles", PROFILE);
+    // The tool-execution duplicate-graph prune (see profile.ts for why).
+    pruneProfileHostDupes(profileDir);
 
     // 3. Configure the auth credential pair in the profile's patch layer
     // (ADR-0008): the runtime row reads it and forwards it to the Next child.
@@ -81,6 +97,8 @@ export default async function globalSetup(): Promise<void> {
       user: AUTH_USER,
       passwordHash: scryptValue(AUTH_PASSWORD),
     });
+    // 3b. Default every session of this home onto the scripted provider.
+    writeFileSync(join(dshHome, "settings.yaml"), scriptedSettingsYaml(scripted.baseURL));
 
     // 4. Boot the shared instance on a free port until the URL is announced.
     booted = await phase("booting the scratch profile", () => bootProfile(dshHome));
@@ -96,10 +114,12 @@ export default async function globalSetup(): Promise<void> {
       dshPid: booted.dshPid,
       tarballPath: tarball,
       auth: { user: AUTH_USER, password: AUTH_PASSWORD },
+      scriptedModel: { port: scripted.port, baseURL: scripted.baseURL },
     };
     writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
   } catch (error) {
     await booted?.stop();
+    await scripted?.stop();
     rmSync(scratchDir, { recursive: true, force: true });
     throw error;
   }

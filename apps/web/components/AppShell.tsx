@@ -9,6 +9,7 @@ import type { SessionGroupMode } from "../lib/session-view";
 import type { SessionsResult } from "../lib/sessions";
 import { SessionsNav } from "./sessions-nav";
 import { SidebarResizeHandle } from "./sidebar-resize-handle";
+import { SessionHeaderProvider, SessionHeaderSlot } from "./session-header";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -161,26 +162,51 @@ export function AppSidebar({
 
 /**
  * The content column on the stock SidebarInset: the always-visible header
- * with the fold toggle, then the scrollable page area (max-width 48rem)
- * under the separator. The SidebarProvider lives in app/layout.tsx (the
- * docs' usage pattern), so this column needs no sidebar state of its own.
+ * with the fold toggle and the session identity (published from the page
+ * through SessionHeaderSlot), then the page area under the separator. The
+ * SidebarProvider lives in app/layout.tsx (the docs' usage pattern), so this
+ * column needs no sidebar state of its own.
+ *
+ * A session page fills the column edge to edge - its transcript owns the
+ * scroll and the 48rem cap, so the shell adds no padding or second scroll
+ * box; every other page keeps the padded, centered reading column. The
+ * session column also pins itself to the viewport: the shell row is only
+ * `min-h-svh`, so without a definite height the transcript's flex-1 would
+ * size to its content, the composer would ride the document scroll, and the
+ * whole page would move instead of just the chat.
  */
 export function AppShell({ children }: { children: ReactNode }) {
+  const isSession = usePathname().startsWith("/sessions/");
   return (
-    <SidebarInset>
-      {/* The header sits inside the inset's <main> column, so its implicit
-          banner role would be lost (header->banner only outside main);
-          the explicit role keeps the page landmark. */}
-      <header role="banner" className="flex h-12 shrink-0 items-center gap-3 px-4">
-        <SidebarTrigger aria-label="Toggle navigation" />
-      </header>
-      <Separator />
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {/* A flex column with min-h-full so a page section can flex-1 to fill
-            the scroll area (the home hero centers); plain block children keep
-            their natural top-aligned height. */}
-        <div className="mx-auto flex min-h-full max-w-3xl flex-col px-6 py-4">{children}</div>
-      </div>
-    </SidebarInset>
+    <SessionHeaderProvider>
+      <SidebarInset className={isSession ? "h-svh" : undefined}>
+        {/* The header sits inside the inset's <main> column, so its implicit
+            banner role would be lost (header->banner only outside main);
+            the explicit role keeps the page landmark. */}
+        <header role="banner" className="flex h-12 shrink-0 items-center gap-3 px-2 sm:px-4">
+          <SidebarTrigger aria-label="Toggle navigation" />
+          <SessionHeaderSlot />
+        </header>
+        <Separator />
+        <div
+          className={
+            isSession ? "min-h-0 flex-1 overflow-hidden" : "min-h-0 flex-1 overflow-y-auto"
+          }
+        >
+          {/* A flex column with min-h-full so a page section can flex-1 to fill
+              the scroll area (the home hero centers); plain block children keep
+              their natural top-aligned height. */}
+          <div
+            className={
+              isSession
+                ? "flex h-full min-h-0 flex-col"
+                : "mx-auto flex min-h-full max-w-3xl flex-col px-6 py-4"
+            }
+          >
+            {children}
+          </div>
+        </div>
+      </SidebarInset>
+    </SessionHeaderProvider>
   );
 }

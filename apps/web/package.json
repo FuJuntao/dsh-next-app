@@ -12,7 +12,10 @@
   },
   "dependencies": {
     "@base-ui/react": "catalog:",
+    "@deepseek-ai/dsh-attachment": "catalog:",
+    "@deepseek-ai/dsh-file-reference": "catalog:",
     "@deepseek-ai/dsh-host-apiproxy": "catalog:",
+    "@deepseek-ai/dsh-session": "catalog:",
     "@deepseek-ai/schemastery": "catalog:",
     "@lexical/react": "catalog:",
     "@remixicon/react": "catalog:",
@@ -22,9 +25,14 @@
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-markdown": "catalog:",
+    "rehype-sanitize": "catalog:",
+    "remark-gfm": "catalog:",
+    "shiki": "catalog:",
     "tailwind-merge": "catalog:"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-attachment-local": "catalog:",
     "@tailwindcss/postcss": "catalog:",
     "@tsconfig/next": "catalog:",
     "@tsconfig/strictest": "catalog:",

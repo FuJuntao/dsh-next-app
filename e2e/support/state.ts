@@ -26,6 +26,18 @@ export interface E2EState {
     /** The plaintext password; the browser answers the 401 challenge with it. */
     password: string;
   };
+  /**
+   * The scripted model provider (task #135 commit 2) the shared boot and
+   * every scratch instance default onto: a loopback OpenAI-compat stub the
+   * profile's settings.yaml points `agent-default-model` at. Live specs
+   * script model behavior by embedding `scripted-*` markers in prompts.
+   */
+  scriptedModel: {
+    /** The port the stub listens on (127.0.0.1). */
+    port: number;
+    /** The provider baseURL (ends with `/v1`). */
+    baseURL: string;
+  };
 }
 
 /** State file location - fixed so specs and teardown find it without cross-process plumbing. */

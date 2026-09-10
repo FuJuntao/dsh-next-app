@@ -246,12 +246,19 @@ test("the folder tree fits a phone viewport", async ({ page }) => {
   await expect(dialog.getByText("No subfolders.")).toBeVisible();
 });
 
-// ...and the session page's icon-only chrome surviving the home redesign.
-test("the session page keeps the icon-only Send message chrome", async ({ page }) => {
+// ...and the session page's own send chrome: idle is ONE Send button - steer
+// and queue are the same gesture with no turn to interrupt or wait for - and
+// the named pair only exists while a turn actually runs.
+test("the session page shows Send while idle, Steer and Queue only while running", async ({
+  page,
+}) => {
   const created = (await envelopeCall("session.create", {})) as { sessionId: string };
   await page.goto(profile.baseURL + "/sessions/" + created.sessionId);
   await expect(page.getByRole("textbox", { name: "Message the session" })).toBeEditable();
   await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Steer the session now" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Queue this message" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Stop current turn" })).toHaveCount(0);
 });
 
 test("the model picker selection is applied before the first prompt", async ({ page }) => {
@@ -298,7 +305,10 @@ test("the model picker selection is applied before the first prompt", async ({ p
     await expect(dialog.getByRole("button", { name: "Default", exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: effort.name, exact: true }).click();
   }
-  await expect(page.getByRole("button", { name: "Model" })).toContainText(model.name);
+  // exact:true - catalog option buttons (e.g. "Stub Model", joined with
+  // task #135's scripted provider) contain "Model" in their names; the
+  // composer chip is the ONLY button named exactly "Model".
+  await expect(page.getByRole("button", { name: "Model", exact: true })).toContainText(model.name);
   await composer.pressSequentially("model picker send");
   await page.getByRole("button", { name: "Start session" }).click();
   await expect(page).toHaveURL(/\/sessions\/[^/]+$/);

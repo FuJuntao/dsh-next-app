@@ -19,12 +19,20 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
+import { activeAtToken } from "@deepseek-ai/dsh-file-reference/grammar";
 import {
   LexicalTypeaheadMenuPlugin,
   MenuOption,
   type MenuTextMatch,
 } from "@lexical/react/LexicalTypeaheadMenuPlugin";
-import { RiChat3Line, RiFileLine, RiSendPlane2Fill, RiTerminalBoxLine } from "@remixicon/react";
+import {
+  RiChat3Line,
+  RiFileLine,
+  RiInboxLine,
+  RiSendPlane2Fill,
+  RiStopLine,
+  RiTerminalBoxLine,
+} from "@remixicon/react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -56,6 +64,9 @@ export type ComposerEntry = {
   key?: string;
 };
 
+/** Which inbox placement a submit gesture asked for (AC 13). */
+export type SendMode = "steer" | "queue";
+
 export type SessionComposerProps = {
   /** Injected `/` source. */
   commands: ComposerEntry[];
@@ -63,8 +74,11 @@ export type SessionComposerProps = {
    * Pluggable submit action, supplied by the surface. Resolving means the text
    * was accepted: the composer clears the draft. Rejecting means failure: the
    * surface renders the error and the composer preserves the draft for retry.
+   * The mode is the gesture that fired it (story #134 AC 13): the session
+   * page steers on the primary gesture and queues on the chord/secondary;
+   * surfaces without modes (home) ignore the parameter.
    */
-  onSubmit: (text: string) => Promise<unknown>;
+  onSubmit: (text: string, mode: SendMode) => Promise<unknown>;
   /** Empty-state text and accessible name; defaults to the session wording. */
   placeholder?: string;
   /** Injected `@` source (static list; filtered locally against the query). */
@@ -92,10 +106,11 @@ export type SessionComposerProps = {
    */
   onLockedActivate?: () => void;
   /**
-   * Visible text on the send button (design packet: home's submit is
-   * "Start session" - the one first-screen action that says its name).
-   * Absent means the icon-only square with the "Send message" accessible
-   * name - the session page's shape.
+   * Visible text on the send button (#134's Design packet, Gestures: home's
+   * submit is "Start session" - the one first-screen action that says its
+   * name).
+   * Absent on a surface with no modes and no label of its own, the control
+   * is then the icon-only square carrying the "Send message" accessible name.
    */
   submitLabel?: string;
   /**
@@ -104,6 +119,27 @@ export type SessionComposerProps = {
    * not yet accept typing.
    */
   lockedHint?: string;
+  /**
+   * Turn-state chrome (session page, AC 13/15): idle shows one Send button;
+   * while a turn runs the pair becomes **Steer** / **Queue** (Enter steers,
+   * Cmd/Ctrl+Enter queues) and the stop control joins the row. Default false
+   * keeps home's single-submit chrome untouched.
+   */
+  sendModes?: boolean;
+  /** Whether a turn is running (drives the stop control). */
+  running?: boolean;
+  /** Stop the running turn (AC 15); rendered only while `running`. */
+  onStop?: () => void;
+  /**
+   * Whether the surface holds pending attachments (image intake, AC 18):
+   * with true, a send with NO text is allowed (image-only prompts).
+   */
+  hasAttachments?: () => boolean;
+  /**
+   * Legend text for the `@` affordance (the session page's source is
+   * files AND sessions; home keeps "@ sessions").
+   */
+  referenceHint?: string;
 };
 
 class ComposerOption extends MenuOption {
@@ -138,8 +174,6 @@ class ComposerOption extends MenuOption {
 // `(^|\s)`: the menu opens after any word boundary, not only at line
 // start - typing "fix this /mode" must offer commands like dsh web does.
 const SLASH_TRIGGER_REGEX = /(^|\s)\/([\w-]*)$/u;
-const AT_TRIGGER_REGEX = /(^|\s|\n)@([^\s@]*)$/u;
-
 function checkForSlashTrigger(text: string): MenuTextMatch | null {
   const match = SLASH_TRIGGER_REGEX.exec(text);
   if (match === null) return null;
@@ -153,16 +187,19 @@ function checkForSlashTrigger(text: string): MenuTextMatch | null {
   };
 }
 
+// The `@` trigger is the HOST grammar (AC 21): dsh-file-reference's
+// browser-safe activeAtToken - quoted paths, email-like interiors, and
+// cursor anchoring are its rules, not this file's. vendored-grammar.test.ts
+// pins the contract the UI relies on; a host bump that re-tokenizes fails
+// there instead of silently changing the menu.
 function checkForAtTrigger(text: string): MenuTextMatch | null {
-  const match = AT_TRIGGER_REGEX.exec(text);
-  if (match === null) return null;
-  const leading = match[1];
-  const query = match[2];
-  if (leading === undefined || query === undefined) return null;
+  const line = text.slice(text.lastIndexOf("\n") + 1);
+  const token = activeAtToken(line, line.length);
+  if (token === undefined) return null;
   return {
-    leadOffset: match.index + leading.length,
-    matchingString: query,
-    replaceableString: "@" + query,
+    leadOffset: text.length - token.prefix.length,
+    matchingString: token.query,
+    replaceableString: token.prefix,
   };
 }
 
@@ -239,7 +276,7 @@ function renderMenu(
       </ul>
       {hint !== undefined && (
         // A signal, not a choice: outside the option list, unselectable.
-        <p className="border-t border-input px-2 py-1 text-[11px] text-muted-foreground">{hint}</p>
+        <p className="border-t border-input px-2 py-1 text-2xs text-muted-foreground">{hint}</p>
       )}
     </div>,
     anchorElementRef.current,
@@ -259,12 +296,15 @@ function useComposerSubmit({
   pendingRef,
   enabledRef,
   setIsPending,
+  hasAttachments,
 }: {
-  onSubmit: (text: string) => Promise<unknown>;
+  onSubmit: (text: string, mode: SendMode) => Promise<unknown>;
   pendingRef: RefObject<boolean>;
   /** Sync gate from the surface (e.g. "no working folder chosen yet"). */
   enabledRef: RefObject<boolean>;
   setIsPending: (pending: boolean) => void;
+  hasAttachments?: (() => boolean) | undefined;
+  referenceHint?: string | undefined;
 }) {
   const [editor] = useLexicalComposerContext();
   // Latest-ref: surfaces pass inline closures; without this the submit
@@ -275,39 +315,42 @@ function useComposerSubmit({
     onSubmitRef.current = onSubmit;
   }, [onSubmit]);
 
-  return useCallback(() => {
-    if (pendingRef.current) return;
-    // Surface refused the send (disabled state): swallow it on every path,
-    // button and Enter alike.
-    if (!enabledRef.current) return;
-    let text = "";
-    editor.getEditorState().read(() => {
-      text = $getRoot().getTextContent().trim();
-    });
-    if (text.length === 0) return;
-    pendingRef.current = true;
-    setIsPending(true);
-    void (async () => {
-      try {
-        await onSubmitRef.current(text);
-        // Accepted: drop the draft (the surface navigates or shows it sent).
-        // The editor may already be gone when the action navigates away.
-        const root = editor.getRootElement();
-        if (root !== null && root.isConnected) {
-          editor.update(() => {
-            $getRoot().clear();
-          });
+  return useCallback(
+    (mode: SendMode = "steer") => {
+      if (pendingRef.current) return;
+      // Surface refused the send (disabled state): swallow it on every path,
+      // button and Enter alike.
+      if (!enabledRef.current) return;
+      let text = "";
+      editor.getEditorState().read(() => {
+        text = $getRoot().getTextContent().trim();
+      });
+      if (text.length === 0 && hasAttachments?.() !== true) return;
+      pendingRef.current = true;
+      setIsPending(true);
+      void (async () => {
+        try {
+          await onSubmitRef.current(text, mode);
+          // Accepted: drop the draft (the surface navigates or shows it sent).
+          // The editor may already be gone when the action navigates away.
+          const root = editor.getRootElement();
+          if (root !== null && root.isConnected) {
+            editor.update(() => {
+              $getRoot().clear();
+            });
+          }
+        } catch {
+          // Failed: preserve the draft for retry; the surface renders the error.
+        } finally {
+          pendingRef.current = false;
+          setIsPending(false);
+          const root = editor.getRootElement();
+          if (root !== null && root.isConnected) editor.focus();
         }
-      } catch {
-        // Failed: preserve the draft for retry; the surface renders the error.
-      } finally {
-        pendingRef.current = false;
-        setIsPending(false);
-        const root = editor.getRootElement();
-        if (root !== null && root.isConnected) editor.focus();
-      }
-    })();
-  }, [editor, pendingRef, setIsPending]);
+      })();
+    },
+    [editor, pendingRef, setIsPending, hasAttachments],
+  );
 }
 
 function submitWithEnter(
@@ -315,7 +358,8 @@ function submitWithEnter(
   event: KeyboardEvent | null,
   menuOpenRef: RefObject<boolean>,
   pendingRef: RefObject<boolean>,
-  submit: () => void,
+  submit: (mode: SendMode) => void,
+  sendModes: boolean,
 ): boolean {
   if (event === null) return false;
   // IME composition: block Lexical's other Enter handlers but never
@@ -333,7 +377,14 @@ function submitWithEnter(
   }
   // In flight: swallow the Enter - no submit, no newline.
   if (pendingRef.current) return true;
-  submit();
+  // The queue chord (AC 13; #134's Design packet, Gestures): Cmd/Ctrl+Enter
+  // queues on a
+  // mode-aware surface; elsewhere plain Enter submits whatever it means.
+  if (sendModes && (event.metaKey || event.ctrlKey)) {
+    submit("queue");
+    return true;
+  }
+  submit(sendModes ? "steer" : "steer");
   return true;
 }
 
@@ -341,20 +392,22 @@ function EnterToSendPlugin({
   menuOpenRef,
   pendingRef,
   submit,
+  sendModes,
 }: {
   menuOpenRef: RefObject<boolean>;
   pendingRef: RefObject<boolean>;
-  submit: () => void;
+  submit: (mode: SendMode) => void;
+  sendModes: boolean;
 }) {
   const [editor] = useLexicalComposerContext();
   useEffect(() => {
     return editor.registerCommand(
       KEY_ENTER_COMMAND,
       (event: KeyboardEvent | null) =>
-        submitWithEnter(editor, event, menuOpenRef, pendingRef, submit),
+        submitWithEnter(editor, event, menuOpenRef, pendingRef, submit, sendModes),
       COMMAND_PRIORITY_HIGH,
     );
-  }, [editor, menuOpenRef, pendingRef, submit]);
+  }, [editor, menuOpenRef, pendingRef, submit, sendModes]);
   return null;
 }
 
@@ -374,32 +427,79 @@ function EditableGatePlugin({ enabled }: { enabled: boolean }) {
   return null;
 }
 
-function SendButton({
+/**
+ * The send controls, per turn state. A mode-aware surface (the session page)
+ * shows ONE Send button while the session is idle - with no turn running,
+ * steer and queue are the same gesture and naming two of them is noise - and
+ * the two named gestures only while a turn runs: **Steer** interrupts it,
+ * **Queue** waits its turn. A surface without modes (home) keeps its single
+ * labelled submit whatever the state.
+ *
+ * `isPending` disables the controls: one send in flight is the contract the
+ * Enter handler shares (see `useComposerSubmit`).
+ */
+function SendControls({
   hasText,
   isPending,
   sendEnabled,
   submit,
   submitLabel,
+  sendModes,
+  running,
 }: {
   hasText: boolean;
   isPending: boolean;
   sendEnabled: boolean;
-  submit: () => void;
+  submit: (mode: SendMode) => void;
   /** Visible text (home: "Start session"); absent keeps the icon-only square. */
   submitLabel: string | undefined;
+  sendModes: boolean;
+  running: boolean;
 }) {
+  const disabled = !hasText || isPending || !sendEnabled;
+  if (!sendModes || !running) {
+    return (
+      <Button
+        type="button"
+        variant="default"
+        size={submitLabel === undefined && !sendModes ? "icon-sm" : "xs"}
+        aria-label={submitLabel ?? "Send message"}
+        title={sendModes ? "Send this message" : undefined}
+        disabled={disabled}
+        onClick={() => submit("steer")}
+      >
+        {isPending ? <Spinner /> : <RiSendPlane2Fill />}
+        {(submitLabel !== undefined || sendModes) && (submitLabel ?? "Send")}
+      </Button>
+    );
+  }
   return (
-    <Button
-      type="button"
-      variant="default"
-      size={submitLabel === undefined ? "icon-sm" : "xs"}
-      aria-label={submitLabel ?? "Send message"}
-      disabled={!hasText || isPending || !sendEnabled}
-      onClick={submit}
-    >
-      {isPending ? <Spinner /> : <RiSendPlane2Fill />}
-      {submitLabel !== undefined && submitLabel}
-    </Button>
+    <>
+      <Button
+        type="button"
+        variant="default"
+        size="xs"
+        aria-label="Steer the session now"
+        title="Steer - interrupt the running turn with this message"
+        disabled={disabled}
+        onClick={() => submit("steer")}
+      >
+        {isPending ? <Spinner /> : <RiSendPlane2Fill />}
+        Steer
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="xs"
+        aria-label="Queue this message"
+        title="Queue - let the current turn finish first (⌘/Ctrl+Enter)"
+        disabled={disabled}
+        onClick={() => submit("queue")}
+      >
+        <RiInboxLine />
+        Queue
+      </Button>
+    </>
   );
 }
 
@@ -489,7 +589,12 @@ function TypeaheadMenus({
     (option: ComposerOption, textNodeContainingQuery: TextNode | null, closeMenu: () => void) => {
       editor.update(() => {
         const text = option.insertText ?? option.label;
-        const replacement = $createTextNode(text + " ");
+        // Descent rule (AC 21): a quoted, still-open directory mention
+        // (`@"dir/` with no closing quote) must not gain a trailing space -
+        // the space lands inside the open quote and kills descent. Closed
+        // or unquoted mentions finish the token and take the space.
+        const staysOpen = text.startsWith('@"') && !text.endsWith('"');
+        const replacement = $createTextNode(staysOpen ? text : text + " ");
         if (textNodeContainingQuery !== null) {
           textNodeContainingQuery.replace(replacement);
         } else {
@@ -563,12 +668,17 @@ function ComposerInner({
   submitLabel,
   lockedHint,
   setIsPending,
+  sendModes,
+  running,
+  onStop,
+  hasAttachments,
+  referenceHint,
 }: {
   commands: ComposerEntry[];
   hasText: boolean;
   isPending: boolean;
   menuOpenRef: RefObject<boolean>;
-  onSubmit: (text: string) => Promise<unknown>;
+  onSubmit: (text: string, mode: SendMode) => Promise<unknown>;
   pendingRef: RefObject<boolean>;
   placeholder: string;
   references: ComposerEntry[];
@@ -578,6 +688,11 @@ function ComposerInner({
   submitLabel: string | undefined;
   lockedHint: string | undefined;
   setIsPending: (pending: boolean) => void;
+  sendModes: boolean;
+  running: boolean;
+  onStop?: (() => void) | undefined;
+  hasAttachments?: (() => boolean) | undefined;
+  referenceHint?: string | undefined;
 }) {
   // Sync twin of the enabled prop for the submit paths (same reason
   // pendingRef exists: a click/Enter can arrive before the re-render).
@@ -585,22 +700,35 @@ function ComposerInner({
   useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
-  const submit = useComposerSubmit({ onSubmit, pendingRef, enabledRef, setIsPending });
+  const submit = useComposerSubmit({
+    onSubmit,
+    pendingRef,
+    enabledRef,
+    setIsPending,
+    ...(hasAttachments !== undefined ? { hasAttachments } : {}),
+  });
   // The hint advertises only the triggers this surface actually injected: an
-  // empty source mounts no menu, so advertising it would be a lie. The
-  // legend is trimmed to one compact line at phone widths (design packet);
-  // Shift+Enter is discoverable on its own.
+  // empty source mounts no menu, so advertising it would be a lie. The send
+  // chord's meaning follows the buttons: with a turn running, Enter steers
+  // and the chord queues; idle, Enter just sends. Shift+Enter is
+  // discoverable on its own.
   const hint = [
-    "Enter sends",
+    sendModes
+      ? running === true
+        ? "Enter steers · ⌘/Ctrl+Enter queues"
+        : "Enter sends"
+      : "Enter sends",
     commands.length > 0 && "/ commands",
-    referenceSearch !== undefined ? "@ sessions" : references.length > 0 && "@ files",
+    referenceSearch !== undefined
+      ? (referenceHint ?? "@ sessions")
+      : references.length > 0 && "@ files",
   ]
     .filter(Boolean)
     .join(" · ");
 
   return (
     <>
-      <div className="rounded-none border border-input bg-transparent transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50 dark:bg-input/30">
+      <div className="rounded-none border border-input bg-card transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50 dark:bg-input/25">
         <div className="relative">
           {!enabled && (
             // The locked affordance: the editor area becomes the trigger
@@ -623,33 +751,65 @@ function ComposerInner({
             contentEditable={
               <ContentEditable
                 aria-label={placeholder}
-                className="block max-h-48 min-h-12 overflow-y-auto px-2.5 py-2 text-xs outline-none"
+                className="block max-h-48 min-h-11 overflow-y-auto px-3 py-2.5 text-sm leading-normal outline-none"
               />
             }
             placeholder={
-              <div className="pointer-events-none absolute inset-x-0 top-0 px-2.5 py-2 text-xs text-muted-foreground">
+              <div className="pointer-events-none absolute inset-x-0 top-0 px-3 py-2.5 text-sm text-muted-foreground/70">
                 {placeholder}
               </div>
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
         </div>
-        <div className="flex items-center justify-between gap-2 border-t border-input px-2.5 py-1.5">
+        <div className="flex items-center justify-between gap-2 border-t border-border/50 px-2.5 py-1.5">
           {/* While locked the footer states the remedy, not the shortcuts of
-              an editor that does not accept typing yet (design packet). */}
-          <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+              an editor that does not accept typing yet (#134's Design
+              packet, Copy). */}
+          <p className="min-w-0 flex-1 text-xs leading-4 text-muted-foreground/70">
             {enabled || lockedHint === undefined ? hint : lockedHint}
           </p>
-          <SendButton
-            hasText={hasText}
-            isPending={isPending}
-            sendEnabled={enabled}
-            submit={submit}
-            submitLabel={submitLabel}
-          />
+          <div className="flex shrink-0 items-center gap-1">
+            {sendModes &&
+              running === true &&
+              onStop !== undefined && (
+                // AC 15: while a turn runs, the stop control joins the two
+                // mode gestures - the one moment cancelling is as meaningful
+                // as steering. AC 25's floor again as a target, not as ink:
+                // the 24px glyph keeps its size and the hit band grows
+                // vertically, so it still reads as the `icon-xs` preset it is.
+                // Horizontal stays put - the 4px gap to the send controls is
+                // smaller than the band would be.
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  className="relative after:absolute after:-top-2.5 after:-bottom-2.5 after:inset-x-0 after:content-['']"
+                  aria-label="Stop current turn"
+                  title="Stop the running turn"
+                  onClick={onStop}
+                >
+                  <RiStopLine />
+                </Button>
+              )}
+            <SendControls
+              hasText={hasText || hasAttachments?.() === true}
+              isPending={isPending}
+              sendEnabled={enabled}
+              submit={submit}
+              submitLabel={submitLabel}
+              sendModes={sendModes === true}
+              running={running === true}
+            />
+          </div>
         </div>
       </div>
-      <EnterToSendPlugin menuOpenRef={menuOpenRef} pendingRef={pendingRef} submit={submit} />
+      <EnterToSendPlugin
+        menuOpenRef={menuOpenRef}
+        pendingRef={pendingRef}
+        submit={submit}
+        sendModes={sendModes}
+      />
       <TypeaheadMenus
         menuOpenRef={menuOpenRef}
         commands={commands}
@@ -670,6 +830,11 @@ export function SessionComposer({
   onLockedActivate,
   submitLabel,
   lockedHint,
+  sendModes = false,
+  running = false,
+  onStop,
+  hasAttachments,
+  referenceHint,
 }: SessionComposerProps) {
   const [hasText, setHasText] = useState(false);
   const [isPending, setIsPending] = useState(false);
@@ -705,6 +870,11 @@ export function SessionComposer({
         submitLabel={submitLabel}
         lockedHint={lockedHint}
         setIsPending={setIsPending}
+        sendModes={sendModes}
+        running={running}
+        {...(onStop !== undefined ? { onStop } : {})}
+        {...(hasAttachments !== undefined ? { hasAttachments } : {})}
+        {...(referenceHint !== undefined ? { referenceHint } : {})}
       />
       <OnChangePlugin
         onChange={(editorState) => {
