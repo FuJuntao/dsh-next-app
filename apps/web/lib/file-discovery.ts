@@ -163,7 +163,6 @@ async function gitList(root: string, signal: AbortSignal): Promise<GitOutcome> {
       return;
     }
     const reader = new NulRecordReader();
-    const decoder = new TextDecoder("utf8");
     let bytes = 0;
     let ceiling = false;
     let failed = false;
@@ -181,8 +180,9 @@ async function gitList(root: string, signal: AbortSignal): Promise<GitOutcome> {
         stopAtCeiling();
         return;
       }
-      // stream: true - a chunk may cut a multi-byte path in half.
-      reader.feed(decoder.decode(chunk, { stream: true }));
+      // The reader owns the decoder: a chunk may cut a multi-byte path in
+      // half, and only the reader knows to flush it before the last record.
+      reader.feed(chunk);
       if (reader.budgetHit) stopAtCeiling();
     });
     child.on("error", () => {
@@ -199,7 +199,7 @@ async function gitList(root: string, signal: AbortSignal): Promise<GitOutcome> {
         resolve({ status: "unavailable" });
         return;
       }
-      reader.finish();
+      reader.close();
       if (!ceiling && reader.records.length === 0) {
         resolve({ status: "unavailable" }); // an empty repo is not evidence
         return;
