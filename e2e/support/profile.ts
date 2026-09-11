@@ -1,7 +1,14 @@
 import { randomBytes, scryptSync } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { freePort } from "./port";
 import { sleep } from "./process";
@@ -123,50 +130,169 @@ export function writeRuntimePatch(profileDir: string, config?: ProfileRuntimeCon
 }
 
 /**
- * Assert that an installed profile resolves ONE copy of the tool runtime
- * (#138) - the composition every tool call depends on.
+ * One entry per crossing the boot must hold on a single module instance: the
+ * package that owns an identity-bearing key, and the row package that meets it
+ * there. `TOOL_RUNTIME_SCHEDULER` is a `Symbol()` - not `Symbol.for` - so the
+ * copy that writes the slot and the copy that reads it must be one copy; held
+ * apart, the read is `undefined` and every tool call dies with "Cannot read
+ * properties of undefined (reading 'prepare')" (#138).
  *
- * The mechanism: `TOOL_RUNTIME_SCHEDULER` is a module-scoped `Symbol()`, not
- * `Symbol.for`. The agent-loop row registers the scheduler on the
- * `@deepseek-ai/dsh-tools` copy it imports, then reads it back through that
- * symbol - so when the boot holds two physical copies, the registry key and
- * the lookup key are different Symbols, the read is `undefined`, and the turn
- * dies with "Cannot read properties of undefined (reading 'prepare')". This
- * suite used to work around exactly that by pruning the profile's copy; the
- * bundle now carries `dsh-tools` and `dsh-agent-loop` as dependencies, so one
- * instance answers every importer in the profile.
+ * The criterion is a key's **registration**, not the presence of a symbol: a
+ * module-scoped `Symbol()` forks into one key per copy, while `Symbol.for()`
+ * resolves through the global registry and stays one key however many copies
+ * exist. ADR-0012 carries the audit of which host packages fork; this list is
+ * where a newly discovered crossing gets recorded, with both of its halves.
+ */
+const IDENTITY_BEARING_CROSSINGS = [
+  { key: "@deepseek-ai/dsh-tools", reader: "@deepseek-ai/dsh-agent-loop" },
+] as const;
+
+/**
+ * Packages allowed to appear more than once, because their cross-package keys
+ * are registered symbols (`Symbol.for`) and their state handoffs go through
+ * `globalThis` - two copies still agree on every key, so a duplicate costs
+ * bytes, not behaviour. This is the second case of the criterion above, and
+ * schemastery is its worked example.
  *
- * The guard states the invariant itself rather than a proxy for it: the
- * package resolved from the profile root and from inside the agent loop must
- * be the same realpath, because Node's module cache keys on realpath and a
- * Symbol's identity follows the instance. A future bundle that drops either
- * dependency, or a resolver that reintroduces a second copy, fails here with
- * the mechanism named - instead of surfacing as a broken tool call in a spec
- * three layers away.
+ * Counts and versions are deliberately not repeated here: the census below
+ * recomputes them at run time, `pnpm-lock.yaml` shows which versions resolved,
+ * and ADR-0012 records the measurement behind the allowance.
+ *
+ * A package joins this list on evidence that its keys are registered - never
+ * because a duplicate is merely inconvenient. If one starts keying a
+ * cross-package slot with a module-scoped `Symbol()`, it moves to
+ * IDENTITY_BEARING_CROSSINGS with the package it crosses to (ADR-0012).
+ */
+const KNOWN_INERT_DUPLICATES = ["@deepseek-ai/schemastery"] as const;
+
+/**
+ * Assert that an installed profile composes the host graph the way tool
+ * execution needs it (ADR-0012), at the boundary that rule actually has.
+ *
+ * Two checks, because the failure and the fear are different:
+ *
+ * 1. **Every identity-bearing crossing resolves to one instance.** Both halves
+ *    of each entry have to be *in* the profile - a half that resolves from the
+ *    dsh installation is a second instance even when the profile holds one,
+ *    which is how #138 happened - and the owning package must resolve to the
+ *    same realpath from the profile root and from inside its counterpart.
+ *    Node's module cache keys on realpath and a `Symbol()`'s identity follows
+ *    the instance, so this states the invariant rather than a proxy for it.
+ * 2. **No unexpected duplicates, inside the host scope.** A census over the
+ *    profile's `@deepseek-ai` tree fails on any multi-copy package outside the
+ *    measured-inert set. The walk stops at that scope on purpose: duplicates
+ *    elsewhere are per-package vendoring - a dependency compiled into another
+ *    package's own build - where no bare specifier can resolve the two halves of
+ *    a crossing apart, so the only fork that can hurt is one row and its
+ *    counterpart landing on different copies (ADR-0012 carries the measurement).
+ *    Listing benign ones would train readers to skim this guard, and skimming is
+ *    how the next hoist drift gets found the way #138 was: as a broken tool call
+ *    three layers away.
+ *
+ * Deliberately NOT asserted: one copy of every row package. The shipped graph
+ * does not hold that, does not need to, and ADR-0012 records why.
  *
  * @param profileDir The installed profile directory (holds `node_modules`).
  */
 export function assertSharedToolRuntimeGraph(profileDir: string): void {
-  const scoped = join(profileDir, "node_modules", "@deepseek-ai");
-  for (const row of ["dsh-tools", "dsh-agent-loop"]) {
-    if (!existsSync(join(scoped, row))) {
+  const modules = join(profileDir, "node_modules");
+  for (const { key, reader } of IDENTITY_BEARING_CROSSINGS) {
+    for (const pkg of [key, reader] as const) {
+      if (!existsSync(join(modules, pkg))) {
+        throw new Error(
+          `${pkg} is missing from the installed profile (${modules}), so its row resolves from ` +
+            `the dsh installation and crosses module instances with the rest of the boot ` +
+            `(#138); the bundle must depend on it, not merely peer it`,
+        );
+      }
+    }
+    const forOwner = resolveFrom(profileDir, key);
+    const forReader = resolveFrom(join(modules, reader), key);
+    if (forOwner !== forReader) {
       throw new Error(
-        `@deepseek-ai/${row} is missing from the installed profile (${scoped}), so its row ` +
-          `resolves from the dsh installation and crosses module instances with the rest of ` +
-          `the boot (#138); the bundle must depend on it, not merely peer it`,
+        `the boot holds two ${key} instances: the profile's rows resolve it to ${forOwner} ` +
+          `while ${reader} resolves it to ${forReader}. ${key} keys a slot that ${reader} ` +
+          `reads back through a module-scoped Symbol, so the write and the read never meet ` +
+          `and every tool call fails (#138)`,
       );
     }
   }
-  const forRows = resolveFrom(profileDir, "@deepseek-ai/dsh-tools");
-  const forAgentLoop = resolveFrom(join(scoped, "dsh-agent-loop"), "@deepseek-ai/dsh-tools");
-  if (forRows !== forAgentLoop) {
+  const inert = KNOWN_INERT_DUPLICATES as readonly string[];
+  const unexpected = [...hostPackageCopies(profileDir).entries()]
+    .filter(([name, copies]) => copies.size > 1 && !inert.includes(name))
+    .map(
+      ([name, copies]) => `${name} in ${copies.size} copies:\n    ${[...copies].join("\n    ")}`,
+    );
+  if (unexpected.length > 0) {
     throw new Error(
-      `the boot holds two @deepseek-ai/dsh-tools instances: the profile's rows resolve it to ` +
-        `${forRows} while dsh-agent-loop resolves it to ${forAgentLoop}. Tool execution crosses ` +
-        `the two through a module-scoped Symbol, so every tool call fails reading "prepare" ` +
-        `(#138)`,
+      `the profile holds multiple instances of ${unexpected.length} @deepseek-ai package(s) ` +
+        `outside the measured-inert set:\n  ${unexpected.join("\n  ")}\n` +
+        `Classify each one by its keys, not by convenience: registered (` +
+        `Symbol.for) or nothing crossing the package boundary at all - then add it to ` +
+        `KNOWN_INERT_DUPLICATES; a module-scoped ` +
+        `Symbol() that another package reads back - then add both halves to ` +
+        `IDENTITY_BEARING_CROSSINGS and make the bundle carry them (ADR-0012).`,
     );
   }
+}
+
+/** Every realpath-distinct copy of each `@deepseek-ai/*` package inside a profile. */
+function hostPackageCopies(profileDir: string): Map<string, Set<string>> {
+  const copies = new Map<string, Set<string>>();
+  const add = (packageName: string, dir: string): void => {
+    let real: string;
+    try {
+      real = realpathSync(dir);
+    } catch {
+      return; // a broken link holds no instance
+    }
+    const at = copies.get(packageName);
+    if (at === undefined) copies.set(packageName, new Set([real]));
+    else at.add(real);
+  };
+  const isScope = (dir: string): boolean => basename(dir) === "@deepseek-ai";
+  const queue = [join(profileDir, "node_modules")];
+  const visited = new Set<string>();
+  while (queue.length > 0) {
+    const modules = queue.shift() as string;
+    let real: string;
+    try {
+      real = realpathSync(modules);
+    } catch {
+      continue; // no node_modules here
+    }
+    if (visited.has(real)) continue;
+    visited.add(real);
+    let entries;
+    try {
+      entries = readdirSync(modules, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = join(modules, entry.name);
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+      if (isScope(full)) {
+        // Scoped: each child is a package, and each package nests its own
+        // conflicts - the descent below is where duplicates actually hide.
+        for (const pkg of readdirSync(full, { withFileTypes: true })) {
+          add(`@deepseek-ai/${pkg.name}`, join(full, pkg.name));
+          queue.push(join(full, pkg.name, "node_modules"));
+        }
+        continue;
+      }
+      if (entry.name === ".pnpm") {
+        // An isolated layout parks each resolved copy here; realpath dedupe
+        // collapses the symlinks, so only a genuinely second instance counts.
+        for (const storeEntry of readdirSync(full, { withFileTypes: true })) {
+          queue.push(join(full, storeEntry.name, "node_modules"));
+        }
+        continue;
+      }
+      queue.push(full, join(full, "node_modules"));
+    }
+  }
+  return copies;
 }
 
 /** The realpath one directory resolves a package to, without loading it. */
