@@ -140,14 +140,22 @@ carry the graph it boots rows from. This record picks the third, narrowly.
   to every scope would report a dozen known-benign duplicates on every install,
   and a guard that cries wolf on install is a guard that gets skimmed.
 
-  The two walks differ on two axes, because the questions differ on two axes.
-  `hostPackageCopies` is resolver-anchored *and* host-scoped: only a copy a bare
-  specifier can actually land on can fork a crossing, and only the host scope's
-  copies are interchangeable with the installation's through the fallback tier.
-  `profileGraphCensus` is whole-tree *and* all-scope, because the claim above is
-  about the tree. They agree exactly where the assertion needs agreement — 31
-  host-scope names each — and differ overall (218 names against 351), the gap
-  being copies inside build outputs. Any statement that the profile must carry
+  The two walks cover the same tree and differ in what they **record**.
+  `hostPackageCopies`, the assertion's walk, notes a package only when its parent
+  directory is named `@deepseek-ai` — it asks which installation-interchangeable
+  host packages the boot can land on, and the fallback tier only substitutes for
+  packages in that scope, so anything else would be noise. `profileGraphCensus`,
+  the reporting walk, records the `name` from every `package.json` it reaches,
+  because the claim above is about the whole installed graph. Both counts come
+  from their own functions and the setup line prints them side by side, so the
+  comparison below is machine-produced rather than remembered: on a fresh install
+  at this head the first sees **31** host-scope names and the second **351**, the
+  31 a subset of the 351 — the difference is recording scope, not coverage. An
+  earlier draft of this sentence said "218 against 351" and credited 218 to
+  `hostPackageCopies`, which cannot produce it under any run, since it records
+  host names only; 218 came from an ad-hoc comparison script with a third
+  recording rule nothing had named. Same failure as the "40" above, caught the
+  same way, kept for the same reason. Any statement that the profile must carry
   "every row package together with the rows that talk to it" is **wrong as a
   general rule** and correct only for the pair above.
 - **Shipping the whole host graph is rejected on measurement.** Making

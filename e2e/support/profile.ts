@@ -179,17 +179,19 @@ const KNOWN_INERT_DUPLICATES = ["@deepseek-ai/schemastery"] as const;
  *    same realpath from the profile root and from inside its counterpart.
  *    Node's module cache keys on realpath and a `Symbol()`'s identity follows
  *    the instance, so this states the invariant rather than a proxy for it.
- * 2. **No unexpected duplicates, inside the host scope.** The walk over the
- *    profile's `@deepseek-ai` tree (`hostPackageCopies`) fails on any multi-copy
- *    package outside the measured-inert set. It is node_modules-anchored, so it
- *    counts what a bare specifier can actually reach - which is what this
- *    assertion is about. Duplicates elsewhere are per-package vendoring, a
- *    dependency compiled into another package's own build, where no specifier can
- *    resolve the two halves of a crossing apart: the wider
- *    {@link profileGraphCensus} counts far more names outside this scope than
- *    inside it, and ADR-0012 carries the figures. Failing on those would train
- *    readers to skim this guard, and skimming is how the next hoist drift gets
- *    found the way #138 was: as a broken tool call three layers away.
+ * 2. **No unexpected duplicates, inside the host scope.** The walk
+ *    (`hostPackageCopies`) fails on any multi-copy package outside the
+ *    measured-inert set, and it records only names under an `@deepseek-ai`
+ *    directory - deliberately, since that is the scope where the boot-healed
+ *    fallback tier can substitute the installation's copy for the profile's, and
+ *    the realpath comparison in check 1 is what asks a resolver's question.
+ *    Duplicates elsewhere are per-package vendoring, a dependency compiled into
+ *    another package's own build, where no specifier can resolve the two halves
+ *    of a crossing apart: the wider {@link profileGraphCensus} counts far more
+ *    names outside this scope than inside it, and ADR-0012 carries the figures.
+ *    Failing on those would train readers to skim this guard, and skimming is how
+ *    the next hoist drift gets found the way #138 was: as a broken tool call
+ *    three layers away.
  *
  * Deliberately NOT asserted: one copy of every row package. The shipped graph
  * does not hold that, does not need to, and ADR-0012 records why.
@@ -240,25 +242,6 @@ export function assertSharedToolRuntimeGraph(profileDir: string): void {
   }
 }
 
-/**
- * The census behind ADR-0012's scope argument: EVERY package root in the
- * installed profile tree, not just the resolver-visible host ones.
- *
- * This walks differently from {@link hostPackageCopies} because the two answer
- * different questions. That one is resolver-anchored and host-scoped - only a
- * copy a bare specifier can land on can fork a crossing, and only inside the host
- * scope are profile and installation copies interchangeable through the fallback
- * tier - so it is the right shape for the assertion. This census is whole-tree
- * and all-scope, because ADR-0012 reasons about the installed graph as a whole:
- * most of its duplicate copies are dependencies compiled into another package's
- * build output (`next/dist/compiled/zod`), which no specifier can even reach.
- * The two agree on the host scope and differ over the rest of the tree; ADR-0012
- * carries the figures, since counts in this file would only age.
- *
- * ADR-0012 quotes its output as dated evidence; the suite regenerates it on
- * every install run, so the numbers have a home that executes instead of a
- * pipeline a reader has to rebuild by hand.
- */
 /** One package name that resolves to more than one physical copy. */
 export interface ProfileGraphDuplicate {
   name: string;
@@ -269,6 +252,7 @@ export interface ProfileGraphDuplicate {
   vendorOnly: boolean;
 }
 
+/** What {@link profileGraphCensus} counted over an installed profile tree. */
 export interface ProfileGraphCensus {
   /** Distinct package names found anywhere in the tree. */
   names: number;
@@ -283,7 +267,22 @@ function isVendoredCopy(dir: string): boolean {
   return dir.includes("/dist/compiled/");
 }
 
-/** Count every package root in an installed profile tree. */
+/**
+ * The census behind ADR-0012's scope argument: every package root in the
+ * installed profile tree, whatever scope it belongs to.
+ *
+ * It differs from {@link hostPackageCopies} in what each one **records**, not in
+ * how far it travels - both walk the whole tree. This one takes the `name` from
+ * every `package.json` it reaches, because the record reasons about the installed
+ * graph as a whole, and much of that graph's duplication lives in dependencies
+ * compiled into another package's build output (`next/dist/compiled/zod`), where
+ * no bare specifier can land. The assertion's walk notes only packages under an
+ * `@deepseek-ai` directory, because the fallback tier substitutes the
+ * installation's copy only for names in that scope, so anything else it recorded
+ * would be noise. Counts for both are printed by {@link
+ * describeProfileGraphCensus} on every install run and carried as dated evidence
+ * in ADR-0012 - this file states the criterion, never the numbers.
+ */
 export function profileGraphCensus(profileDir: string): ProfileGraphCensus {
   const byName = new Map<string, Set<string>>();
   const queue = [join(profileDir, "node_modules")];
@@ -344,15 +343,28 @@ export function describeProfileGraphCensus(profileDir: string): string {
   const outside = census.duplicates.filter((d) => !d.name.startsWith("@deepseek-ai/"));
   const vendored = outside.filter((d) => d.vendored);
   const vendorOnly = outside.filter((d) => d.vendorOnly);
+  // Both host-scope counts print, from their own producers: the census's is a
+  // name filter over the whole tree, the assertion's is the only scope its walk
+  // records at all. Printing the pair is what "31 is a subset of 351" means
+  // operationally - and what an earlier draft had to be told by review.
+  const asserted = hostPackageCopies(profileDir).size;
   return (
-    `profile graph: ${census.names} package names (${census.hostNames} in @deepseek-ai), ` +
-    `${outside.length} duplicated outside the host scope, ${vendored.length} of them vendored ` +
-    `(next/dist/compiled), ${vendorOnly.length} vendor-against-vendor`
+    `profile graph: ${census.names} names whole-tree, ${census.hostNames} in @deepseek-ai ` +
+    `(${asserted} from the assertion's host-scoped walk), ${outside.length} duplicated outside ` +
+    `that scope, ${vendored.length} of those vendored (next/dist/compiled), ` +
+    `${vendorOnly.length} vendor-against-vendor`
   );
 }
 
-/** Every realpath-distinct copy of each `@deepseek-ai/*` package inside a profile. */
-function hostPackageCopies(profileDir: string): Map<string, Set<string>> {
+/**
+ * Every realpath-distinct copy of each `@deepseek-ai/*` package inside a
+ * profile, as the assertion sees it.
+ *
+ * Exported so the record's host-scope figure has a producer: it can only ever
+ * name packages under an `@deepseek-ai` directory, which is exactly the fact an
+ * earlier draft of ADR-0012 lost track of and invented "218" for.
+ */
+export function hostPackageCopies(profileDir: string): Map<string, Set<string>> {
   const copies = new Map<string, Set<string>>();
   const add = (packageName: string, dir: string): void => {
     let real: string;
