@@ -200,9 +200,11 @@ export function assertSharedToolRuntimeGraph(profileDir: string): void {
     for (const pkg of [key, reader] as const) {
       if (!existsSync(join(modules, pkg))) {
         throw new Error(
-          `${pkg} is missing from the installed profile (${modules}), so its row resolves from ` +
-            `the dsh installation and crosses module instances with the rest of the boot ` +
-            `(#138); the bundle must depend on it, not merely peer it`,
+          `${pkg} is missing from the installed profile (${modules}). A row package the profile ` +
+            `does not carry still resolves - dsh heals the installation's graph into ` +
+            "`$DSH_HOME/profiles/node_modules` at boot - so this half would silently load a " +
+            `*second* copy of ${key} and fork the crossing (#138). The bundle must depend on ` +
+            "it, not merely peer it.",
         );
       }
     }

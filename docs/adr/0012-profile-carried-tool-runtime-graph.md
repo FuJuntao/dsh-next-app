@@ -11,10 +11,10 @@ Supersedes a clause of ADR-0002 (see "What this changes about ADR-0002").
 ADR-0002 decided that the host packages the bundle's rows name are
 peerDependencies resolved from the user's dsh installation. That model assumes
 every row in a boot resolves out of one tree. It stops holding the moment the
-profile carries a copy of a package the installation also carries, because
-cordis resolves a row's package name from the profile's own `node_modules`
-first — and some host contracts cross packages through **module-scoped values**,
-where two copies are not two allocations but two mutually invisible worlds.
+profile carries a copy of a package the installation also carries, because the
+profile's own copy wins Node's walk from the profile directory — and some host
+contracts cross packages through **module-scoped values**, where two copies are
+not two allocations but two mutually invisible worlds.
 
 `TOOL_RUNTIME_SCHEDULER` is that case (found as #138). It is `Symbol(...)`, not
 `Symbol.for(...)`, declared in `@deepseek-ai/dsh-tools`, and it keys a slot that
@@ -33,6 +33,22 @@ reference. Registration and lookup therefore met on different Symbols, the
 lookup yielded `undefined`, and **every** tool call in an installed boot failed
 with `Cannot read properties of undefined (reading 'prepare')`: a message
 naming neither package nor cause, from a profile that otherwise boots healthy.
+
+**How a profile boot ends up with two anchors — measured, since the first draft
+of this record attributed the order to cordis on inference alone.** Row packages
+are bare specifiers, and resolution walks up from the profile directory, so the
+profile's own copy wins: planting a `throw` at the head of the profile's
+`dsh-tools/lib/index.js` aborts a real `dsh --profile` boot inside row
+application, naming `profiles/<p>/node_modules/@deepseek-ai/dsh-tools/lib/index.js`.
+The installation reaches the same walk through a second tier: `prepareProfile()`
+calls `healProfilesModuleFallback()`, which walks the running installation's
+dependency graph and materialises it as a symlink farm at
+`$DSH_HOME/profiles/node_modules` (202 entries on a long-lived home, every one
+pointing into the installation). **A row package the profile does not carry
+therefore resolves to the installation copy through that farm** — which is
+exactly how `dsh-agent-loop` got its own `dsh-tools` while the tools row used the
+profile's. The farm is healed at boot, not at install, so a never-booted home has
+no second tier yet.
 
 #138 posed three directions: keep rows on peers and stop the profile hoisting
 host code; key the slot with a registered symbol upstream; or let the profile
@@ -152,12 +168,24 @@ have no identity-bearing crossing to protect.
   install whose pinned pair is older than the host's dsh is now reachable, and
   the catalog pin plus the regression suite are what stand between it and a
   silent break — the installer itself no longer checks.
-- Two upstream behaviours are load-bearing here and are named as dependencies,
-  not facts: **cordis resolves a row's package name from the profile's tree
-  before the installation's**, and **the scheduler slot stays keyed by a
-  module-scoped `Symbol()`**. If the first ever changes, the profile copy stops
-  winning and the fix silently stops mattering; the second is #141, and what it
-  would retire is recorded below.
+- Three upstream behaviours are load-bearing, named as dependencies rather than
+  facts — and unlike the first draft of this bullet, they now say which way each
+  one fails:
+  1. **The profile's own copy wins Node's walk from the profile directory**
+     (marker probe above). If it stopped winning, both halves would fall to the
+     installation and share a copy: this fix would become *unnecessary* rather
+     than ineffective. No silent regression is hiding behind it.
+  2. **The boot-healed fallback tier** —
+     `healProfilesModuleFallback()`, run from `prepareProfile()`, symlinking the
+     installation's graph into `$DSH_HOME/profiles/node_modules`. This is what
+     lets the fork happen *silently*: a row package the profile does not carry
+     still resolves, through this tier, to the installation's copy (verified on
+     the deployed profile — `dsh-agent-loop` is absent from it and its fallback
+     link points into the installation). The heal runs before layers load and
+     re-runs every boot, so there is no state in which a booted profile lacks the
+     tier; what a profile can lack is the copy that should shadow it.
+  3. **The scheduler slot stays keyed by a module-scoped `Symbol()`** — #141, and
+     what it would retire is recorded below.
 - The guard's inert allow-list is a claim about the current host graph, not a
   law. A host package that starts forking a cross-package key — a module-scoped
   `Symbol()`, an `instanceof` class, a private field — must join
