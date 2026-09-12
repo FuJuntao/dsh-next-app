@@ -5,6 +5,7 @@ import { run } from "./process";
 import {
   assertSharedToolRuntimeGraph,
   bootProfile,
+  describeProfileGraphCensus,
   scryptValue,
   writeRuntimePatch,
   type BootedProfile,
@@ -91,6 +92,11 @@ export default async function globalSetup(): Promise<void> {
     // The bundle has to ship a complete host graph: a partial one splits the
     // boot across two module instances and kills every tool call (#138).
     assertSharedToolRuntimeGraph(profileDir);
+    // ADR-0012 quotes whole-tree figures as dated evidence, so the suite
+    // regenerates them on every run (~0.1s) rather than leaving a reader to
+    // rebuild the walk. Nothing asserts them: they describe the graph's shape,
+    // while the guard above decides whether that shape is survivable.
+    console.log(`e2e setup: ${describeProfileGraphCensus(profileDir)}`);
 
     // 3. Configure the auth credential pair in the profile's patch layer
     // (ADR-0008): the runtime row reads it and forwards it to the Next child.

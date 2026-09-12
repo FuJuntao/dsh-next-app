@@ -114,26 +114,42 @@ carry the graph it boots rows from. This record picks the third, narrowly.
 
   One crossing, therefore, and `IDENTITY_BEARING_CROSSINGS` in
   `e2e/support/profile.ts` is where the next one gets recorded — as a pair, with
-  the census failing any duplicate **in the host scope** not on the inert list.
+  the guard's host-scope walk (`hostPackageCopies`) failing any duplicate in that
+  scope not on the inert list.
 
-  **That census walks `@deepseek-ai/*`, and the limit is deliberate.** A fresh
-  install of the packed bundle holds **351** distinct package names, **12** of
-  them multi-copy outside the host scope (`zod`, `semver`, `commander`, `debug`,
-  `nanoid`, `@babel/runtime`, `@types/unist`, `client-only`, `loader-utils`,
-  `schema-utils`, `web-vitals`, `webpack-sources`). Two of those twelve — `zod`
-  (`const BRAND = Symbol("zod_brand")`) and `semver` — do declare module-scoped
-  `Symbol()` consts, so the criterion is not exclusive to this scope. What is
-  exclusive is the failure mode: **11 of the 12** have a copy under
-  `next/dist/compiled/` — Next's own vendored builds, four of them vendor-against-
-  vendor — and the twelfth (`@types/unist`) is a nested types-only package with no
-  runtime module identity to fork. None of them is a row and its counterpart
-  resolving apart, which is the only split this class can fail on; a fork inside a
-  vendored build is per-package isolation, which is what bundling is for. Widening
-  the walk to every scope would report a dozen known-benign duplicates on every
-  install, and a guard that cries wolf on install is a guard that gets skimmed.
-  Any statement that the profile must carry "every row package together with the
-  rows that talk to it" is **wrong as a general rule** and correct only for the
-  pair above.
+  **That walk stops at `@deepseek-ai/*`, and the limit is deliberate.** The
+  figures below come from a second, wider function in the same file —
+  `profileGraphCensus` in `e2e/support/profile.ts`, which the e2e setup prints on
+  every install run (about 0.1 s), so these numbers regenerate instead of ageing.
+  They are stated as evidence at this host version, not as invariants, and
+  nothing asserts them. A fresh install of the packed bundle holds **351**
+  distinct package names, **12** of them multi-copy outside the host scope (`zod`,
+  `semver`, `commander`, `debug`, `nanoid`, `@babel/runtime`, `@types/unist`,
+  `client-only`, `loader-utils`, `schema-utils`, `web-vitals`,
+  `webpack-sources`). Two of the twelve do declare module-scoped `Symbol()` consts
+  — zod's `const BRAND = Symbol("zod_brand")` and semver's `const ANY =
+  Symbol('SemVer ANY')` (`semver/classes/comparator.js:3`) — so the criterion is
+  not exclusive to this scope. What is exclusive is the failure mode: **11 of the
+  12** have a copy under `next/dist/compiled/` (the rule is that one path shape,
+  `isVendoredCopy`), **four** of them vendor-against-vendor (`loader-utils`,
+  `schema-utils`, `web-vitals`, `webpack-sources`), and the twelfth
+  (`@types/unist`) is a nested types-only package with no runtime module identity
+  to fork. None of the twelve is a row and its counterpart resolving apart, which
+  is the only split this class can fail on; a fork inside a vendored build is
+  per-package isolation, which is what bundling is for. Widening the *assertion*
+  to every scope would report a dozen known-benign duplicates on every install,
+  and a guard that cries wolf on install is a guard that gets skimmed.
+
+  The two walks differ on two axes, because the questions differ on two axes.
+  `hostPackageCopies` is resolver-anchored *and* host-scoped: only a copy a bare
+  specifier can actually land on can fork a crossing, and only the host scope's
+  copies are interchangeable with the installation's through the fallback tier.
+  `profileGraphCensus` is whole-tree *and* all-scope, because the claim above is
+  about the tree. They agree exactly where the assertion needs agreement — 31
+  host-scope names each — and differ overall (218 names against 351), the gap
+  being copies inside build outputs. Any statement that the profile must carry
+  "every row package together with the rows that talk to it" is **wrong as a
+  general rule** and correct only for the pair above.
 - **Shipping the whole host graph is rejected on measurement.** Making
   `@deepseek-ai/dsh-base` a dependency — the "one instance wins everywhere"
   reading of this decision — pulls the native tool packages (`node-pty`,

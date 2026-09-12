@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   realpathSync,
   writeFileSync,
 } from "node:fs";
@@ -178,16 +179,17 @@ const KNOWN_INERT_DUPLICATES = ["@deepseek-ai/schemastery"] as const;
  *    same realpath from the profile root and from inside its counterpart.
  *    Node's module cache keys on realpath and a `Symbol()`'s identity follows
  *    the instance, so this states the invariant rather than a proxy for it.
- * 2. **No unexpected duplicates, inside the host scope.** A census over the
- *    profile's `@deepseek-ai` tree fails on any multi-copy package outside the
- *    measured-inert set. The walk stops at that scope on purpose: duplicates
- *    elsewhere are per-package vendoring - a dependency compiled into another
- *    package's own build - where no bare specifier can resolve the two halves of
- *    a crossing apart, so the only fork that can hurt is one row and its
- *    counterpart landing on different copies (ADR-0012 carries the measurement).
- *    Listing benign ones would train readers to skim this guard, and skimming is
- *    how the next hoist drift gets found the way #138 was: as a broken tool call
- *    three layers away.
+ * 2. **No unexpected duplicates, inside the host scope.** The walk over the
+ *    profile's `@deepseek-ai` tree (`hostPackageCopies`) fails on any multi-copy
+ *    package outside the measured-inert set. It is node_modules-anchored, so it
+ *    counts what a bare specifier can actually reach - which is what this
+ *    assertion is about. Duplicates elsewhere are per-package vendoring, a
+ *    dependency compiled into another package's own build, where no specifier can
+ *    resolve the two halves of a crossing apart: the wider
+ *    {@link profileGraphCensus} counts far more names outside this scope than
+ *    inside it, and ADR-0012 carries the figures. Failing on those would train
+ *    readers to skim this guard, and skimming is how the next hoist drift gets
+ *    found the way #138 was: as a broken tool call three layers away.
  *
  * Deliberately NOT asserted: one copy of every row package. The shipped graph
  * does not hold that, does not need to, and ADR-0012 records why.
@@ -236,6 +238,117 @@ export function assertSharedToolRuntimeGraph(profileDir: string): void {
         `IDENTITY_BEARING_CROSSINGS and make the bundle carry them (ADR-0012).`,
     );
   }
+}
+
+/**
+ * The census behind ADR-0012's scope argument: EVERY package root in the
+ * installed profile tree, not just the resolver-visible host ones.
+ *
+ * This walks differently from {@link hostPackageCopies} because the two answer
+ * different questions. That one is resolver-anchored and host-scoped - only a
+ * copy a bare specifier can land on can fork a crossing, and only inside the host
+ * scope are profile and installation copies interchangeable through the fallback
+ * tier - so it is the right shape for the assertion. This census is whole-tree
+ * and all-scope, because ADR-0012 reasons about the installed graph as a whole:
+ * most of its duplicate copies are dependencies compiled into another package's
+ * build output (`next/dist/compiled/zod`), which no specifier can even reach.
+ * The two agree on the host scope and differ over the rest of the tree; ADR-0012
+ * carries the figures, since counts in this file would only age.
+ *
+ * ADR-0012 quotes its output as dated evidence; the suite regenerates it on
+ * every install run, so the numbers have a home that executes instead of a
+ * pipeline a reader has to rebuild by hand.
+ */
+/** One package name that resolves to more than one physical copy. */
+export interface ProfileGraphDuplicate {
+  name: string;
+  copies: number;
+  /** Some copy sits in another package's build output (a vendored bundle). */
+  vendored: boolean;
+  /** Every copy sits in a build output: vendor against vendor. */
+  vendorOnly: boolean;
+}
+
+export interface ProfileGraphCensus {
+  /** Distinct package names found anywhere in the tree. */
+  names: number;
+  /** Names resolving to more than one physical copy, with their classification. */
+  duplicates: ProfileGraphDuplicate[];
+  /** Distinct package names inside the host scope. */
+  hostNames: number;
+}
+
+/** Whether a package copy sits inside another package's compiled build output. */
+function isVendoredCopy(dir: string): boolean {
+  return dir.includes("/dist/compiled/");
+}
+
+/** Count every package root in an installed profile tree. */
+export function profileGraphCensus(profileDir: string): ProfileGraphCensus {
+  const byName = new Map<string, Set<string>>();
+  const queue = [join(profileDir, "node_modules")];
+  const visited = new Set<string>();
+  while (queue.length > 0) {
+    const dir = queue.shift() as string;
+    let real: string;
+    try {
+      real = realpathSync(dir);
+    } catch {
+      continue;
+    }
+    if (visited.has(real)) continue;
+    visited.add(real);
+    const manifest = join(dir, "package.json");
+    if (existsSync(manifest)) {
+      try {
+        const name = (JSON.parse(readFileSync(manifest, "utf8")) as { name?: string }).name;
+        if (name !== undefined) {
+          const at = byName.get(name);
+          if (at === undefined) byName.set(name, new Set([real]));
+          else at.add(real);
+        }
+      } catch {
+        // a malformed manifest is not a package root; keep walking
+      }
+    }
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory() || entry.isSymbolicLink()) queue.push(join(dir, entry.name));
+    }
+  }
+  const duplicates: ProfileGraphCensus["duplicates"] = [];
+  let hostNames = 0;
+  for (const [name, dirs] of byName) {
+    if (name.startsWith("@deepseek-ai/")) hostNames += 1;
+    if (dirs.size < 2) continue;
+    const copies = [...dirs];
+    duplicates.push({
+      name,
+      copies: dirs.size,
+      vendored: copies.some(isVendoredCopy),
+      vendorOnly: copies.every(isVendoredCopy),
+    });
+  }
+  duplicates.sort((a, b) => b.copies - a.copies || a.name.localeCompare(b.name));
+  return { names: byName.size, duplicates, hostNames };
+}
+
+/** One line describing the census, for the install phase log. */
+export function describeProfileGraphCensus(profileDir: string): string {
+  const census = profileGraphCensus(profileDir);
+  const outside = census.duplicates.filter((d) => !d.name.startsWith("@deepseek-ai/"));
+  const vendored = outside.filter((d) => d.vendored);
+  const vendorOnly = outside.filter((d) => d.vendorOnly);
+  return (
+    `profile graph: ${census.names} package names (${census.hostNames} in @deepseek-ai), ` +
+    `${outside.length} duplicated outside the host scope, ${vendored.length} of them vendored ` +
+    `(next/dist/compiled), ${vendorOnly.length} vendor-against-vendor`
+  );
 }
 
 /** Every realpath-distinct copy of each `@deepseek-ai/*` package inside a profile. */
