@@ -280,7 +280,9 @@ function isVendoredCopy(dir: string): boolean {
  * `@deepseek-ai` directory, because the fallback tier substitutes the
  * installation's copy only for names in that scope, so anything else it recorded
  * would be noise. Counts for both are printed by {@link
- * describeProfileGraphCensus} on every install run and carried as dated evidence
+ * describeProfileGraphCensus} - via the paired
+ * {@link assertAndReportHostGraph} - at each of the suite's four installs, and
+ * carried as dated evidence
  * in ADR-0012 - this file states the criterion, never the numbers.
  */
 export function profileGraphCensus(profileDir: string): ProfileGraphCensus {
@@ -339,21 +341,43 @@ export function profileGraphCensus(profileDir: string): ProfileGraphCensus {
 
 /** One line describing the census, for the install phase log. */
 export function describeProfileGraphCensus(profileDir: string): string {
+  // The cost prints with the figures it belongs to: ADR-0012 quotes a duration,
+  // and a duration the line does not report is a number with no producer - which
+  // is how its "about 0.1 s" went stale the moment this line gained a second
+  // walk. `hostPackageCopies` is timed separately because the guard runs it
+  // again moments later; the record's claim covers the line, not the suite.
+  const start = process.hrtime.bigint();
   const census = profileGraphCensus(profileDir);
+  const mid = process.hrtime.bigint();
+  const asserted = hostPackageCopies(profileDir).size;
+  const end = process.hrtime.bigint();
   const outside = census.duplicates.filter((d) => !d.name.startsWith("@deepseek-ai/"));
   const vendored = outside.filter((d) => d.vendored);
   const vendorOnly = outside.filter((d) => d.vendorOnly);
-  // Both host-scope counts print, from their own producers: the census's is a
-  // name filter over the whole tree, the assertion's is the only scope its walk
-  // records at all. Printing the pair is what "31 is a subset of 351" means
-  // operationally - and what an earlier draft had to be told by review.
-  const asserted = hostPackageCopies(profileDir).size;
+  const elapsed = (from: bigint, to: bigint): string => `${Math.round(Number(to - from) / 1e6)}ms`;
   return (
     `profile graph: ${census.names} names whole-tree, ${census.hostNames} in @deepseek-ai ` +
     `(${asserted} from the assertion's host-scoped walk), ${outside.length} duplicated outside ` +
     `that scope, ${vendored.length} of those vendored (next/dist/compiled), ` +
-    `${vendorOnly.length} vendor-against-vendor`
+    `${vendorOnly.length} vendor-against-vendor, census ${elapsed(start, mid)} ` +
+    `+ host walk ${elapsed(mid, end)}`
   );
+}
+
+/**
+ * Guard an installed profile's host graph and report it, as one step.
+ *
+ * The pairing is the point: ADR-0012 says these figures are counted at each of
+ * the suite's installs, and the only way that stays true is if the assertion and
+ * the report cannot be called apart. They had already drifted - the guard ran at
+ * all four installs, the report at one - which is finding #13.
+ *
+ * @param label Prefix identifying which install this is, for the run log.
+ * @param profileDir The installed profile directory (holds `node_modules`).
+ */
+export function assertAndReportHostGraph(label: string, profileDir: string): void {
+  assertSharedToolRuntimeGraph(profileDir);
+  console.log(`${label}: ${describeProfileGraphCensus(profileDir)}`);
 }
 
 /**

@@ -43,8 +43,9 @@ application, naming `profiles/<p>/node_modules/@deepseek-ai/dsh-tools/lib/index.
 The installation reaches the same walk through a second tier: `prepareProfile()`
 calls `healProfilesModuleFallback()`, which walks the running installation's
 dependency graph and materialises it as a symlink farm at
-`$DSH_HOME/profiles/node_modules` (202 entries on a long-lived home, every one
-pointing into the installation). **A row package the profile does not carry
+`$DSH_HOME/profiles/node_modules` — on a long-lived home, 264 top-level entries,
+**202 of them in the `@deepseek-ai` scope** where the substitution can bite, and
+every link resolving into the installation. **A row package the profile does not carry
 therefore resolves to the installation copy through that farm** — which is
 exactly how `dsh-agent-loop` got its own `dsh-tools` while the tools row used the
 profile's. The farm is healed at boot, not at install, so a never-booted home has
@@ -119,8 +120,14 @@ carry the graph it boots rows from. This record picks the third, narrowly.
 
   **That walk stops at `@deepseek-ai/*`, and the limit is deliberate.** The
   figures below come from a second, wider function in the same file —
-  `profileGraphCensus` in `e2e/support/profile.ts`, which the e2e setup prints on
-  every install run (about 0.1 s), so these numbers regenerate instead of ageing.
+  `profileGraphCensus` in `e2e/support/profile.ts`, emitted by
+  `assertAndReportHostGraph` at **each of the suite's four installs** (the shared
+  one and three scratch profiles), labelled with the install it describes. The
+  line carries its own timings, so the cost is a printed figure rather than a
+  remembered one; a first draft said "about 0.1 s" for a one-walk line and went
+  stale when the line gained the host walk. Pairing the report with the assertion
+  is deliberate: they had drifted apart, guard at four installs and report at
+  one.
   They are stated as evidence at this host version, not as invariants, and
   nothing asserts them. A fresh install of the packed bundle holds **351**
   distinct package names, **12** of them multi-copy outside the host scope (`zod`,
@@ -158,6 +165,14 @@ carry the graph it boots rows from. This record picks the third, narrowly.
   same way, kept for the same reason. Any statement that the profile must carry
   "every row package together with the rows that talk to it" is **wrong as a
   general rule** and correct only for the pair above.
+- **Counts name their population.** Every figure in this record is stated with
+  the set it counts over — "12 duplicated outside that scope", "202 of them in
+  the `@deepseek-ai` scope" — because three separate findings here (#8, #11, #14)
+  were measurements that were right about what was counted and loose about the
+  noun, each caught by someone running a different command than the one quoted.
+  A figure whose population is not named in the sentence is a figure a reader
+  cannot re-derive.
+
 - **Shipping the whole host graph is rejected on measurement.** Making
   `@deepseek-ai/dsh-base` a dependency — the "one instance wins everywhere"
   reading of this decision — pulls the native tool packages (`node-pty`,

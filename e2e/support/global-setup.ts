@@ -3,9 +3,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { run } from "./process";
 import {
-  assertSharedToolRuntimeGraph,
+  assertAndReportHostGraph,
   bootProfile,
-  describeProfileGraphCensus,
   scryptValue,
   writeRuntimePatch,
   type BootedProfile,
@@ -90,13 +89,11 @@ export default async function globalSetup(): Promise<void> {
     );
     const profileDir = join(dshHome, "profiles", PROFILE);
     // The bundle has to ship a complete host graph: a partial one splits the
-    // boot across two module instances and kills every tool call (#138).
-    assertSharedToolRuntimeGraph(profileDir);
-    // ADR-0012 quotes whole-tree figures as dated evidence, so the suite
-    // regenerates them on every run (~0.1s) rather than leaving a reader to
-    // rebuild the walk. Nothing asserts them: they describe the graph's shape,
-    // while the guard above decides whether that shape is survivable.
-    console.log(`e2e setup: ${describeProfileGraphCensus(profileDir)}`);
+    // boot across two module instances and kills every tool call (#138). The
+    // census reports through the same call so the guard and the figures cannot
+    // drift apart again (finding #13); ADR-0012 quotes those figures as dated
+    // evidence, and asserts nothing about them.
+    assertAndReportHostGraph("e2e setup (shared install)", profileDir);
 
     // 3. Configure the auth credential pair in the profile's patch layer
     // (ADR-0008): the runtime row reads it and forwards it to the Next child.

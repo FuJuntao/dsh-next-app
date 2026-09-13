@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import { test as base, expect } from "@playwright/test";
 import {
-  assertSharedToolRuntimeGraph,
+  assertAndReportHostGraph,
   bootProfile,
   scryptValue,
   writeRuntimePatch,
@@ -51,8 +51,9 @@ async function installScratchInstance(instanceName: string): Promise<BootedProfi
     user: state.auth.user,
     passwordHash: scryptValue(state.auth.password),
   });
-  // The same host-graph composition guard as the shared boot (#138).
-  assertSharedToolRuntimeGraph(join(home, "profiles", PROFILE));
+  // The same host-graph guard *and* report as the shared boot (#138, #13): the
+  // record's figures are counted at each install, so this call is the pair.
+  assertAndReportHostGraph(`e2e scratch install ${instance}`, join(home, "profiles", PROFILE));
   // Every scratch instance defaults its sessions onto the run's scripted
   // provider (task #135 commit 2), like the shared boot.
   writeFileSync(join(home, "settings.yaml"), scriptedSettingsYaml(state.scriptedModel.baseURL));
