@@ -28,10 +28,12 @@
   },
   "dependencies": {
     "@base-ui/react": "catalog:",
+    "@deepseek-ai/dsh-agent-loop": "catalog:",
     "@deepseek-ai/dsh-attachment": "catalog:",
     "@deepseek-ai/dsh-file-reference": "catalog:",
     "@deepseek-ai/dsh-host-apiproxy": "catalog:",
     "@deepseek-ai/dsh-session": "catalog:",
+    "@deepseek-ai/dsh-tools": "catalog:",
     "@deepseek-ai/schemastery": "catalog:",
     "@lexical/react": "catalog:",
     "@remixicon/react": "catalog:",

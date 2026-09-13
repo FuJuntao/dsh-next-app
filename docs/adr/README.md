@@ -25,3 +25,4 @@ records that predate the reset refer to that numbering.
 | [0009](0009-serving-config-cordis.md) | Serving parameters (host, port) as cordis row config on the runtime row, flags override | Accepted |
 | [0010](0010-bridge-carrier-reuse.md) | Unix-socket bridge over the shipped fetch carrier (supersedes ADR-0003's framing and connection model) | Accepted |
 | [0011](0011-file-discovery-next-side.md) | @-reference discovery walks the filesystem Next-side, fenced per session | Accepted |
+| [0012](0012-profile-carried-tool-runtime-graph.md) | The profile carries the tool-runtime pair — single-instance discipline is bounded to identity-bearing crossings (supersedes ADR-0002's peer-resolution clause) | Accepted |
