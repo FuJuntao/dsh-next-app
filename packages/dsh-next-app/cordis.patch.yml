@@ -7,6 +7,22 @@
 # only what the gateway's service chain requires, not the web-app transport
 # layer (the browser roster and the transport rows are the UI stories').
 #
+# A row's package resolves by name from the profile's own node_modules BEFORE
+# the user's dsh installation - an upstream resolution order this layer depends
+# on without controlling it, which ADR-0012 names as a dependency, not a fact.
+# That only costs correctness where a value crosses packages by module
+# identity, and the one such crossing in this boot is the tool runtime:
+# `dsh-agent-loop` registers the scheduler on the `@deepseek-ai/dsh-tools` copy
+# it imports and reads it back through a module-scoped Symbol, so the two halves
+# must land in one tree - held apart, the read is `undefined` and every tool
+# call dies (#138). Both are therefore dependencies of this bundle, not peers:
+# the profile install runs with autoInstallPeers off and a peer never lands.
+#
+# Not a general rule, and deliberately not the whole host graph: other
+# duplicates in the profile cost bytes, not behaviour (ADR-0012; the e2e
+# host-graph guard holds the line on new ones). Keying that slot with a
+# registered symbol upstream would retire the constraint entirely (#141).
+#
 # A patch replaces the targeted row's whole `config`, so each row below
 # restates every key it owns; these rows carry no config of their own.
 
