@@ -281,9 +281,9 @@ function isVendoredCopy(dir: string): boolean {
  * installation's copy only for names in that scope, so anything else it recorded
  * would be noise. Counts for both are printed by {@link
  * describeProfileGraphCensus} - via the paired
- * {@link assertAndReportHostGraph} - at each of the suite's four installs, and
- * carried as dated evidence
- * in ADR-0012 - this file states the criterion, never the numbers.
+ * {@link assertAndReportHostGraph} - at each of the suite's installs - and
+ * carried as dated evidence in ADR-0012; this file states the criterion, never
+ * the numbers.
  */
 export function profileGraphCensus(profileDir: string): ProfileGraphCensus {
   const byName = new Map<string, Set<string>>();
