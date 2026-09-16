@@ -460,6 +460,13 @@ test("whole-group fold: the header folds, and reopening lands on page 1", async 
   await expect(fold).toHaveAttribute("aria-expanded", "true");
   await expect(fold).toHaveAttribute("title", ALPHA_CWD);
   await expect(fold).toContainText(String(pages.flat().length));
+  // The packet's Copy rule pinned on the COMPUTED name (review round 3 #1):
+  // "basename 13 sessions", spaced - toHaveAccessibleName runs the browser's
+  // own accname algorithm, so the single-text-node shape cannot silently
+  // regress to the glued "13sessions" the multi-child JSX produced.
+  await expect(fold).toHaveAccessibleName(
+    (ALPHA_CWD.split("/").at(-1) ?? "") + " " + pages.flat().length + " sessions",
+  );
 
   // Park on the LAST page, so a reopen-to-page-1 that actually reset is
   // provable across more than one step.

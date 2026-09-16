@@ -260,9 +260,10 @@ function RowGroup({
           <span aria-hidden="true" className="ml-auto shrink-0 tabular-nums">
             {group.rows.length}
           </span>
-          <span className="sr-only">
-            {group.rows.length} {group.rows.length === 1 ? "session" : "sessions"}
-          </span>
+          {/* One text node: `{n} {unit}` as separate children drops the
+              interstitial space from the computed accname (review #1), so
+              the digits glue to the word - "13sessions". */}
+          <span className="sr-only">{`${group.rows.length} ${group.rows.length === 1 ? "session" : "sessions"}`}</span>
         </button>
       )}
       {!folded && (
