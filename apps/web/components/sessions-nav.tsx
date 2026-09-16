@@ -192,10 +192,13 @@ function RowNode({
  * Pager control styling: the list's own visual language (sidebar-accent
  * hover and focus ring, like every row) at a quiet tone, so the control
  * reads as a line of the list rather than a stray button from the main
- * surface's palette.
+ * surface's palette. The geometry matches a row exactly: same p-2/gap-2,
+ * and the wider chevron carries -mx-1 so it occupies the 6px status-dot
+ * slot - the label then starts on the same x as every session title.
  */
 const PAGER_BUTTON_CLASS =
-  "flex h-7 items-center gap-1 rounded-sm px-2 text-xs text-sidebar-foreground/60 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring";
+  "flex h-7 items-center gap-2 rounded-sm px-2 text-xs text-sidebar-foreground/60 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring";
+const PAGER_ICON_CLASS = "size-3.5 -mx-1 shrink-0";
 
 /**
  * One arranged group: a foldable workspace header, then the current page's
@@ -283,7 +286,7 @@ function RowGroup({
                         onClick={() => onPageChange(Math.max(1, paged.page - 1))}
                         className={PAGER_BUTTON_CLASS}
                       >
-                        <RiArrowUpSLine aria-hidden="true" className="size-3.5 shrink-0" />
+                        <RiArrowUpSLine aria-hidden="true" className={PAGER_ICON_CLASS} />
                         <span>Show less</span>
                       </button>
                     )}
@@ -293,7 +296,7 @@ function RowGroup({
                         onClick={() => onPageChange(paged.page + 1)}
                         className={PAGER_BUTTON_CLASS}
                       >
-                        <RiArrowDownSLine aria-hidden="true" className="size-3.5 shrink-0" />
+                        <RiArrowDownSLine aria-hidden="true" className={PAGER_ICON_CLASS} />
                         <span>{`Show ${paged.moreCount} more`}</span>
                       </button>
                     )}
