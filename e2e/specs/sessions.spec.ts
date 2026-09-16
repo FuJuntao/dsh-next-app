@@ -244,6 +244,28 @@ async function withWorkspaceGrouping(page: Page): Promise<void> {
   ]);
 }
 
+/**
+ * The PLATFORM accessible name of the button whose name starts with
+ * `namePrefix`, read from Chromium's own accessibility tree over CDP - the
+ * computation assistive technology consumes. Playwright's toHaveAccessibleName
+ * / ariaSnapshot run a SEPARATE accname implementation that inserts a
+ * separator between text nodes, so they pass the glued multi-child markup
+ * this guards (review round 4); the CDP tree is the faithful source.
+ */
+async function platformButtonName(page: Page, namePrefix: string): Promise<string | undefined> {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const { nodes } = (await cdp.send("Accessibility.getFullAXTree")) as {
+      nodes: { role?: { value?: string }; name?: { value?: string } }[];
+    };
+    return nodes.find(
+      (n) => n.role?.value === "button" && (n.name?.value ?? "").startsWith(namePrefix),
+    )?.name?.value;
+  } finally {
+    await cdp.detach();
+  }
+}
+
 test("seeded sessions render with their titles; the blank one shows New Session", async ({
   page,
 }) => {
@@ -460,12 +482,17 @@ test("whole-group fold: the header folds, and reopening lands on page 1", async 
   await expect(fold).toHaveAttribute("aria-expanded", "true");
   await expect(fold).toHaveAttribute("title", ALPHA_CWD);
   await expect(fold).toContainText(String(pages.flat().length));
-  // The packet's Copy rule pinned on the COMPUTED name (review round 3 #1):
-  // "basename 13 sessions", spaced - toHaveAccessibleName runs the browser's
-  // own accname algorithm, so the single-text-node shape cannot silently
-  // regress to the glued "13sessions" the multi-child JSX produced.
-  await expect(fold).toHaveAccessibleName(
-    (ALPHA_CWD.split("/").at(-1) ?? "") + " " + pages.flat().length + " sessions",
+  // The packet's Copy rule pinned on the PLATFORM accname (review round 4):
+  // toHaveAccessibleName was no guard - Playwright's own accname inserts a
+  // space between the two text nodes and passes the glued markup, while
+  // Chromium's computation (what AT hears) glues it. The CDP tree is the
+  // faithful read, and the single-text-node shape is pinned structurally.
+  const basename = ALPHA_CWD.split("/").at(-1) ?? "";
+  await expect(platformButtonName(page, basename)).resolves.toBe(
+    basename + " " + pages.flat().length + " sessions",
+  );
+  await expect(fold.locator("span.sr-only").evaluate((el) => el.childNodes.length)).resolves.toBe(
+    1,
   );
 
   // Park on the LAST page, so a reopen-to-page-1 that actually reset is
