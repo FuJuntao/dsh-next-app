@@ -219,7 +219,7 @@ function RowGroup({
         <button
           type="button"
           aria-expanded={!folded}
-          data-testid={"session-group-fold-" + group.key}
+          data-testid={"session-fold-" + group.key}
           title={group.detail}
           onClick={onFoldToggle}
           className="flex w-full items-center gap-1 rounded-sm px-2 pt-2 pb-1 text-left text-2xs font-medium text-sidebar-foreground/50 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground"
