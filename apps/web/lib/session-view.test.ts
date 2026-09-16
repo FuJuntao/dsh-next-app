@@ -9,7 +9,14 @@
  * the server/client determinism depends on (recency desc, id tie-break).
  */
 import { describe, expect, it } from "vitest";
-import { arrangeSessions, DEFAULT_GROUP } from "./session-view";
+import {
+  DEFAULT_GROUP,
+  SESSION_PAGE_SIZE,
+  arrangeSessions,
+  sessionPage,
+  sessionPageOf,
+} from "./session-view";
+import type { SessionRow } from "./session-view";
 import type { Session } from "./sessions";
 
 /** One row with the noise fields filled; tests override what they read. */
@@ -123,5 +130,93 @@ describe("arrangeSessions - ordering contract", () => {
     expect(groups).toEqual([
       { key: "", label: undefined, rows: [{ session: row({ id: "a" }), children: [] }] },
     ]);
+  });
+});
+
+describe("sessionPage - windowing top-level rows", () => {
+  // 12 parents "p0".."p11" (recency-ordered by arrangeSessions, so build
+  // rows straight through it), p1 carrying a nested child plus a deeper
+  // grandchild: the window must treat that whole subtree as one unit.
+  const sessions: Session[] = Array.from({ length: 12 }, (_, i) =>
+    row({ id: "p" + i, updatedAt: 1200 - i * 10 }),
+  );
+  sessions.push(
+    row({ id: "c1", parentSessionId: "p1", updatedAt: 50 }),
+    row({ id: "g1", parentSessionId: "c1", updatedAt: 40 }),
+  );
+  const groups = arrangeSessions(sessions, "none");
+  const rows = groups[0]?.rows as SessionRow[];
+
+  it("cuts at the 5-row budget, newest first", () => {
+    expect(SESSION_PAGE_SIZE).toBe(5);
+    expect(rows).toHaveLength(12);
+    const page = sessionPage(rows, 1);
+    expect(page.rows.map((r) => r.session.id)).toEqual(["p0", "p1", "p2", "p3", "p4"]);
+    expect(page.pageCount).toBe(3);
+    expect(page.moreCount).toBe(5);
+  });
+
+  it("keeps a nested lineage on its parent's page across the cut", () => {
+    // p1 (with child c1 and grandchild g1) sits inside page 1's window;
+    // c1/g1 consume no budget - the page still carries 5 top-level rows,
+    // and c1 never appears as a top-level row of page 2.
+    const page = sessionPage(rows, 1);
+    expect(page.rows.map((r) => r.session.id)).toContain("p1");
+    expect(page.rows[1]?.children.map((r) => r.session.id)).toEqual(["c1"]);
+    expect(page.rows[1]?.children[0]?.children.map((r) => r.session.id)).toEqual(["g1"]);
+    const page2 = sessionPage(rows, 2);
+    expect(page2.rows.map((r) => r.session.id)).toEqual(["p5", "p6", "p7", "p8", "p9"]);
+  });
+
+  it("reports the hidden-row budget for Show more, clamped at the last page", () => {
+    // moreCount = min(5, hidden past the window): page 1 has 12-5=7 hidden
+    // (capped to 5), page 2 has 12-10=2, the last page has nothing left.
+    expect(sessionPage(rows, 1).moreCount).toBe(5);
+    expect(sessionPage(rows, 2).moreCount).toBe(2);
+    expect(sessionPage(rows, 3).rows.map((r) => r.session.id)).toEqual(["p10", "p11"]);
+    expect(sessionPage(rows, 3).moreCount).toBe(0);
+  });
+
+  it("clamps out-of-range pages so server and client never disagree", () => {
+    expect(sessionPage(rows, 0).page).toBe(1);
+    expect(sessionPage(rows, 99).page).toBe(3);
+    expect(sessionPage(rows, Number.NaN).page).toBe(1);
+    expect(sessionPage(rows, 2.7).page).toBe(2);
+    const empty = sessionPage([], 4);
+    expect(empty.page).toBe(1);
+    expect(empty.pageCount).toBe(1);
+    expect(empty.rows).toEqual([]);
+    expect(empty.moreCount).toBe(0);
+  });
+
+  it("shows no controls for a group within budget", () => {
+    const small = sessionPage(rows.slice(0, 5), 1);
+    expect(small.moreCount).toBe(0);
+    expect(small.pageCount).toBe(1);
+    const exact = sessionPage(rows.slice(0, 5), 1);
+    expect(exact.rows).toHaveLength(5);
+  });
+});
+
+describe("sessionPageOf - the page holding a session", () => {
+  const sessions: Session[] = Array.from({ length: 7 }, (_, i) =>
+    row({ id: "p" + i, updatedAt: 700 - i * 10 }),
+  );
+  sessions.push(row({ id: "c6", parentSessionId: "p6", updatedAt: 50 }));
+  const rows = arrangeSessions(sessions, "none")[0]?.rows as SessionRow[];
+
+  it("finds the 1-based window of a top-level row", () => {
+    expect(sessionPageOf(rows, "p0")).toBe(1);
+    expect(sessionPageOf(rows, "p4")).toBe(1);
+    expect(sessionPageOf(rows, "p5")).toBe(2);
+    expect(sessionPageOf(rows, "p6")).toBe(2);
+  });
+
+  it("maps a nested child to its parent's page", () => {
+    expect(sessionPageOf(rows, "c6")).toBe(2);
+  });
+
+  it("is undefined for a session the group does not hold", () => {
+    expect(sessionPageOf(rows, "ghost")).toBeUndefined();
   });
 });
