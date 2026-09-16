@@ -1,7 +1,7 @@
 # docs/assets
 
-UI captures attached to pull-request bodies. One directory per story
-(`149/`), PNGs only.
+UI captures attached to pull-request bodies. One directory per story,
+PNGs only.
 
 - **Purpose:** a PR body embeds these to show reviewers the rendered
   state a diff produces; they are review artifacts, not documentation
