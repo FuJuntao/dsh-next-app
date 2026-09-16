@@ -33,7 +33,13 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { RiCloudOffLine, RiFolderLine, RiFolderOpenLine } from "@remixicon/react";
+import {
+  RiArrowDownSLine,
+  RiArrowUpSLine,
+  RiCloudOffLine,
+  RiFolderLine,
+  RiFolderOpenLine,
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -183,6 +189,15 @@ function RowNode({
 }
 
 /**
+ * Pager control styling: the list's own visual language (sidebar-accent
+ * hover and focus ring, like every row) at a quiet tone, so the control
+ * reads as a line of the list rather than a stray button from the main
+ * surface's palette.
+ */
+const PAGER_BUTTON_CLASS =
+  "flex h-7 items-center gap-1 rounded-sm px-2 text-xs text-sidebar-foreground/60 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring";
+
+/**
  * One arranged group: a foldable workspace header, then the current page's
  * parents with their nested children, then the pager controls. An unlabelled
  * group is the flat view - no header, no fold, no page budget (#148
@@ -251,33 +266,41 @@ function RowGroup({
                 onNavigate={onNavigate}
               />
             ))}
+            {pagedGroup &&
+              (paged.moreCount > 0 || paged.page > 1) && (
+                // Pager row (AC 2): Show less steps back exactly one page,
+                // diverging from the built-in's collapse-all-the-way-out; the
+                // controls vanish at page 1 / when everything already shows,
+                // and a group of <=5 rows never renders this row at all. It
+                // lives INSIDE the list as one more item - same indent, same
+                // hover shape - and the directional chevrons carry the state
+                // beyond color (and give the tap target a reason to exist).
+                <SidebarMenuItem data-testid={"session-pager-" + group.key}>
+                  <div className="flex items-center gap-1">
+                    {paged.page > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => onPageChange(Math.max(1, paged.page - 1))}
+                        className={PAGER_BUTTON_CLASS}
+                      >
+                        <RiArrowUpSLine aria-hidden="true" className="size-3.5 shrink-0" />
+                        <span>Show less</span>
+                      </button>
+                    )}
+                    {paged.moreCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => onPageChange(paged.page + 1)}
+                        className={PAGER_BUTTON_CLASS}
+                      >
+                        <RiArrowDownSLine aria-hidden="true" className="size-3.5 shrink-0" />
+                        <span>{`Show ${paged.moreCount} more`}</span>
+                      </button>
+                    )}
+                  </div>
+                </SidebarMenuItem>
+              )}
           </SidebarMenu>
-          {pagedGroup &&
-            (paged.moreCount > 0 || paged.page > 1) && (
-              // Pager row (AC 2): Show less steps back exactly one page,
-              // diverging from the built-in's collapse-all-the-way-out; the
-              // controls vanish at page 1 / when everything already shows,
-              // and a group of <=5 rows never renders this row at all.
-              <div
-                data-testid={"session-pager-" + group.key}
-                className="flex items-center gap-1 py-1 pl-4"
-              >
-                {paged.page > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onPageChange(Math.max(1, paged.page - 1))}
-                  >
-                    Show less
-                  </Button>
-                )}
-                {paged.moreCount > 0 && (
-                  <Button variant="ghost" size="sm" onClick={() => onPageChange(paged.page + 1)}>
-                    {`Show ${paged.moreCount} more`}
-                  </Button>
-                )}
-              </div>
-            )}
         </>
       )}
     </div>
