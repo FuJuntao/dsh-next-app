@@ -237,7 +237,10 @@ function RowGroup({
         <button
           type="button"
           aria-expanded={!folded}
-          aria-controls={"session-list-" + group.key}
+          // The reference resolves only while the list is rendered: folded,
+          // the group shows just this header and the id is not in the
+          // document (ARIA idrefs must point at defined ids; review #2).
+          aria-controls={folded ? undefined : "session-list-" + group.key}
           data-testid={"session-fold-" + group.key}
           title={group.detail}
           onClick={onFoldToggle}
