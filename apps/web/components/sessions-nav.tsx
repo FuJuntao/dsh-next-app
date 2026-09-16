@@ -18,12 +18,22 @@
  * rows (AC 6). Rows order by last activity - the session.list wire order;
  * grouping is the one user choice (revised scope: recency covers what a
  * sort control added, so it was dropped before review).
+ *
+ * Fold and paging (story #148 task #149): every workspace group is headed
+ * by a toggle button that folds the whole group, and its window shows at
+ * most SESSION_PAGE_SIZE top-level rows with Show {n} more / Show less
+ * stepping between pages. Both states live in component state keyed by the
+ * group's cwd - ephemeral by design (AC 5): they survive client-side
+ * navigation, reset on a full reload, and never enter the prefs cookie.
+ * The window itself is cut by the pure sessionPage helper, so the folded/
+ * paged arrangement is what the server paints and hydration matches (AC 6);
+ * the page seeded for the active session keeps a deep link honest too.
  */
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { RiCloudOffLine, RiFolderLine } from "@remixicon/react";
+import { RiCloudOffLine, RiFolderLine, RiFolderOpenLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -47,6 +57,8 @@ import {
   DEFAULT_GROUP,
   arrangeSessions,
   formatRelativeTime,
+  sessionPage,
+  sessionPageOf,
   type SessionGroup,
   type SessionGroupMode,
   type SessionRow,
@@ -170,42 +182,132 @@ function RowNode({
   );
 }
 
-/** One arranged group: optional workspace header, parents then nested children. */
+/**
+ * One arranged group: a foldable workspace header, then the current page's
+ * parents with their nested children, then the pager controls. An unlabelled
+ * group is the flat view - no header, no fold, no page budget (#148
+ * non-goal), so it renders every row.
+ */
 function RowGroup({
   group,
+  folded,
+  page,
   activePathname,
   onNavigate,
+  onFoldToggle,
+  onPageChange,
 }: {
   group: SessionGroup;
+  folded: boolean;
+  /** The stored 1-based page; sessionPage clamps it against the live rows. */
+  page: number;
   activePathname: string;
   onNavigate: () => void;
+  onFoldToggle: () => void;
+  onPageChange: (page: number) => void;
 }) {
+  const paged = sessionPage(group.rows, page);
+  const pagedGroup = group.label !== undefined;
   return (
     <div data-testid={"session-group-" + group.key}>
-      {group.label !== undefined && (
-        <div
-          className="flex items-center gap-1 px-2 pt-2 pb-1 text-2xs font-medium text-sidebar-foreground/50"
+      {pagedGroup && (
+        // The whole header row is the tap target (AC 7): the folder glyph is
+        // the persistent expand-state chevron - hover-revealed affordances
+        // are untappable on touch, which is where we deliberately diverge
+        // from the built-in nav's hover chevron. Reopening returns to
+        // page 1 (AC 3), so the toggle never preserves a page across folds.
+        <button
+          type="button"
+          aria-expanded={!folded}
+          data-testid={"session-group-fold-" + group.key}
           title={group.detail}
+          onClick={onFoldToggle}
+          className="flex w-full items-center gap-1 rounded-sm px-2 pt-2 pb-1 text-left text-2xs font-medium text-sidebar-foreground/50 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground"
         >
-          <RiFolderLine aria-hidden="true" className="size-3 shrink-0" />
+          {folded ? (
+            <RiFolderLine aria-hidden="true" className="size-3 shrink-0" />
+          ) : (
+            <RiFolderOpenLine aria-hidden="true" className="size-3 shrink-0" />
+          )}
           <span className="truncate">{group.label}</span>
-        </div>
+          {/* Session count beside the name (AC 3): the top-level rows the
+              pager does its budget arithmetic on, as in the built-in nav. */}
+          <span className="ml-auto shrink-0 tabular-nums">{group.rows.length}</span>
+        </button>
       )}
-      {/* In the grouped view the rows indent beneath the folder label so
-          the hierarchy reads as folder -> sessions (the flat view stays
-          flush with the rest of the nav). */}
-      <SidebarMenu className={group.label !== undefined ? "pl-4" : undefined}>
-        {group.rows.map((row) => (
-          <RowNode
-            key={row.session.id}
-            row={row}
-            activePathname={activePathname}
-            onNavigate={onNavigate}
-          />
-        ))}
-      </SidebarMenu>
+      {!folded && (
+        <>
+          {/* In the grouped view the rows indent beneath the folder label so
+              the hierarchy reads as folder -> sessions (the flat view stays
+              flush with the rest of the nav). The flat view is also NOT
+              windowed (#148 non-goal): the budget applies to grouped
+              headers only, so the uncapped rows render from group.rows. */}
+          <SidebarMenu className={pagedGroup ? "pl-4" : undefined}>
+            {(pagedGroup ? paged.rows : group.rows).map((row) => (
+              <RowNode
+                key={row.session.id}
+                row={row}
+                activePathname={activePathname}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </SidebarMenu>
+          {pagedGroup &&
+            (paged.moreCount > 0 || paged.page > 1) && (
+              // Pager row (AC 2): Show less steps back exactly one page,
+              // diverging from the built-in's collapse-all-the-way-out; the
+              // controls vanish at page 1 / when everything already shows,
+              // and a group of <=5 rows never renders this row at all.
+              <div
+                data-testid={"session-pager-" + group.key}
+                className="flex items-center gap-1 py-1 pl-4"
+              >
+                {paged.page > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onPageChange(Math.max(1, paged.page - 1))}
+                  >
+                    Show less
+                  </Button>
+                )}
+                {paged.moreCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => onPageChange(paged.page + 1)}>
+                    {`Show ${paged.moreCount} more`}
+                  </Button>
+                )}
+              </div>
+            )}
+        </>
+      )}
     </div>
   );
+}
+
+/** The session id a pathname points at, or undefined off a session page. */
+function sessionIdFromPathname(pathname: string): string | undefined {
+  const prefix = "/sessions/";
+  return pathname.startsWith(prefix) ? pathname.slice(prefix.length) || undefined : undefined;
+}
+
+/**
+ * The hydration seed (AC 4 + AC 6): the page holding the active session is
+ * computed before first paint, so a deep link server-renders the right page
+ * instead of patching it in after hydration. Everything else starts unfolded
+ * at page 1 - fold/page state is never persisted, and a full reload re-seeds
+ * from the URL and nothing else (AC 5).
+ */
+function activeSeedPages(
+  groups: SessionGroup[],
+  activeId: string | undefined,
+): Record<string, number> {
+  if (activeId === undefined) return {};
+  for (const g of groups) {
+    if (g.label === undefined) continue; // the flat view is not paged (non-goal)
+    const page = sessionPageOf(g.rows, activeId);
+    if (page !== undefined) return page > 1 ? { [g.key]: page } : {};
+  }
+  return {};
 }
 
 /**
@@ -241,6 +343,58 @@ export function SessionsNav({
     });
     return arrangeSessions(rows, group);
   }, [sessions, group, navVersion]);
+
+  // Fold and page state, keyed by the group key (the cwd string), not the
+  // index: groups reorder as activity arrives and index-keyed state would
+  // misattribute pages (AC 5). Ephemeral component state - it survives
+  // client-side navigation, resets on a full reload, and never reaches the
+  // prefs cookie. The Ungrouped bucket shares key "" with the flat view;
+  // the label check below makes that collision inert (the flat view has no
+  // controls to key).
+  const [foldedKeys, setFoldedKeys] = useState<Record<string, boolean>>({});
+  const activeId = sessionIdFromPathname(pathname);
+  const [pages, setPages] = useState<Record<string, number>>(() =>
+    activeSeedPages(groups, activeId),
+  );
+
+  const setPage = (key: string, page: number): void =>
+    setPages((m) => (m[key] === page ? m : { ...m, [key]: page }));
+  const toggleFold = (key: string): void => {
+    setFoldedKeys((m) => ({ ...m, [key]: !m[key] }));
+    // Reopening returns to page 1 (AC 3); resetting on the way out is the
+    // same observable state (a folded group shows no window).
+    setPages((m) => (m[key] === undefined || m[key] === 1 ? m : { ...m, [key]: 1 }));
+  };
+
+  // Active-session reveal (AC 4), once per active-session change: unfold
+  // the holding group and jump to its page. A later manual page move is
+  // never yanked back.
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
+  useEffect(() => {
+    if (activeId === undefined) return;
+    for (const g of groupsRef.current) {
+      if (g.label === undefined) continue;
+      const page = sessionPageOf(g.rows, activeId);
+      if (page === undefined) continue;
+      setFoldedKeys((m) => (m[g.key] ? { ...m, [g.key]: false } : m));
+      setPages((m) => (m[g.key] === page ? m : { ...m, [g.key]: page }));
+      break;
+    }
+  }, [activeId]);
+
+  // The scroll half of the reveal, after the jump's re-render: the row only
+  // exists once its page is painted, so this retries each commit until it
+  // appears - then block "nearest" is the "skip when already in view" rule
+  // for free (it scrolls nothing when the element is fully visible).
+  const scrolledFor = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (activeId === undefined || scrolledFor.current === activeId) return;
+    const row = document.querySelector('[data-session-id="' + activeId + '"]');
+    if (row === null) return;
+    scrolledFor.current = activeId;
+    row.scrollIntoView({ block: "nearest" });
+  }, [activeId, groups, foldedKeys, pages]);
 
   if (sessions.status === "unavailable") {
     return (
@@ -294,9 +448,21 @@ export function SessionsNav({
           />
         </span>
       </SidebarGroupLabel>
-      {groups.map((g) => (
-        <RowGroup key={g.key} group={g} activePathname={pathname} onNavigate={navigate} />
-      ))}
+      {groups.map((g) => {
+        const pagedGroup = g.label !== undefined;
+        return (
+          <RowGroup
+            key={g.key}
+            group={g}
+            folded={pagedGroup && foldedKeys[g.key] === true}
+            page={pages[g.key] ?? 1}
+            activePathname={pathname}
+            onNavigate={navigate}
+            onFoldToggle={() => toggleFold(g.key)}
+            onPageChange={(page) => setPage(g.key, page)}
+          />
+        );
+      })}
     </SidebarGroup>
   );
 }
