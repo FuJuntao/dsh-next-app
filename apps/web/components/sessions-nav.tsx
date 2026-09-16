@@ -237,6 +237,7 @@ function RowGroup({
         <button
           type="button"
           aria-expanded={!folded}
+          aria-controls={"session-list-" + group.key}
           data-testid={"session-fold-" + group.key}
           title={group.detail}
           onClick={onFoldToggle}
@@ -249,8 +250,16 @@ function RowGroup({
           )}
           <span className="truncate">{group.label}</span>
           {/* Session count beside the name (AC 3): the top-level rows the
-              pager does its budget arithmetic on, as in the built-in nav. */}
-          <span className="ml-auto shrink-0 tabular-nums">{group.rows.length}</span>
+              pager does its budget arithmetic on, as in the built-in nav.
+              The visible digit is aria-hidden and a screen-reader span
+              carries it with its unit, so the disclosure control's name
+              ends "... 13 sessions", never a bare number (review #5). */}
+          <span aria-hidden="true" className="ml-auto shrink-0 tabular-nums">
+            {group.rows.length}
+          </span>
+          <span className="sr-only">
+            {group.rows.length} {group.rows.length === 1 ? "session" : "sessions"}
+          </span>
         </button>
       )}
       {!folded && (
@@ -260,7 +269,7 @@ function RowGroup({
               flush with the rest of the nav). The flat view is also NOT
               windowed (#148 non-goal): the budget applies to grouped
               headers only, so the uncapped rows render from group.rows. */}
-          <SidebarMenu className={pagedGroup ? "pl-4" : undefined}>
+          <SidebarMenu id={"session-list-" + group.key} className={pagedGroup ? "pl-4" : undefined}>
             {(pagedGroup ? paged.rows : group.rows).map((row) => (
               <RowNode
                 key={row.session.id}
