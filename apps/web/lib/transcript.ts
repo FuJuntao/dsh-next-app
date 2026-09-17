@@ -338,14 +338,17 @@ export interface TranscriptState {
   /** The `turn/start` time of that turn: the tail's live line reads it so
    * "Working" also says how long the wait has been (null while idle). */
   runningSince: number | null;
-  /** True only when the most recent settled turn ended ABORTED with no newer
-   * turn opened after it: the driver parked its inbox with no wake latched,
-   * which is the one host state that strands pending work (#146's Stop). A
-   * `completed` end auto-resumes the inbox, so it must NEVER count as
-   * stranded; this flag is what keeps the handback from stealing a
-   * mid-resume follow-up in the frames between that end and the next start.
-   * Set on an aborted `turn/end`, cleared on any `turn/start`. */
-  parkedAborted: boolean;
+  /** True when the most recent settled turn PARKED the inbox: it ended in a
+   * state that latches no wake and opened no newer turn, so the driver is idle
+   * while pending work is still held - what #146 hands back. `aborted` (the
+   * Stop) and `error` both qualify: each exits `turn()` by THROWING, so
+   * `kick()`'s loop breaks and its `finally` re-wakes only if a wake was
+   * already latched - which a mid-turn steer never latches. A `completed` end
+   * is NOT parking: `turn()` returns true while the inbox has pending work and
+   * resumes it, so draining there would steal a follow-up in the frames before
+   * the resuming `turn/start` - and the `not-found` arbiter cannot catch it,
+   * because the item is genuinely still pending. Cleared by any `turn/start`. */
+  parkedStranded: boolean;
   /** Latest `session/subscribed.lastSeq` control value, once seen. */
   subscribedLastSeq: number | null;
   pending: PendingCard[];
@@ -364,7 +367,7 @@ export function createTranscript(): TranscriptState {
     hasMore: false,
     runningTurn: null,
     runningSince: null,
-    parkedAborted: false,
+    parkedStranded: false,
     subscribedLastSeq: null,
     pending: [],
     queue: [],
@@ -809,7 +812,7 @@ export function foldEvent(
       // A fresh turn also ends any earlier parked-aborted stranding.
       state.runningTurn = data["turn"] as number;
       state.runningSince = event.time;
-      state.parkedAborted = false;
+      state.parkedStranded = false;
       break;
     }
     case "turn/end": {
@@ -850,11 +853,16 @@ export function foldEvent(
         state.runningTurn = null;
         state.runningSince = null;
       }
-      // Only the ABORTED settle parks the inbox with nothing coming back: a
-      // completed/max-tokens end auto-resumes pending work (the loop's own
-      // `hasPending` check), so it must never read as stranded. #146's scope
-      // is the Stop, and this flag is precisely that.
-      state.parkedAborted = mark.state === "aborted";
+      // The settles that PARK, i.e. exit `turn()` by throwing so `kick()`'s
+      // finally only re-wakes a latched wake (a mid-turn steer latches none):
+      // the Stop's `aborted`, and `error` (its catch calls `throwError`, which
+      // emits `agent/error` and throws). `completed`/`max-tokens`/`interrupted`
+      // instead fall through to the loop's own `hasPending` check and resume,
+      // so they must never read as stranded.
+      // `blocked` also returns without resuming, but no scenario produces a
+      // `turn/end{blocked}` with work still parked here, so it is deliberately
+      // not claimed - see the open question recorded on #146.
+      state.parkedStranded = mark.state === "aborted" || mark.state === "error";
       break;
     }
     case "approval/asked": {
@@ -1119,16 +1127,16 @@ export function foldDownlinkEvent(
  * FIFO as the snapshot delivered it (task #147 settled AC 3's "oldest
  * first" as this order: the sequence the stopped loop would have run).
  *
- * `parkedAborted` is the load-bearing half. "No turn open" alone is NOT
+ * `parkedStranded` is the load-bearing half. "No turn open" alone is NOT
  * enough: after a `completed` end the driver immediately resumes a pending
- * follow-up, and in the frames before that resuming `turn/start` lands a
- * naive read would drain a message that is on its way to running - the
- * not-found arbiter cannot catch it, because the item is still genuinely
- * pending. Only an aborted settle (the Stop) strands work with no wake
- * latched, so only that settles `parkedAborted`.
+ * follow-up, and in the frames before that resuming `turn/start` lands a naive
+ * read would drain a message that is on its way to running - the not-found
+ * arbiter cannot catch it, because the item is still genuinely pending. The
+ * settles that park are `aborted` and `error`, the two that leave `turn()` by
+ * throwing with no wake latched; a mid-turn steer latches none for either.
  */
 export function strandedWork(state: TranscriptState): QueuedItem[] {
-  if (state.runningTurn !== null || !state.parkedAborted) return [];
+  if (state.runningTurn !== null || !state.parkedStranded) return [];
   const steering: QueuedItem[] = [];
   const queued: QueuedItem[] = [];
   for (const item of state.queue) {

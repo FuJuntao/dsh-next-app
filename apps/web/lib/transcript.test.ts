@@ -640,13 +640,21 @@ describe("stranded work (story #146 AC 1, AC 4)", () => {
   });
   const queueFrame = (...items: unknown[]): MuxFrame =>
     ({ type: "session/queue", sessionId: "sess-a", items }) as unknown as MuxFrame;
-  // A turn opened and then STOPPED (aborted): the one host settle that parks
-  // pending work with no wake latched. Every stranding test sits on this.
-  const stoppedTurn = (state: TranscriptState, seq = 1): void => {
+  // A turn opened and then settled in a PARKING way: `aborted` (the Stop) and
+  // `error` both leave `turn()` by throwing with no wake latched, so pending
+  // work survives with nothing coming back for it. Every stranding test below
+  // sits on one of these.
+  const stoppedTurn = (state: TranscriptState, seq = 1, kind = "aborted"): void => {
     foldEvent(state, ev("turn/start", seq, { turn: 1 }));
     foldEvent(
       state,
-      ev("turn/end", seq + 1, { turn: 1, reason: { kind: "aborted", reason: { kind: "user" } } }),
+      ev(
+        "turn/end",
+        seq + 1,
+        kind === "error"
+          ? { turn: 1, reason: { kind: "error", error: { message: "boom", code: "X" } } }
+          : { turn: 1, reason: { kind, reason: { kind: "user" } } },
+      ),
     );
   };
 
@@ -715,8 +723,23 @@ describe("stranded work (story #146 AC 1, AC 4)", () => {
     foldEvent(state, ev("turn/end", 2, { turn: 1, reason: { kind: "completed" } }));
     foldFrame(state, queueFrame(queued("q1", "about to auto-run", { placement: "queued" })));
     expect(state.runningTurn).toBeNull();
-    expect(state.parkedAborted).toBe(false);
+    expect(state.parkedStranded).toBe(false);
     expect(strandedWork(state)).toEqual([]);
+  });
+
+  it("an ERROR settle strands identically - the false promise is not Stop-only", () => {
+    // Review finding #5: `turn()`'s catch sets reason `error` and calls
+    // `throwError`, which emits `agent/error` and THROWS, so `kick()`'s loop
+    // breaks and its `finally` re-wakes only a latched wake. A mid-turn steer
+    // latches none - so a failed turn parks pending work exactly like a Stop,
+    // and leaving it to read "waiting for the next turn" is the same lie AC 1
+    // exists to remove.
+    const state = createTranscript();
+    stoppedTurn(state, 1, "error");
+    foldFrame(state, queueFrame(queued("s1", "stranded by an error")));
+    expect(state.runningTurn).toBeNull();
+    expect(state.parkedStranded).toBe(true);
+    expect(strandedWork(state).map((i) => i.id)).toEqual(["s1"]);
   });
 
   it("a fresh turn clears a prior stranding - work the resume claims is not returned", () => {
@@ -726,7 +749,7 @@ describe("stranded work (story #146 AC 1, AC 4)", () => {
     expect(strandedWork(state)).toHaveLength(1);
     // A new turn opens (e.g. a follow-up wake resumed it): no longer parked.
     foldEvent(state, ev("turn/start", 9, { turn: 2 }));
-    expect(state.parkedAborted).toBe(false);
+    expect(state.parkedStranded).toBe(false);
     expect(strandedWork(state)).toEqual([]);
   });
 

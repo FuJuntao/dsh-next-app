@@ -126,7 +126,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
   // AC 1/4: parked-aborted (a Stop settled the last turn with nothing coming
   // back). Drives the residue strip; distinct from `!running`, which is also
   // true for a frame while a completed turn auto-resumes its follow-up.
-  const [stranded, setStranded] = useState<boolean>(() => fold.parkedAborted);
+  const [stranded, setStranded] = useState<boolean>(() => fold.parkedStranded);
   const [queue, setQueue] = useState<QueuedItem[]>(() => [...fold.queue]);
   const [pending, setPending] = useState<PendingCard[]>(() => [...fold.pending]);
   const intakeRef = useRef<ImageIntakeHandle | null>(null);
@@ -179,7 +179,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     setHasMore(foldRef.current.hasMore);
     setRunning(foldRef.current.runningTurn !== null);
     setRunningSince(foldRef.current.runningSince);
-    setStranded(foldRef.current.parkedAborted);
+    setStranded(foldRef.current.parkedStranded);
     setQueue([...foldRef.current.queue]);
     setPending([...foldRef.current.pending]);
   }, []);
