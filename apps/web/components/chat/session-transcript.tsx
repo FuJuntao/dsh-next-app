@@ -31,11 +31,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RiArrowDownSLine, RiShieldCheckLine } from "@remixicon/react";
-import type {
-  HistoryEntry,
-
-  SessionProjectionsBlock,
-} from "@deepseek-ai/dsh-host-apiproxy/api";
+import type { HistoryEntry, SessionProjectionsBlock } from "@deepseek-ai/dsh-host-apiproxy/api";
 
 import { ImageIntake, type ImageIntakeHandle } from "@/components/chat/image-intake";
 import { ApprovalCard, QuestionCard } from "@/components/chat/pending-cards";
@@ -44,10 +40,11 @@ import type { ImageAttachmentLimits } from "@/lib/image-intake";
 import { searchFileReferences } from "@/lib/file-discovery";
 import { searchSessionReferences } from "@/lib/session-references";
 import type { ComposerEntry, ComposerSearch } from "@/components/session-composer";
+import { SessionComposer, type SessionComposerHandle } from "@/components/session-composer";
 import { useSessionLive } from "@/components/chat/use-session-live";
+import { useHandback } from "@/components/chat/use-handback";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { SessionComposer } from "@/components/session-composer";
 import { useSessionHeaderPublisher } from "@/components/session-header";
 import { SLASH_MENU_ENTRIES } from "@/lib/slash-commands";
 import { cancelTurn, sendPrompt } from "@/lib/chat-send";
@@ -55,7 +52,6 @@ import { navTitleOf, setNavTitle } from "@/lib/nav-live";
 import { loadOlderHistory } from "@/lib/session-history-action";
 import {
   createTranscript,
-
   foldHistoryPage,
   prependHistoryPage,
   seedProjections,
@@ -183,6 +179,20 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     setPending([...foldRef.current.pending]);
   }, []);
 
+  // The handback (story #146): releasing the work a stopped session strands
+  // needs the composer's imperative end and the Alert slot. It re-runs on
+  // every host queue snapshot and on the running-flag settling, which is what
+  // makes a Stop (here or elsewhere) and a reload converge on one drain.
+  const composerRef = useRef<SessionComposerHandle | null>(null);
+  const handback = useHandback({
+    sessionId,
+    foldRef,
+    queue,
+    running,
+    composerRef,
+    setAlert: setSendError,
+  });
+
   // The write flow (AC 13/15 as amended on #134). The transcript mints no row
   // of its own: a message is in the session when the host says so, and a
   // refused send should never have appeared in it at all. What covers the
@@ -207,12 +217,15 @@ export function SessionTranscript(props: SessionTranscriptProps) {
         setSendError(null);
         intakeRef.current?.clear();
         setAttachmentCount(0);
+        // A draft that leaves through this door is SENT, not dismissed: if it
+        // carried handed-back work, its ids must not be acked as deletions.
+        handback.markSent();
       } else {
         setSendError(result.error);
         throw new Error(result.error); // preserve the draft (composer contract)
       }
     },
-    [sessionId],
+    [sessionId, handback.markSent],
   );
 
   const handleStop = useCallback((): void => {
@@ -530,7 +543,21 @@ export function SessionTranscript(props: SessionTranscriptProps) {
               }
             />
           </div>
+          {handback.notice !== null && (
+            // AC 5: the handback is stated once - this one line both shows
+            // how many messages returned and (as a polite live region) says
+            // it to assistive tech. It is the return's only surface.
+            <p
+              role="status"
+              aria-live="polite"
+              className="text-xs text-muted-foreground"
+              data-testid="handback-notice"
+            >
+              {handback.notice}
+            </p>
+          )}
           <SessionComposer
+            ref={composerRef}
             hasAttachments={() => (intakeRef.current?.count() ?? 0) > 0}
             referenceSearch={referenceSearch}
             referenceHint="@ files & sessions"
@@ -540,6 +567,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
             running={running}
             onStop={handleStop}
             onSubmit={handleSend}
+            onDraftChange={handback.onDraftChange}
           />
         </div>
       </div>

@@ -170,6 +170,13 @@ export type SessionComposerProps = {
    * files AND sessions; home keeps "@ sessions").
    */
   referenceHint?: string;
+  /**
+   * Called with the trimmed draft text on every edit, including the empty
+   * string when the draft is cleared. The session page's handback controller
+   * uses it to tell a dismissed return from a sent one (#146 AC 6); the
+   * surface that does not pass it is unaffected.
+   */
+  onDraftChange?: (text: string) => void;
 };
 
 class ComposerOption extends MenuOption {
@@ -935,11 +942,18 @@ export const SessionComposer = forwardRef<SessionComposerHandle, SessionComposer
       onStop,
       hasAttachments,
       referenceHint,
+      onDraftChange,
     }: SessionComposerProps,
     handleRef,
   ) {
     const [hasText, setHasText] = useState(false);
     const [isPending, setIsPending] = useState(false);
+    // Latest-ref so the change plugin never rebuilds its closure per render,
+    // and the draft-text report to the surface stays in step with hasText.
+    const onDraftChangeRef = useRef(onDraftChange);
+    useEffect(() => {
+      onDraftChangeRef.current = onDraftChange;
+    }, [onDraftChange]);
     // Whether a typeahead menu is open; the Enter handler defers to the menu's
     // option selection while this is set. onOpen/onClose fire on open/close
     // transitions of the plugin's resolution.
@@ -982,7 +996,9 @@ export const SessionComposer = forwardRef<SessionComposerHandle, SessionComposer
         <OnChangePlugin
           onChange={(editorState) => {
             editorState.read(() => {
-              setHasText($getRoot().getTextContent().trim().length > 0);
+              const text = $getRoot().getTextContent().trim();
+              setHasText(text.length > 0);
+              onDraftChangeRef.current?.(text);
             });
           }}
         />

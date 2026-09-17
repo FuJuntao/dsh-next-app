@@ -652,7 +652,13 @@ describe("stranded work (story #146 AC 1, AC 4)", () => {
 
   it("lifts the release identity - id, rpcId, image references - onto the strip item", () => {
     const state = createTranscript();
-    foldFrame(state, queueFrame(queued("a", "plain steer"), queued("b", "with image", { images: [{ attachmentId: "att-1" }] })));
+    foldFrame(
+      state,
+      queueFrame(
+        queued("a", "plain steer"),
+        queued("b", "with image", { images: [{ attachmentId: "att-1" }] }),
+      ),
+    );
     expect(state.queue).toEqual([
       {
         id: "a",
@@ -738,12 +744,7 @@ describe("stranded work (story #146 AC 1, AC 4)", () => {
         queued("s-new", "steered second in"),
       ),
     );
-    expect(strandedWork(state).map((i) => i.id)).toEqual([
-      "s-old",
-      "s-new",
-      "q-old",
-      "q-new",
-    ]);
+    expect(strandedWork(state).map((i) => i.id)).toEqual(["s-old", "s-new", "q-old", "q-new"]);
   });
 
   it("an image-bearing item strands but is never releasable (AC 4)", () => {
