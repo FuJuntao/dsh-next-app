@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import { httpPost } from "../support/bridge-client";
 import { expect, test } from "../support/fixtures";
 import type { BootedProfile } from "../support/profile";
+import { sleep } from "../support/process";
 
 test.use({ httpCredentials: { username: "e2e", password: "dsh-next-app-e2e-password" } });
 test.use({ viewport: { width: 1280, height: 800 } });
@@ -175,4 +176,137 @@ test("the stop control settles the turn as stopped", async ({ page }) => {
     timeout: 30_000,
   });
   await expect(stop).toBeHidden(); // running state settled from the stream
+});
+
+// --- The Stop handback (story #146 task #147 commit 6) --------------------
+//
+// A mid-turn steer is preserved by `session.cancel` (keepInbox) but the
+// aborted driver never wakes again, so the steer parks in `session/queue`
+// with nothing coming back for it. These legs prove the surface hands that
+// work back to the composer, and that resending it runs as one turn.
+
+test("Stop returns a stranded steer to the composer; resending lands it once (AC 1-3, AC 7)", async ({
+  page,
+}) => {
+  const sessionId = await createSession();
+  await page.goto(profile.baseURL + "/sessions/" + sessionId);
+  // A long first turn to steer into and then stop.
+  await envelopeCall("session.prompt", {
+    sessionId,
+    mode: "queue",
+    content: [{ type: "text", text: "scripted-stream first long turn" }],
+  });
+  const box = page.getByRole("textbox", { name: "Message the session" });
+  await expect(page.getByRole("button", { name: "Steer the session now" })).toBeVisible({
+    timeout: 15_000,
+  });
+  await box.click();
+  await box.pressSequentially("a steer to bring back");
+  await box.press("Enter"); // Enter steers into the running turn
+  const scroller = page.getByTestId("transcript-scroll");
+  await expect(scroller.getByText("a steer to bring back", { exact: false })).toBeVisible({
+    timeout: 10_000,
+  }); // pending in the strip
+
+  await page.getByRole("button", { name: "Stop current turn" }).click();
+
+  // The strip empties on the host's release, and the text is back in the
+  // composer - never a Continue/Resume/Retry control (AC 7).
+  await expect(scroller.getByText("a steer to bring back", { exact: false })).toHaveCount(0, {
+    timeout: 15_000,
+  });
+  await expect(box).toContainText("a steer to bring back");
+  await expect(page.getByTestId("handback-notice")).toHaveText(
+    "Returned 1 message to the composer.",
+  );
+  for (const name of [/continue/i, /resume/i, /retry/i]) {
+    await expect(page.getByRole("button", { name })).toHaveCount(0);
+    await expect(page.getByRole("link", { name })).toHaveCount(0);
+  }
+
+  // Resend the returned work: it becomes ONE durable row and runs a turn.
+  await box.press("Enter");
+  await expect(scroller.getByText("a steer to bring back", { exact: false })).toHaveCount(1, {
+    timeout: 30_000,
+  });
+});
+
+test("a Stop from another client is handed back on the first load (AC 1)", async ({ page }) => {
+  // The deterministic shape of "after a Stop initiated from another client":
+  // nothing drains it first, because no page is open while the stop happens.
+  const sessionId = await createSession();
+  await envelopeCall("session.prompt", {
+    sessionId,
+    mode: "queue",
+    content: [{ type: "text", text: "scripted-stream another-client turn" }],
+  });
+  await envelopeCall("session.prompt", {
+    sessionId,
+    mode: "steer",
+    content: [{ type: "text", text: "stranded by another client" }],
+  });
+  await envelopeCall("session.cancel", { sessionId }); // the other client's Stop
+
+  await page.goto(profile.baseURL + "/sessions/" + sessionId);
+  const box = page.getByRole("textbox", { name: "Message the session" });
+  await expect(box).toContainText("stranded by another client", { timeout: 15_000 });
+});
+
+test("deleting the returned draft does not re-offer it on reload (AC 6)", async ({ page }) => {
+  const sessionId = await createSession();
+  await page.goto(profile.baseURL + "/sessions/" + sessionId);
+  await envelopeCall("session.prompt", {
+    sessionId,
+    mode: "queue",
+    content: [{ type: "text", text: "scripted-stream dismiss turn" }],
+  });
+  const box = page.getByRole("textbox", { name: "Message the session" });
+  await expect(page.getByRole("button", { name: "Steer the session now" })).toBeVisible({
+    timeout: 15_000,
+  });
+  await box.click();
+  await box.pressSequentially("delete this return");
+  await box.press("Enter");
+  await page.getByRole("button", { name: "Stop current turn" }).click();
+  await expect(box).toContainText("delete this return", { timeout: 15_000 });
+
+  // Dismiss the returned draft, then reload.
+  await box.click();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.press("Delete");
+  await page.reload();
+  await expect(box).toBeVisible({ timeout: 30_000 });
+  await sleep(3_000); // give any (wrongly) re-offered handback a window to appear
+  await expect(box).not.toContainText("delete this return");
+});
+
+test("an image-bearing steer is residue, never returned (AC 4)", async ({ page }) => {
+  const sessionId = await createSession();
+  await envelopeCall("session.prompt", {
+    sessionId,
+    mode: "queue",
+    content: [{ type: "text", text: "scripted-stream image turn" }],
+  });
+  const png =
+    "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mP4z8CAFTEMLQkAKP8/wc53yE8AAAAASUVORK5CYII=";
+  await envelopeCall("session.prompt", {
+    sessionId,
+    mode: "steer",
+    content: [
+      { type: "text", text: "an image steer" },
+      { type: "image", mediaType: "image/png", data: png, name: "shot.png" },
+    ],
+  });
+  await envelopeCall("session.cancel", { sessionId }); // Stop: the steer parks
+
+  await page.goto(profile.baseURL + "/sessions/" + sessionId);
+  const box = page.getByRole("textbox", { name: "Message the session" });
+  await expect(box).toBeVisible({ timeout: 30_000 });
+  await sleep(3_000); // let any (wrongly) handback fire
+  // The composer never receives the image-bearing item's text...
+  await expect(box).not.toContainText("an image steer");
+  // ...and the strip holds it up as the stopped fact, not a promised next step.
+  const residue = page.getByTestId("queue-residue");
+  await expect(residue).toBeVisible();
+  await expect(residue).toContainText("the session is stopped");
 });
