@@ -123,6 +123,10 @@ export function SessionTranscript(props: SessionTranscriptProps) {
 
   const [running, setRunning] = useState<boolean>(() => fold.runningTurn !== null);
   const [runningSince, setRunningSince] = useState<number | null>(() => fold.runningSince);
+  // AC 1/4: parked-aborted (a Stop settled the last turn with nothing coming
+  // back). Drives the residue strip; distinct from `!running`, which is also
+  // true for a frame while a completed turn auto-resumes its follow-up.
+  const [stranded, setStranded] = useState<boolean>(() => fold.parkedAborted);
   const [queue, setQueue] = useState<QueuedItem[]>(() => [...fold.queue]);
   const [pending, setPending] = useState<PendingCard[]>(() => [...fold.pending]);
   const intakeRef = useRef<ImageIntakeHandle | null>(null);
@@ -175,6 +179,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     setHasMore(foldRef.current.hasMore);
     setRunning(foldRef.current.runningTurn !== null);
     setRunningSince(foldRef.current.runningSince);
+    setStranded(foldRef.current.parkedAborted);
     setQueue([...foldRef.current.queue]);
     setPending([...foldRef.current.pending]);
   }, []);
@@ -487,7 +492,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
                 signal while a turn runs - per-row spinners say HOW, this
                 says THAT, so it stays up for the whole turn. */}
             {running && runningSince !== null && <TurnLive since={runningSince} />}
-            <QueueStrip queue={queue} />
+            <QueueStrip queue={queue} stranded={stranded} />
             {pending.map((card) =>
               card.kind === "approval" ? (
                 <ApprovalCard key={card.id} card={card} />
