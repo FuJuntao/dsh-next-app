@@ -2,8 +2,9 @@
 
 /**
  * The chat write door (story #134 task #135 commit 7; the channel split:
- * small JSON writes ride server actions): prompt and cancel over the unary
- * bridge, in the shapes the page may name and nothing more.
+ * small JSON writes ride server actions): prompt, cancel, and the queue
+ * release over the unary bridge, in the shapes the page may name and
+ * nothing more.
  *
  * AC 13's contract lives in the RETURN value, not in throws: the action is
  * the door, so an empty draft is refused locally, a transport failure or an
@@ -17,12 +18,15 @@
  *
  * AC 15's cancel is fire-and-settle: `session.cancel` stops the ACTIVE
  * turn; the transcript settles on the resulting `turn/end` (aborted) over
- * the downlink. The client never resends or promotes pending queue work -
- * the host owns that ordering.
+ * the downlink. The client never resends on its own; since story #146 it
+ * may RELEASE still-pending queue work back to the operator (the door at
+ * the bottom of this file), but the ordering of whatever the host does run
+ * stays the host's.
  *
  * The browser's IANA zone rides every prompt (the prompt contract: browser
  * callers attach their zone; the host validates and records it).
  */
+import type { RequestPayload } from "@deepseek-ai/dsh-host-apiproxy/api";
 import { SessionId } from "@deepseek-ai/dsh-session/types";
 import { getActionBridgeClient } from "./bridge";
 
@@ -107,5 +111,49 @@ export async function cancelTurn(sessionId: string): Promise<CancelResult> {
   } catch (error) {
     console.error("[chat-send] session.cancel failed:", error);
     return { ok: false, error: "the stop could not be sent (the dsh bridge is unavailable)" };
+  }
+}
+
+/**
+ * The release door (story #146 task #147 commit 1): give up the host's hold
+ * on ONE still-pending inbox item - `session.updateQueue` with the `remove`
+ * action, the only queue action this surface ever names (#146's Non-Goals
+ * keep `edit` and `steer` out). `Inbox.remove` is the host's synchronous
+ * splice, so its answer is the authoritative fact for the handback: a
+ * successful `removed` means the item is no longer pending anywhere and
+ * only then may its text return to the composer; `not-found` means it was
+ * not pending at the moment asked (the loop claimed it at a step boundary,
+ * or another client already released it); `transport` means the question
+ * never reached the host and the item stays pending. The three must stay
+ * distinguishable at the caller - prompt/cancel above fold every refusal
+ * into one Alert string, which would erase exactly that difference.
+ */
+export type RemoveQueueResult =
+  | { status: "removed" }
+  | { status: "not-found" }
+  | { status: "transport" }
+  | { status: "refused"; code: string };
+
+export async function removeQueueItem(
+  sessionId: string,
+  itemId: string,
+): Promise<RemoveQueueResult> {
+  try {
+    const response = await getActionBridgeClient().sessions.updateQueue({
+      sessionId: SessionId(sessionId),
+      // The brand is a compile-time cast; the host's zod schema is the
+      // runtime authority on the id's shape.
+      itemId: itemId as RequestPayload<"session.updateQueue">["itemId"],
+      action: { kind: "remove" },
+    });
+    if (!response.result.ok) {
+      return response.result.error.code === "queue-item-not-found"
+        ? { status: "not-found" }
+        : { status: "refused", code: response.result.error.code };
+    }
+    return { status: "removed" };
+  } catch (error) {
+    console.error("[chat-send] session.updateQueue remove failed:", error);
+    return { status: "transport" };
   }
 }
