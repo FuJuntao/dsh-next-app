@@ -29,7 +29,7 @@
  * 16, commit 8) will outrank the jump control, which outranks the
  * reconnect notice.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RiArrowDownSLine, RiShieldCheckLine } from "@remixicon/react";
 import type { HistoryEntry, SessionProjectionsBlock } from "@deepseek-ai/dsh-host-apiproxy/api";
 
@@ -46,7 +46,8 @@ import { useHandback } from "@/components/chat/use-handback";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSessionHeaderPublisher } from "@/components/session-header";
-import { SLASH_MENU_ENTRIES } from "@/lib/slash-commands";
+import { slashMenuFrom, type SlashMenuSource } from "@/lib/slash-menu";
+import { fetchSessionSkills } from "@/lib/session-skills";
 import { cancelTurn, sendPrompt } from "@/lib/chat-send";
 import { navTitleOf, setNavTitle } from "@/lib/nav-live";
 import { loadOlderHistory } from "@/lib/session-history-action";
@@ -101,6 +102,13 @@ function titleFrom(fold: TranscriptState): string | null {
   const cell = fold.projections["title"];
   return typeof cell?.value === "string" && cell.value !== "" ? cell.value : null;
 }
+
+/**
+ * AC 6's honesty line for this door: the roster could not be read. Home
+ * carries its own wording for the same state, because it names the folder
+ * this surface cannot see (#117's Copy rule: say what happened).
+ */
+const UNREADABLE_SKILLS = "Couldn't read this session's skills";
 
 export function SessionTranscript(props: SessionTranscriptProps) {
   const { sessionId, blank, meta } = props;
@@ -170,6 +178,38 @@ export function SessionTranscript(props: SessionTranscriptProps) {
     },
     [sessionId],
   );
+  // The `/` roster (story #152): the host's own answer for THIS session,
+  // asked once per load - no watcher, no re-read while the page is open (the
+  // story's non-goal). What is held is the door's VERDICT, not a list, and
+  // the fold that renders it is home's: until the answer lands, and if it
+  // never does, the menu carries the six vendored commands (AC 5's floor),
+  // and a refusal says so in the hint row (AC 6) instead of implying this
+  // project has no skills.
+  const [roster, setRoster] = useState<SlashMenuSource>({ ok: true, skills: [] });
+  useEffect(() => {
+    let current = true;
+    const refuse = (reason: string): void => {
+      // The reason is for the log; the row is one sentence about the state.
+      console.warn("[session-transcript] the skill roster was refused:", reason);
+      setRoster({ ok: false, reason });
+    };
+    void fetchSessionSkills(sessionId).then(
+      (result) => {
+        if (!current) return;
+        if (result.ok) setRoster(result);
+        else refuse(result.reason);
+      },
+      (cause: unknown) => {
+        // The action call itself failed (transport, a stale build): the
+        // roster is unknown, which is exactly what the hint line is for.
+        if (current) refuse(cause instanceof Error ? cause.message : String(cause));
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [sessionId]);
+  const slashMenu = useMemo(() => slashMenuFrom(roster, UNREADABLE_SKILLS), [roster]);
   const [, setAttachmentCount] = useState(0); // render pulse only; the count itself is read via the handle
   const [sendError, setSendError] = useState<string | null>(null);
 
@@ -566,7 +606,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
             hasAttachments={() => (intakeRef.current?.count() ?? 0) > 0}
             referenceSearch={referenceSearch}
             referenceHint="@ files & sessions"
-            commands={{ entries: [...SLASH_MENU_ENTRIES] }}
+            commands={slashMenu}
             references={[]}
             sendModes
             running={running}
