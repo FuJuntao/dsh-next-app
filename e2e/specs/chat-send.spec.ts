@@ -254,30 +254,107 @@ test("a Stop from another client is handed back on the first load (AC 1)", async
 
 test("deleting the returned draft does not re-offer it on reload (AC 6)", async ({ page }) => {
   const sessionId = await createSession();
+  const ackKey = "dsh-next-app.handback-dismissed:" + sessionId;
+  const readAck = (): Promise<string | null> =>
+    page.evaluate((key) => window.localStorage.getItem(key), ackKey);
+
+  // Blocked turn, so the steer provably cannot be claimed before the Stop.
   await page.goto(profile.baseURL + "/sessions/" + sessionId);
   await envelopeCall("session.prompt", {
     sessionId,
     mode: "queue",
-    content: [{ type: "text", text: "scripted-stream dismiss turn" }],
+    content: [{ type: "text", text: "scripted-approval hold the step open" }],
   });
-  const box = page.getByRole("textbox", { name: "Message the session" });
-  await expect(page.getByRole("button", { name: "Steer the session now" })).toBeVisible({
-    timeout: 15_000,
-  });
-  await box.click();
-  await box.pressSequentially("delete this return");
-  await box.press("Enter");
-  await page.getByRole("button", { name: "Stop current turn" }).click();
-  await expect(box).toContainText("delete this return", { timeout: 15_000 });
+  await expect(page.getByTestId("approval-card")).toBeVisible({ timeout: 30_000 });
 
-  // Dismiss the returned draft, then reload.
+  // The stranded item arrives from ANOTHER client (AC 1 covers this) with
+  // padding a composer would never leave behind: the composer reports its draft
+  // TRIMMED, so this is the shape that tells a like-for-like comparison from a
+  // byte-equal one. A byte-equal check reads the return's OWN arrival as the
+  // operator deleting it, and acks work that was never touched - permanently,
+  // since the store never expires.
+  await envelopeCall("session.prompt", {
+    sessionId,
+    mode: "steer",
+    content: [{ type: "text", text: "  padded return from elsewhere  \n" }],
+  });
+  const strip = page.getByTestId("queue-strip");
+  await expect(strip.getByText("padded return from elsewhere", { exact: false })).toBeVisible({
+    timeout: 10_000,
+  });
+
+  await page.getByRole("button", { name: "Stop current turn" }).click();
+  const box = page.getByRole("textbox", { name: "Message the session" });
+  await expect(box).toContainText("padded return from elsewhere", { timeout: 15_000 });
+
+  // Arrival is not dismissal: AC 6 records only a CLEARED draft, so nothing may
+  // be in the store yet.
+  await sleep(1_500);
+  expect(await readAck()).toBeNull();
+
+  // Now actually dismiss it.
   await box.click();
   await page.keyboard.press("Control+A");
   await page.keyboard.press("Delete");
+  await expect.poll(async () => await readAck(), { timeout: 5_000 }).toBeTruthy(); // the dismissal is recorded, by id
+  const acked: string[] = JSON.parse((await readAck()) ?? "[]");
+  expect(acked.length).toBe(1);
+  // AC 6's "no content store": ids only, never the returned text.
+  expect(acked.join(" ")).not.toContain("padded return");
+
   await page.reload();
   await expect(box).toBeVisible({ timeout: 30_000 });
   await sleep(3_000); // give any (wrongly) re-offered handback a window to appear
-  await expect(box).not.toContainText("delete this return");
+  await expect(box).not.toContainText("padded return from elsewhere");
+});
+
+test("a multi-line steer returns and resends unchanged (AC 3)", async ({ page }) => {
+  // Review finding #1: Lexical joins PARAGRAPHS with "\n\n" and reads a soft
+  // break back as "\n", so rebuilding the draft one-paragraph-per-line injected
+  // a blank line into every soft break of the operator's own message. Single-line
+  // text survives that bug, which is why the other legs use it; this is the leg
+  // that cannot pass with the wrong model.
+  //
+  // Staged on a turn BLOCKED at an approval, not on a streaming one: a blocked
+  // turn stays open until someone answers, so the steer provably cannot be
+  // claimed before the Stop. Racing a ~3.6s scripted stream made this leg
+  // order-dependent - and worse, its pre-Stop assertion could be satisfied by
+  // the DURABLE ROW of an auto-resumed turn, which asserts nothing at all about
+  // the handback.
+  const sessionId = await createSession();
+  await page.goto(profile.baseURL + "/sessions/" + sessionId);
+  await envelopeCall("session.prompt", {
+    sessionId,
+    mode: "queue",
+    content: [{ type: "text", text: "scripted-approval hold the step open" }],
+  });
+  await expect(page.getByTestId("approval-card")).toBeVisible({ timeout: 30_000 }); // parked, still open
+
+  const box = page.getByRole("textbox", { name: "Message the session" });
+  await box.click();
+  await box.pressSequentially("alpha line");
+  await box.press("Shift+Enter"); // a SOFT break, not a new paragraph
+  await box.pressSequentially("bravo line");
+  await box.press("Enter"); // steer the two-line message into the parked turn
+  const scroller = page.getByTestId("transcript-scroll");
+  // It is pending work in the strip, and it is NOT yet a transcript row.
+  const strip = page.getByTestId("queue-strip");
+  await expect(strip).toBeVisible({ timeout: 10_000 });
+  await expect(strip.getByText("alpha line", { exact: false })).toBeVisible();
+  await expect(scroller.getByText("alpha line", { exact: false })).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Stop current turn" }).click();
+  await expect(box).toContainText("bravo line", { timeout: 15_000 });
+
+  // Resend it, then read the DURABLE row the host recorded: a user row renders
+  // `item.text` verbatim in a `whitespace-pre-wrap` div (no markdown), so its
+  // innerText reflects exactly the newlines the returned draft carried. One soft
+  // break in, one out - a re-paragraphised draft reads back with a blank line
+  // between the two, which is the defect this pins.
+  await box.press("Enter");
+  const row = scroller.getByText("alpha line", { exact: false }).last();
+  await expect(row).toBeVisible({ timeout: 45_000 });
+  expect((await row.innerText()).trim()).toBe("alpha line\nbravo line");
 });
 
 test("an image-bearing steer is residue, never returned (AC 4)", async ({ page }) => {
