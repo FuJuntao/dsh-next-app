@@ -30,6 +30,12 @@ catalog:
   # The other half of the identity-bearing pair noted above (ADR-0012).
   "@deepseek-ai/dsh-tools": 0.1.1-rc.2
   "@deepseek-ai/dsh": 0.1.1-rc.2
+  # The library the host itself parses SKILL.md frontmatter with
+  # (`yaml@^2` in @deepseek-ai/dsh-skill-filesystem): same parser, same
+  # verdicts - see apps/web/lib/host-skills.ts and the e2e parity guard.
+  # The promise is the library and its major, not the patch: the host
+  # resolves its own, and a drift in behavior is the guard's job to catch.
+  yaml: 2.9.0
   "@base-ui/react": 1.7.0
   "@playwright/test": 1.62.1
   "@remixicon/react": 4.9.0

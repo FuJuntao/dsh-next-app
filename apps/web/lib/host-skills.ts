@@ -17,6 +17,14 @@
  * (host-path.ts) - the same line the browse door and the session's `cwd`
  * enforce - so a path outside the subtree is refused before any read.
  *
+ * What gets listed is decided by the host, not by taste: `readSkill` below
+ * restates the host's own discovery rules - the same `yaml` library it
+ * parses frontmatter with, its required-fields and name grammar, and the
+ * user-invocable filter its `skill.list` applies. Every one of those is a
+ * parity promise (story #152 AC 4 and AC 7): parse with anything else and a
+ * block-scalar description reaches the menu as a literal `>`; skip the
+ * filter and home advertises a `/name` the host will not invoke.
+ *
  * This powers completion only - invocation is a plain `session.prompt`
  * whose leading `/name` the host recognizes at the pre-step boundary
  * (the skills contract), so a stale or missing entry here can never
@@ -28,6 +36,7 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { parse } from "yaml";
 import { fenceInsideHostRoot, getHostRoot } from "./host-path";
 
 /** One project skill as the `/` menu consumes it. */
@@ -54,7 +63,20 @@ export async function fetchProjectSkills(cwd: string): Promise<ProjectSkill[]> {
   return [];
 }
 
-/** Read every `SKILL.md` in one `.agents/skills` directory. */
+/**
+ * The host's skill-name grammar (`SKILL_NAME` in @deepseek-ai/dsh-skill):
+ * a name outside it is not a skill the host will resolve at the pre-step
+ * boundary, so it must not be offered as a suggestion either.
+ */
+const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * The camelCase invocation keys the host REJECTS outright
+ * (`rejectLegacyInvocationKey`) - a file carrying one is ignored there, so
+ * it is ignored here.
+ */
+const LEGACY_INVOCATION_KEYS = ["disableModelInvocation", "modelInvocable", "userInvocable"];
+
 function readSkills(skillsDir: string): ProjectSkill[] {
   let names: string[];
   try {
@@ -66,27 +88,104 @@ function readSkills(skillsDir: string): ProjectSkill[] {
   for (const name of names) {
     try {
       if (!statSync(join(skillsDir, name)).isDirectory()) continue;
-      const head = readFileSync(join(skillsDir, name, "SKILL.md"), "utf8").slice(0, 4096);
-      const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(head);
-      if (front === null || front[1] === undefined) continue;
-      const fields = new Map<string, string>();
-      for (const line of front[1].split(/\r?\n/)) {
-        const colon = line.indexOf(":");
-        if (colon <= 0) continue;
-        fields.set(
-          line.slice(0, colon).trim(),
-          line
-            .slice(colon + 1)
-            .trim()
-            .replace(/^["'](.*)["']$/u, "$1"),
-        );
-      }
-      const description = fields.get("description");
-      if (description === undefined || description === "") continue;
-      skills.push({ name: fields.get("name") ?? name, description });
+      const skill = readSkill(join(skillsDir, name, "SKILL.md"));
+      if (skill !== null) skills.push(skill);
     } catch {
       // No readable SKILL.md: not an invocable skill here, skip it.
     }
   }
   return skills;
+}
+
+/**
+ * One `SKILL.md` as the menu sees it, or `null` when the host would not
+ * list it - which is the only question that matters here, because the
+ * parity guard compares the two rosters and a row home invents fails it.
+ * A dropped file is never an error: an unreadable, headless or
+ * non-invocable skill is simply not a command.
+ */
+function readSkill(path: string): ProjectSkill | null {
+  const block = frontmatterBlock(readFileSync(path, "utf8"));
+  if (block === null) return null;
+  let data: Record<string, unknown>;
+  try {
+    // The same parse the host runs, so `>` and `|` blocks, quoted strings,
+    // folded text and bare multi-line continuations all yield the real
+    // sentence - the shapes the first-colon splitter turned into ">" or
+    // dropped outright (story #152 AC 4).
+    const parsed: unknown = parse(block);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    data = parsed as Record<string, unknown>;
+  } catch {
+    return null; // invalid YAML: the host ignores the file, and so do we
+  }
+  const name = stringField(data, "name");
+  if (name === undefined || !SKILL_NAME.test(name)) return null;
+  const description = stringField(data, "description");
+  if (description === undefined) return null;
+  if (LEGACY_INVOCATION_KEYS.some((key) => Object.hasOwn(data, key))) return null;
+  const userInvocable = booleanField(data, "user-invocable");
+  if (userInvocable === null || userInvocable === false) return null;
+  // `disable-model-invocation` is deliberately NOT a filter: skill.list
+  // carries those rows (modelInvocable: false) precisely because the
+  // command-only skills - /story, /design, /review - are the ones a user
+  // types (story #152, non-goals).
+  return { name, description };
+}
+
+/**
+ * The YAML between an opening and a closing `---` fence, or null when the
+ * file has none: the host's `parseFrontmatter` scan restated, including the
+ * `\\r` tolerance and the verdict that an unclosed fence is not frontmatter
+ * (the whole file is then ignored - the reason the old 4 KiB head slice had
+ * to go: a fat header cut mid-file dropped a skill in silence).
+ */
+function frontmatterBlock(raw: string): string | null {
+  const firstLineEnd = raw.indexOf("\n");
+  if (firstLineEnd < 0) return null;
+  if (raw.slice(0, firstLineEnd).replace(/\r$/, "") !== "---") return null;
+  let lineStart = firstLineEnd + 1;
+  while (lineStart <= raw.length) {
+    const nextNewline = raw.indexOf("\n", lineStart);
+    const lineEnd = nextNewline < 0 ? raw.length : nextNewline;
+    if (raw.slice(lineStart, lineEnd).replace(/\r$/, "") === "---") {
+      return raw.slice(firstLineEnd + 1, lineStart);
+    }
+    if (nextNewline < 0) return null;
+    lineStart = nextNewline + 1;
+  }
+  return null;
+}
+
+/** The host's `stringField`: a non-string or an empty value is a missing field. */
+function stringField(data: Record<string, unknown>, key: string): string | undefined {
+  const value = data[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/**
+ * The host's `frontmatterBoolean`: YAML 1.2 core leaves `yes`/`no`/`on`/`off`
+ * as strings, so the host coerces them itself. `undefined` = absent,
+ * `null` = a value it refuses (which makes it ignore the whole file).
+ */
+function booleanField(data: Record<string, unknown>, key: string): boolean | null | undefined {
+  if (!Object.hasOwn(data, key)) return undefined;
+  const value = data[key];
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === "1") return true;
+  if (value === 0 || value === "0") return false;
+  if (typeof value === "string") {
+    switch (value.toLowerCase()) {
+      case "true":
+      case "yes":
+      case "on":
+        return true;
+      case "false":
+      case "no":
+        return false;
+      default:
+        return null;
+    }
+  }
+  return null;
 }
