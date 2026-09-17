@@ -13,6 +13,7 @@ import {
 } from "react";
 import ReactDOM from "react-dom";
 import {
+  $createLineBreakNode,
   $createParagraphNode,
   $createTextNode,
   $getRoot,
@@ -741,12 +742,18 @@ function ComposerInner({
   const [editor] = useLexicalComposerContext();
   // AC 3's receiving end. The handback arrives as one assembled block (the
   // controller has already ordered released items oldest-first and joined
-  // them); insertDraft keeps whatever the operator was typing on top and
-  // hangs the block below a blank line, or drops it straight into an empty
-  // draft. Each line becomes its own paragraph (PlainText's own model) so
-  // the block round-trips through getTextContent and the plain submit path
-  // unchanged; focus returns so the very next gesture can be the ordinary
-  // send.
+  // them with a blank line); insertDraft puts that block BELOW whatever the
+  // operator was typing without ever re-writing their own text.
+  //
+  // The Lexical model this has to respect (verified at 0.49): a non-inline
+  // block child is joined by `DOUBLE_LINE_BREAK` = "\n\n"
+  // (LexicalElementNode.getTextContent), while a `LineBreakNode` reads back as
+  // a single "\n" (LexicalLineBreakNode.getTextContent). So "\n\n" is a
+  // PARAGRAPH and "\n" is a SOFT BREAK - and because adjacent paragraphs
+  // already read back as one blank line, a separator paragraph must NOT be
+  // inserted (it would yield three newlines). Rebuilding the draft from a
+  // `getTextContent()` string instead of appending would re-quote every soft
+  // break as a hard one and silently alter the operator's message.
   useImperativeHandle(
     handleRef,
     () => ({
@@ -754,20 +761,22 @@ function ComposerInner({
         if (text === "") return;
         editor.update(() => {
           const root = $getRoot();
-          const existing = root.getTextContent();
-          const combined = existing.trim() === "" ? text : `${existing}\n\n${text}`;
-          root.clear();
-          // One paragraph per line - PlainText's own model (its `insertLineBreak`
-          // does the same), and RootNode joins block children with "\n", so a
-          // blank separator line is an empty paragraph and the whole block
-          // round-trips through getTextContent / the plain submit path.
+          // A genuinely empty draft is replaced outright: a leading empty
+          // paragraph would read back as a blank line before the block. A
+          // live draft is only appended to - never cleared, never re-flowed.
+          if (root.getTextContent() === "") root.clear();
           let lastTextNode: TextNode | null = null;
           let lastParagraph: ReturnType<typeof $createParagraphNode> | null = null;
-          for (const line of combined.split("\n")) {
+          for (const segment of text.split("\n\n")) {
             const paragraph = $createParagraphNode();
-            if (line !== "") {
-              lastTextNode = $createTextNode(line);
-              paragraph.append(lastTextNode);
+            const lines = segment.split("\n");
+            for (let i = 0; i < lines.length; i++) {
+              if (i > 0) paragraph.append($createLineBreakNode());
+              const line = lines[i] as string;
+              if (line !== "") {
+                lastTextNode = $createTextNode(line);
+                paragraph.append(lastTextNode);
+              }
             }
             root.append(paragraph);
             lastParagraph = paragraph;
