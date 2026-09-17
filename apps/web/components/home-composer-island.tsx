@@ -7,15 +7,11 @@ import type { AgentPresetEntry, ModelProviderGroup } from "@deepseek-ai/dsh-host
 import { ComposerCwdChip } from "@/components/composer-cwd-chip";
 import { ComposerModelChip } from "@/components/composer-model-chip";
 import { ComposerPresetChip } from "@/components/composer-preset-chip";
-import {
-  type ComposerEntry,
-  type ComposerSearch,
-  SessionComposer,
-} from "@/components/session-composer";
+import { type ComposerSearch, SessionComposer } from "@/components/session-composer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { fetchProjectSkills, type ProjectSkill } from "@/lib/host-skills";
+import { buildSlashMenu } from "@/lib/slash-menu";
 import { searchSessionReferences } from "@/lib/session-references";
-import { SLASH_MENU_ENTRIES } from "@/lib/slash-commands";
 import { startSession, type StartSessionModel } from "@/lib/start-session";
 
 // The composer is a client boundary (ADR-0001 island) that server-renders its
@@ -65,18 +61,10 @@ export function HomeComposerIsland({
       },
     );
   }, [cwd]);
-  // Project skills lead, the vendored host commands follow; a skill that
-  // shadows a command name wins (the project's word over the platform's).
-  const commands = useMemo<ComposerEntry[]>(() => {
-    const skillEntries: ComposerEntry[] = skills.map((skill) => ({
-      key: "skill:" + skill.name,
-      kind: "command" as const,
-      label: "/" + skill.name,
-      description: skill.description,
-    }));
-    const shadowed = new Set(skillEntries.map((entry) => entry.label));
-    return [...skillEntries, ...SLASH_MENU_ENTRIES.filter((entry) => !shadowed.has(entry.label))];
-  }, [skills]);
+  // Project skills lead, the vendored host commands follow, and a shadowing
+  // skill wins - the rule lives in lib/slash-menu.ts so the session page's
+  // menu is built by the same function (story #152).
+  const commands = useMemo(() => buildSlashMenu(skills), [skills]);
   // The `@` source (story AC 9): session references via session.search.
   // A failed search yields no options (never an empty-Enter trap: with an
   // empty list the menu simply does not open).

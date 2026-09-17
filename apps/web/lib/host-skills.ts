@@ -21,6 +21,10 @@
  * whose leading `/name` the host recognizes at the pre-step boundary
  * (the skills contract), so a stale or missing entry here can never
  * break a send, only fail to suggest it.
+ *
+ * Descriptions leave here exactly as the file states them: the menu's
+ * one-line clamp is the `/` rule both surfaces share, and it lives in
+ * slash-menu.ts (story #152 task #153).
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -50,9 +54,7 @@ export async function fetchProjectSkills(cwd: string): Promise<ProjectSkill[]> {
   return [];
 }
 
-/** The menu's second line stays one honest sentence. */
-const DESCRIPTION_MAX = 160;
-
+/** Read every `SKILL.md` in one `.agents/skills` directory. */
 function readSkills(skillsDir: string): ProjectSkill[] {
   let names: string[];
   try {
@@ -81,13 +83,7 @@ function readSkills(skillsDir: string): ProjectSkill[] {
       }
       const description = fields.get("description");
       if (description === undefined || description === "") continue;
-      skills.push({
-        name: fields.get("name") ?? name,
-        description:
-          description.length <= DESCRIPTION_MAX
-            ? description
-            : description.slice(0, DESCRIPTION_MAX - 1) + "…",
-      });
+      skills.push({ name: fields.get("name") ?? name, description });
     } catch {
       // No readable SKILL.md: not an invocable skill here, skip it.
     }
