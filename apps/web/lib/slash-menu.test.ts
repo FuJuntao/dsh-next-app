@@ -9,7 +9,12 @@
  * pinned here once so neither door can hold a private version of it.
  */
 import { describe, expect, it } from "vitest";
-import { buildSlashMenu, clampSkillDescription, type SlashMenuSkill } from "./slash-menu";
+import {
+  buildSlashMenu,
+  clampSkillDescription,
+  slashMenuFrom,
+  type SlashMenuSkill,
+} from "./slash-menu";
 import { SLASH_MENU_ENTRIES, VENDORED_SLASH_COMMANDS } from "./slash-commands";
 
 const skill = (name: string, description = name + " description"): SlashMenuSkill => ({
@@ -103,5 +108,42 @@ describe("clampSkillDescription", () => {
   it("is idempotent, so the parity guard can clamp twice", () => {
     const once = clampSkillDescription("y".repeat(500));
     expect(clampSkillDescription(once)).toBe(once);
+  });
+});
+
+describe("slashMenuFrom", () => {
+  const HINT = "Couldn't read this folder's skills";
+  const six = VENDORED_SLASH_COMMANDS.map((command) => "/" + command.name);
+
+  it("renders an answered roster as itself, and says nothing", () => {
+    const menu = slashMenuFrom({ ok: true, skills: [skill("story")] }, HINT);
+    expect(menu.entries.map((entry) => entry.label)).toEqual(["/story", ...six]);
+    expect(menu.hint).toBeUndefined();
+  });
+
+  it("treats an empty answer as an answer: no hint, full floor", () => {
+    // AC 6's "this project has no skills" half, which must not borrow the
+    // failure's wording - the menu is telling the truth about the project.
+    const menu = slashMenuFrom({ ok: true, skills: [] }, HINT);
+    expect(menu.entries.map((entry) => entry.label)).toEqual(six);
+    expect(menu.hint).toBeUndefined();
+  });
+
+  it("keeps the floor and adds the line when the read was refused", () => {
+    // AC 5 and AC 6 in one breath: the menu never goes empty, and an unknown
+    // roster is never presented as an absent one.
+    const menu = slashMenuFrom({ ok: false, reason: "cannot list /x/.agents/skills" }, HINT);
+    expect(menu.entries.map((entry) => entry.label)).toEqual(six);
+    expect(menu.entries.map((entry) => entry.description)).toEqual(
+      SLASH_MENU_ENTRIES.map((entry) => entry.description),
+    );
+    expect(menu.hint).toBe(HINT);
+  });
+
+  it("carries the door's own copy, because only the door knows the noun", () => {
+    expect(slashMenuFrom({ ok: false, reason: "x" }, HINT).hint).toBe(HINT);
+    expect(
+      slashMenuFrom({ ok: false, reason: "x" }, "Couldn't read this session's skills").hint,
+    ).toBe("Couldn't read this session's skills");
   });
 });

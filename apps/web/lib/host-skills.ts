@@ -25,6 +25,11 @@
  * block-scalar description reaches the menu as a literal `>`; skip the
  * filter and home advertises a `/name` the host will not invoke.
  *
+ * The scope is bounded on purpose and the menu must not oversell it: this
+ * door reads the CHOSEN FOLDER's `.agents/skills` and nothing else - no
+ * `.dsh/skills`, no user-level roots, no bundled entries, no flat Markdown.
+ * `/sessions/<id>` is the full-truth surface; whatever home lists is a subset.
+ *
  * This powers completion only - invocation is a plain `session.prompt`
  * whose leading `/name` the host recognizes at the pre-step boundary
  * (the skills contract), so a stale or missing entry here can never
@@ -43,24 +48,43 @@ import { fenceInsideHostRoot, getHostRoot } from "./host-path";
 export type ProjectSkill = { name: string; description: string };
 
 /**
- * List the project skills visible to a session created at `cwd`. Any
- * failure (outside the subtree, unreadable, bridge down) folds to an
- * empty roster - the `/` menu keeps its vendored commands and says
- * nothing about the miss.
+ * The read's outcome: the roster (possibly empty), or the refusal that
+ * explains why there is no roster. `ok: true` with no skills is an ANSWER -
+ * this project has none; `ok: false` is the menu not being allowed to claim
+ * anything. AC 6 (story #152) is exactly that distinction, so it travels.
  */
-export async function fetchProjectSkills(cwd: string): Promise<ProjectSkill[]> {
+export type ProjectSkillsResult =
+  | { ok: true; skills: ProjectSkill[] }
+  | { ok: false; reason: string };
+
+/**
+ * List the project skills visible to a session created at `cwd`. A failure
+ * (outside the subtree, the host default unreadable, the skills directory
+ * unlistable) is REPORTED, not folded away: the menu still offers its
+ * vendored commands, but it says the roster is missing rather than implying
+ * the project has none.
+ */
+export async function fetchProjectSkills(cwd: string): Promise<ProjectSkillsResult> {
   const fenced = await fenceInsideHostRoot(cwd);
-  if (!fenced.ok) return [];
+  if (!fenced.ok) return { ok: false, reason: fenced.reason };
   const root = await getHostRoot();
-  if (root === null) return [];
+  if (root === null) {
+    return { ok: false, reason: "cannot read the host default folder (bridge unavailable)" };
+  }
   // The fence returns a canonical path, so the walk-up climbs only real
   // parents inside the subtree - no symlink can join it.
   for (let dir = fenced.path; ; dir = dirname(dir)) {
     const skillsDir = join(dir, ".agents", "skills");
-    if (existsSync(skillsDir)) return readSkills(skillsDir);
+    if (existsSync(skillsDir)) {
+      const skills = readSkills(skillsDir);
+      if (skills === null) return { ok: false, reason: `cannot list ${skillsDir}` };
+      return { ok: true, skills };
+    }
     if (dir === root || dirname(dir) === dir) break;
   }
-  return [];
+  // No family anywhere in the subtree: a project with no skills, which is a
+  // different fact from an unreadable one and gets no hint line.
+  return { ok: true, skills: [] };
 }
 
 /**
@@ -77,12 +101,17 @@ const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
  */
 const LEGACY_INVOCATION_KEYS = ["disableModelInvocation", "modelInvocable", "userInvocable"];
 
-function readSkills(skillsDir: string): ProjectSkill[] {
+/**
+ * Read every `SKILL.md` in one `.agents/skills` directory; null when the
+ * directory itself cannot be listed - the one failure that is not an answer
+ * about the project, and so the one that becomes a hint line.
+ */
+function readSkills(skillsDir: string): ProjectSkill[] | null {
   let names: string[];
   try {
     names = readdirSync(skillsDir).sort();
   } catch {
-    return [];
+    return null;
   }
   const skills: ProjectSkill[] = [];
   for (const name of names) {

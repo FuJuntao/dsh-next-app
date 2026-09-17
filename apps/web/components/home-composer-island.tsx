@@ -9,10 +9,17 @@ import { ComposerModelChip } from "@/components/composer-model-chip";
 import { ComposerPresetChip } from "@/components/composer-preset-chip";
 import { type ComposerSearch, SessionComposer } from "@/components/session-composer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { fetchProjectSkills, type ProjectSkill } from "@/lib/host-skills";
-import { buildSlashMenu } from "@/lib/slash-menu";
+import { fetchProjectSkills } from "@/lib/host-skills";
+import { slashMenuFrom, type SlashMenuSource } from "@/lib/slash-menu";
 import { searchSessionReferences } from "@/lib/session-references";
 import { startSession, type StartSessionModel } from "@/lib/start-session";
+
+/**
+ * AC 6's honesty line for this door (#117's Copy rule: say what happened,
+ * not that something went wrong). The session page has its own wording for
+ * the same state, because it names a different thing the user can see.
+ */
+const UNREADABLE_SKILLS = "Couldn't read this folder's skills";
 
 // The composer is a client boundary (ADR-0001 island) that server-renders its
 // static surface - shell, placeholder, send button - and hydrates into the
@@ -41,30 +48,43 @@ export function HomeComposerIsland({
   const [folderOpen, setFolderOpen] = useState(false);
   // The model selection (story AC 10); null means the deployment default.
   const [model, setModel] = useState<StartSessionModel | null>(null);
-  // The chosen folder's project skills (the `/` menu's dynamic half):
-  // re-read whenever the folder changes, newest response wins.
-  const [skills, setSkills] = useState<ProjectSkill[]>([]);
+  // The chosen folder's roster, held as the DOOR'S VERDICT: the rows, or the
+  // reason there are no rows to report. One value rather than a list plus a
+  // flag, because they are one fact - and the rule that turns a verdict into
+  // a menu (AC 5's floor, AC 6's honesty line) is the same one the session
+  // page runs, in lib/slash-menu.ts.
+  const [roster, setRoster] = useState<SlashMenuSource>({ ok: true, skills: [] });
   const skillsSeq = useRef(0);
   useEffect(() => {
     const seq = ++skillsSeq.current;
     if (cwd === null) {
-      setSkills([]);
+      setRoster({ ok: true, skills: [] });
       return;
     }
+    const refuse = (reason: string): void => {
+      // The floor holds (AC 5: skills stay invocable regardless - the host
+      // routes leading-`/` prompts whether or not they were suggested) and the
+      // menu says the roster is unknown. The reason goes to the log, not the
+      // row: a fence verdict names a path, which is operator information, not
+      // menu copy.
+      console.warn("[home-composer] the skill roster was refused:", reason);
+      setRoster({ ok: false, reason });
+    };
     void fetchProjectSkills(cwd).then(
-      (next) => {
-        if (seq === skillsSeq.current) setSkills(next);
+      (result) => {
+        if (seq !== skillsSeq.current) return;
+        if (result.ok) setRoster({ ok: true, skills: result.skills });
+        else refuse(result.reason);
       },
-      () => {
-        // A failed read leaves the vendored list alone; skills stay
-        // invocable (the host routes leading-`/` prompts regardless).
+      (cause: unknown) => {
+        // The action call itself failed (transport, a stale build): the
+        // roster is unknown, which is exactly what the hint line is for.
+        if (seq === skillsSeq.current)
+          refuse(cause instanceof Error ? cause.message : String(cause));
       },
     );
   }, [cwd]);
-  // Project skills lead, the vendored host commands follow, and a shadowing
-  // skill wins - the rule lives in lib/slash-menu.ts so the session page's
-  // menu is built by the same function (story #152).
-  const slashEntries = useMemo(() => buildSlashMenu(skills), [skills]);
+  const commands = useMemo(() => slashMenuFrom(roster, UNREADABLE_SKILLS), [roster]);
   // The `@` source (story AC 9): session references via session.search.
   // A failed search yields no options (never an empty-Enter trap: with an
   // empty list the menu simply does not open).
@@ -109,7 +129,7 @@ export function HomeComposerIsland({
         )}
       </div>
       <SessionComposer
-        commands={{ entries: slashEntries }}
+        commands={commands}
         references={[]}
         referenceSearch={queryReferences}
         placeholder="Describe what you want to build"
