@@ -47,7 +47,8 @@
     "react-markdown": "catalog:",
     "rehype-sanitize": "catalog:",
     "remark-gfm": "catalog:",
-    "shiki": "catalog:"
+    "shiki": "catalog:",
+    "yaml": "catalog:"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
