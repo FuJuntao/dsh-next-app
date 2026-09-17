@@ -22,6 +22,11 @@ packages/dsh-next-app/web/
 # dsh-next-app bundle: the packed tarball itself (deploy artifact, never commit)
 scope-dsh-next-app-*.tgz
 
+# e2e scratch projects (slash-roster.spec.ts): fixture folders a spec creates
+# inside the instance's default working folder - the fence's own subtree - and
+# removes in afterAll; ignored so a crashed run cannot dirty the checkout.
+/e2e-slash-*
+
 # logs & misc
 *.log
 .DS_Store

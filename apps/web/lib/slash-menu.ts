@@ -16,11 +16,17 @@
  * The clamp lives here rather than in the data doors so the parity guard
  * (e2e/specs/slash-roster.spec.ts) can compare home's roster against the
  * host's `skill.list` rows line for line: both surfaces render this function's
- * output, so one assertion covers both. This module is pure by contract - no
- * runtime imports, no node APIs - which is what lets a client component and an
- * e2e spec read the same rule instead of restating it.
+ * output, so one assertion covers both.
+ *
+ * Pure by contract, with NO import of its own - not even a type-only one from
+ * the composer it feeds. That is what lets a client component and an e2e spec
+ * read the same rule instead of restating it: the guard imports this module
+ * over a relative path, and anything `@/`-aliased would resolve only inside
+ * the app. The row and menu shapes below are therefore declared here as the
+ * narrower facts they are - the composer's `ComposerEntry` and `ComposerMenu`
+ * stay the caller's contract, and assignability is checked where the rows are
+ * handed over, not asserted twice.
  */
-import type { ComposerEntry, ComposerMenu } from "@/components/session-composer";
 import { SLASH_MENU_ENTRIES } from "./slash-commands";
 
 /** The menu's second line stays one honest sentence. */
@@ -28,6 +34,20 @@ const DESCRIPTION_MAX = 160;
 
 /** One `/` menu row's source: the host's name and its own description text. */
 export type SlashMenuSkill = { name: string; description: string };
+
+/** One built row, in the shape the composer's `/` source consumes. */
+export type SlashMenuEntry = {
+  /** Stable option key. Skill rows carry one because a project's `/plan` and
+   * the registry's `/plan` must never share an option identity; the vendored
+   * rows are keyed by their label, which is unique among them. */
+  key?: string;
+  kind: "command";
+  label: string;
+  description: string;
+};
+
+/** The `/` source as a composer takes it: the rows, plus the hint it owes. */
+export type SlashMenu = { entries: SlashMenuEntry[]; hint?: string };
 
 /**
  * A roster door's verdict, in the shape both doors answer with: the rows
@@ -53,10 +73,10 @@ export function clampSkillDescription(description: string): string {
  * carrying the clamped description), then the vendored commands the skills do
  * not shadow.
  */
-export function buildSlashMenu(skills: readonly SlashMenuSkill[]): ComposerEntry[] {
-  const skillEntries: ComposerEntry[] = skills.map((skill) => ({
+export function buildSlashMenu(skills: readonly SlashMenuSkill[]): SlashMenuEntry[] {
+  const skillEntries: SlashMenuEntry[] = skills.map((skill) => ({
     key: "skill:" + skill.name,
-    kind: "command" as const,
+    kind: "command",
     label: "/" + skill.name,
     description: clampSkillDescription(skill.description),
   }));
@@ -75,7 +95,7 @@ export function buildSlashMenu(skills: readonly SlashMenuSkill[]): ComposerEntry
  * - this repo's skills live in the folder home picked and in the session's
  * cwd, and only the door knows which word is honest.
  */
-export function slashMenuFrom(source: SlashMenuSource, refusalHint: string): ComposerMenu {
+export function slashMenuFrom(source: SlashMenuSource, refusalHint: string): SlashMenu {
   return source.ok
     ? { entries: buildSlashMenu(source.skills) }
     : { entries: buildSlashMenu([]), hint: refusalHint };
