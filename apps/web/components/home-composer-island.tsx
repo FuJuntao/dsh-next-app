@@ -64,7 +64,7 @@ export function HomeComposerIsland({
   // Project skills lead, the vendored host commands follow, and a shadowing
   // skill wins - the rule lives in lib/slash-menu.ts so the session page's
   // menu is built by the same function (story #152).
-  const commands = useMemo(() => buildSlashMenu(skills), [skills]);
+  const slashEntries = useMemo(() => buildSlashMenu(skills), [skills]);
   // The `@` source (story AC 9): session references via session.search.
   // A failed search yields no options (never an empty-Enter trap: with an
   // empty list the menu simply does not open).
@@ -109,7 +109,7 @@ export function HomeComposerIsland({
         )}
       </div>
       <SessionComposer
-        commands={commands}
+        commands={{ entries: slashEntries }}
         references={[]}
         referenceSearch={queryReferences}
         placeholder="Describe what you want to build"
