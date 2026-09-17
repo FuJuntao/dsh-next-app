@@ -91,8 +91,9 @@ vi.mock("./bridge", () => ({
 
 const { fetchProjectSkills } = await import("./host-skills");
 
-beforeAll(() => {
-  fake.host.describe.mockResolvedValue({
+/** The host root every other case reads through. */
+function describeRoot(): Promise<unknown> {
+  return Promise.resolve({
     result: {
       ok: true,
       value: {
@@ -104,12 +105,17 @@ beforeAll(() => {
       },
     },
   });
+}
+
+beforeAll(() => {
+  fake.host.describe.mockImplementation(describeRoot);
 });
 
-/** The roster keyed by name, for shape-by-shape assertions. */
+/** The read's roster, keyed by name: throws the assertion on a refusal. */
 async function roster(cwd: string = root): Promise<Map<string, string>> {
-  const skills = await fetchProjectSkills(cwd);
-  return new Map(skills.map((one) => [one.name, one.description]));
+  const result = await fetchProjectSkills(cwd);
+  if (!result.ok) throw new Error("refused: " + result.reason);
+  return new Map(result.skills.map((one) => [one.name, one.description]));
 }
 
 describe("fetchProjectSkills - the description shapes", () => {
@@ -187,7 +193,9 @@ describe("fetchProjectSkills - what the host would not list", () => {
   });
 
   it("lists exactly the family's subdirectories, in name order", async () => {
-    const skills = await fetchProjectSkills(root);
+    const read = await fetchProjectSkills(root);
+    if (!read.ok) throw new Error("refused: " + read.reason);
+    const skills = read.skills;
     expect(skills.map((one) => one.name)).toEqual([
       "bare-continuation",
       "command-only",
@@ -221,20 +229,69 @@ describe("fetchProjectSkills - the lookup", () => {
     expect(found.has("folded")).toBe(false);
   });
 
-  it("yields an empty roster for a family with nothing in it", async () => {
-    // AC 6's "genuinely empty" half: the walk stops at the first skills
-    // directory, and an empty one is a real answer, not a failure.
+  it("answers empty - ok, not a refusal - for a family with nothing in it", async () => {
+    // AC 6's "genuinely empty" half, which is the half that gets NO hint
+    // line: the walk stopped at a real skills directory and it is empty.
     const bare = join(root, "projects", "quiet");
     mkdirSync(join(bare, ".agents", "skills"), { recursive: true });
-    expect(await roster(bare)).toEqual(new Map());
+    expect(await fetchProjectSkills(bare)).toEqual({ ok: true, skills: [] });
   });
 
-  it("refuses a folder outside the host's default subtree", async () => {
+  it("answers empty when the climb reaches the default folder with no family", async () => {
+    // The other branch of the walk: nothing found on the way up, so the
+    // roster is genuinely empty - and still an ANSWER, not a refusal. This
+    // needs a host root with no family of its own, and host-path caches the
+    // root per module instance, so the case runs against a fresh import with
+    // describe pointed at a second tree; the file's other cases keep reading
+    // through the binding above, whose cache still names `root`.
+    const familyless = join(base, "familyless");
+    mkdirSync(join(familyless, "projects", "plain"), { recursive: true });
+    fake.host.describe.mockImplementation(() =>
+      Promise.resolve({
+        result: {
+          ok: true,
+          value: {
+            cwd: familyless,
+            version: "test",
+            attachedSessions: 0,
+            home: "/home/tester",
+            canOpenPath: false,
+          },
+        },
+      }),
+    );
+    vi.resetModules();
+    const fresh = await import("./host-skills");
+    expect(await fresh.fetchProjectSkills(join(familyless, "projects", "plain"))).toEqual({
+      ok: true,
+      skills: [],
+    });
+    fake.host.describe.mockImplementation(describeRoot);
+  });
+
+  it("refuses a folder outside the host's default subtree, naming the reason", async () => {
     mkdirSync(join(outside, ".agents", "skills", "secret-skill"), { recursive: true });
     writeFileSync(
       join(outside, ".agents", "skills", "secret-skill", "SKILL.md"),
       "---\nname: secret-skill\ndescription: never listed\n---\n",
     );
-    expect(await roster(outside)).toEqual(new Map());
+    const result = await fetchProjectSkills(outside);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected a refusal");
+    // The fence's own words travel: this is what the server log shows and
+    // what tells an operator the pick was refused, not missing.
+    expect(result.reason).toContain("outside the default working folder");
+  });
+
+  it("refuses a skills directory it cannot list", async () => {
+    // `.agents/skills` is a FILE here: existsSync passes, readdir throws.
+    // The roster is unknown, which is a refusal - not an empty project.
+    const broken = join(root, "projects", "broken");
+    mkdirSync(join(broken, ".agents"), { recursive: true });
+    writeFileSync(join(broken, ".agents", "skills"), "not a directory\n");
+    const result = await fetchProjectSkills(broken);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected a refusal");
+    expect(result.reason).toContain("cannot list");
   });
 });
