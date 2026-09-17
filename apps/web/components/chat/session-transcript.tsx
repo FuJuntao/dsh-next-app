@@ -566,7 +566,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
             hasAttachments={() => (intakeRef.current?.count() ?? 0) > 0}
             referenceSearch={referenceSearch}
             referenceHint="@ files & sessions"
-            commands={[...SLASH_MENU_ENTRIES]}
+            commands={{ entries: [...SLASH_MENU_ENTRIES] }}
             references={[]}
             sendModes
             running={running}

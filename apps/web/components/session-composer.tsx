@@ -60,9 +60,18 @@ const DEFAULT_PLACEHOLDER = "Message the session";
 // home injects its own sources. An empty source disables its trigger entirely
 // (its plugin never mounts, no menu opens, Enter never defers to it).
 
-/** One async `@` search outcome: the options, plus a hint line rendered
- * OUTSIDE the option list (the list stays all-choices). */
-export type ComposerSearch = { entries: ComposerEntry[]; hint?: string };
+/** One trigger's menu payload: the options, plus a hint line rendered
+ * OUTSIDE the option list (the list stays all-choices). A hint is the
+ * surface's way of saying WHY the list is what it is - "more results",
+ * "the roster could not be read" - and it is never itself a choice: it is
+ * unselectable, un-highlighted, and absent from the keyboard ring.
+ *
+ * Both triggers take this shape (story #152 task #153): the `@` source
+ * produces one per query, the `/` source is one, injected by the surface. */
+export type ComposerMenu = { entries: ComposerEntry[]; hint?: string };
+
+/** One async `@` search outcome. */
+export type ComposerSearch = ComposerMenu;
 
 export type ComposerEntry = {
   label: string;
@@ -99,8 +108,13 @@ export interface SessionComposerHandle {
 }
 
 export type SessionComposerProps = {
-  /** Injected `/` source. */
-  commands: ComposerEntry[];
+  /**
+   * Injected `/` source: the rows the menu offers, plus the hint line it
+   * owes the user when those rows are not the whole truth (story #152 AC 6).
+   * The trigger mounts only when there is at least one row - a menu with a
+   * hint and no choice would open on nothing.
+   */
+  commands: ComposerMenu;
   /**
    * Pluggable submit action, supplied by the surface. Resolving means the text
    * was accepted: the composer clears the draft. Rejecting means failure: the
@@ -553,7 +567,7 @@ function TypeaheadMenus({
   referenceSearch,
 }: {
   menuOpenRef: RefObject<boolean>;
-  commands: ComposerEntry[];
+  commands: ComposerMenu;
   references: ComposerEntry[];
   referenceSearch: ((query: string) => Promise<ComposerSearch>) | undefined;
 }) {
@@ -569,13 +583,17 @@ function TypeaheadMenus({
     hint?: string;
   }>({ query: "", entries: [] });
   const searchSeq = useRef(0);
+  // Destructured so the option memo keys on the LIST, not on the wrapper
+  // object a surface may rebuild per render: the typeahead's option list must
+  // rebuild on content changes, not on every surface render.
+  const { entries: commandEntries, hint: commandHint } = commands;
 
   const slashOptions = useMemo(
     () =>
-      filterOptions(commands, slashQuery).map(
+      filterOptions(commandEntries, slashQuery).map(
         (entry) => new ComposerOption(entry.kind, entry.label, entry.description),
       ),
-    [commands, slashQuery],
+    [commandEntries, slashQuery],
   );
   const atOptions = useMemo(() => {
     const source =
@@ -662,13 +680,13 @@ function TypeaheadMenus({
 
   return (
     <>
-      {commands.length > 0 && (
+      {commandEntries.length > 0 && (
         <LexicalTypeaheadMenuPlugin
           onQueryChange={setSlashQuery}
           onSelectOption={selectOption}
           options={slashOptions}
           triggerFn={checkForSlashTrigger}
-          menuRenderFn={renderMenu}
+          menuRenderFn={(anchor, props) => renderMenu(anchor, props, commandHint)}
           onOpen={handleMenuOpen}
           onClose={handleMenuClose}
           preselectFirstItem
@@ -716,7 +734,7 @@ function ComposerInner({
   hasAttachments,
   referenceHint,
 }: {
-  commands: ComposerEntry[];
+  commands: ComposerMenu;
   /** The forwarded imperative handle (AC 3's insertDraft), registered here
    * because this is where the editor context lives. */
   handleRef: Ref<SessionComposerHandle>;
@@ -818,7 +836,7 @@ function ComposerInner({
         ? "Enter steers · ⌘/Ctrl+Enter queues"
         : "Enter sends"
       : "Enter sends",
-    commands.length > 0 && "/ commands",
+    commands.entries.length > 0 && "/ commands",
     referenceSearch !== undefined
       ? (referenceHint ?? "@ sessions")
       : references.length > 0 && "@ files",
