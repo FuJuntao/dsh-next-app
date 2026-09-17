@@ -77,9 +77,10 @@ export function useHandback({
   // next replay or the stream's resync shows.
   const handledRef = useRef<Set<string>>(new Set());
   const inFlightRef = useRef(false);
-  // The live return: the joined block sitting in the composer and the ids it
-  // came from. Dismissal (the block vanishing without a send) acks the ids.
-  const returnedRef = useRef<{ text: string; ids: string[] } | null>(null);
+  // The live return: one entry per released item - its id and the TRIMMED text
+  // the draft should still contain. When an entry's text leaves the draft
+  // without a send, that item alone was dismissed and its id alone is acked.
+  const returnedRef = useRef<{ id: string; probe: string }[] | null>(null);
 
   // Everything above is SESSION-scoped, and the island carries no `key`, so
   // the router may reuse this component when the session param changes (the
@@ -107,12 +108,28 @@ export function useHandback({
     );
     if (items.length === 0) return;
     if (inFlightRef.current) return;
+    // AC 2 makes `removed` the licence to write text back - which makes it also
+    // the point of no return. Never cross it without a proven receiving end:
+    // a null handle here means the composer is not mounted, so releasing would
+    // splice the work out of the host with nowhere to put it (no strip residue,
+    // no row, nothing). Leave it pending; the next snapshot retries.
+    if (composerRef.current === null) return;
     inFlightRef.current = true;
     void (async () => {
-      const releasedIds: string[] = [];
-      const texts: string[] = [];
-      let transportFailed = false;
+      const returned: QueuedItem[] = [];
+      // Which arm stopped the batch, for the one line the operator gets.
+      let failure:
+        | { kind: "transport" }
+        | { kind: "refused"; code: string }
+        | { kind: "unmounted" }
+        | null = null;
       for (const item of items) {
+        if (composerRef.current === null) {
+          // The page changed under the batch: the ids already released are
+          // named in the alert, and the rest stay pending and un-handled.
+          failure = { kind: "unmounted" };
+          break;
+        }
         const result = await removeQueueItem(sessionId, item.id);
         // The host's answer retires an id: `removed` (this page owns the text)
         // or `not-found` (the loop claimed it at a step boundary, or another
@@ -122,33 +139,56 @@ export function useHandback({
           handledRef.current.add(item.id);
         }
         if (result.status === "removed") {
-          releasedIds.push(item.id);
-          if (item.text.trim() !== "") texts.push(item.text);
-        } else if (result.status !== "not-found") {
-          // transport / refused: the item stays pending and UN-handled, so a
-          // later snapshot (or a reload) can try again. Break: never pull the
-          // rest of the batch past a failed door (AC 2).
-          transportFailed = true;
+          returned.push(item);
+        } else if (result.status === "transport") {
+          failure = { kind: "transport" };
+          break; // never pull the rest of the batch past a failed door (AC 2)
+        } else if (result.status === "refused") {
+          // Distinct from transport on purpose: the host ANSWERED, with a code.
+          // Commit 1 exists to keep these apart, so the fold happens nowhere.
+          failure = { kind: "refused", code: result.code };
           break;
         }
+        // not-found: claimed or raced - nothing returns, keep going.
       }
       inFlightRef.current = false;
-      if (releasedIds.length > 0) {
-        const block = texts.join("\n\n");
-        returnedRef.current = { text: block, ids: [...releasedIds] };
-        if (block !== "") composerRef.current?.insertDraft(block);
-        // One line, announced once (the live region must CHANGE to speak -
-        // clear, then set on the next macrotask, per the Load older note).
-        const line =
-          releasedIds.length === 1
-            ? "Returned 1 message to the composer."
-            : `Returned ${String(releasedIds.length)} messages to the composer.`;
-        setNotice(null);
-        setTimeout(() => setNotice(line), 0);
+
+      const withText = returned.filter((item) => item.text.trim() !== "");
+      if (withText.length > 0) {
+        const block = withText.map((item) => item.text).join("\n\n");
+        const handle = composerRef.current;
+        if (handle === null) {
+          // Released but nowhere to write: the work is gone from the host, so
+          // say exactly that rather than let it vanish silently.
+          failure = { kind: "unmounted" };
+        } else {
+          handle.insertDraft(block);
+          // Recorded AFTER the insertion, on purpose: `insertDraft` fires the
+          // draft-change event itself, and the composer reports that text
+          // TRIMMED. Tracking the block beforehand would have that own event
+          // read as "the operator deleted it" and ack every id on arrival.
+          // Probes are trimmed for the same reason - compare like with like.
+          returnedRef.current = withText.map((item) => ({
+            id: item.id,
+            probe: item.text.trim(),
+          }));
+          // One line, announced once (the live region must CHANGE to speak -
+          // clear, then set on the next macrotask, per the Load older note).
+          const line =
+            withText.length === 1
+              ? "Returned 1 message to the composer."
+              : `Returned ${String(withText.length)} messages to the composer.`;
+          setNotice(null);
+          setTimeout(() => setNotice(line), 0);
+        }
       }
-      if (transportFailed) {
+      if (failure !== null) {
         setAlert(
-          "a message is still pending in the stopped session - it could not be returned (the dsh bridge is unavailable)",
+          failure.kind === "transport"
+            ? "a message is still pending in the stopped session - it could not be returned (the dsh bridge is unavailable)"
+            : failure.kind === "refused"
+              ? `the session would not release a pending message (${failure.code}) - it stays pending in the queue`
+              : `the page changed mid-return - released messages could not be placed in the composer and are not recoverable here; check the session's queue`,
         );
       }
     })();
@@ -156,16 +196,25 @@ export function useHandback({
 
   const onDraftChange = useCallback(
     (text: string): void => {
-      const returned = returnedRef.current;
-      if (returned === null) return;
-      if (!text.includes(returned.text)) {
-        // The returned block left the draft without a send: that is a
-        // dismissal. Ack the ids (never the content) so no later drain -
-        // this page's next snapshot or the next reload - offers them again.
-        addDismissed(storage(), sessionId, returned.ids);
-        returnedRef.current = null;
-        setNotice(null);
+      const tracked = returnedRef.current;
+      if (tracked === null) return;
+      // Per item, not per block: an edit that removes one returned message must
+      // ack that id alone and leave the others live. The probe is the item's
+      // own trimmed text, which the draft reports in the same space.
+      const keptIds: string[] = [];
+      const gone: string[] = [];
+      for (const entry of tracked) {
+        (text.includes(entry.probe) ? keptIds : gone).push(entry.id);
       }
+      if (gone.length > 0) {
+        // A returned block left the draft without a send: that is a dismissal.
+        // Ack the ids (never the content) so no later drain - this page's next
+        // snapshot or the next reload - offers them again.
+        addDismissed(storage(), sessionId, gone);
+      }
+      returnedRef.current =
+        keptIds.length === 0 ? null : tracked.filter((entry) => keptIds.includes(entry.id));
+      if (gone.length > 0) setNotice(null);
     },
     [sessionId],
   );
