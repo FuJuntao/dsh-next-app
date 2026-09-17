@@ -2,8 +2,12 @@ import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { httpPost } from "../support/bridge-client";
+// The drift guard reads the SAME budget the UI ships (the carved e2e
+// cross-import, review #4 - same precedent as home-composer's slash list).
+import { SESSION_PAGE_SIZE } from "../../apps/web/lib/session-view";
 // The extended test carries the sessionsProfile worker fixture.
 import { expect, test } from "../support/fixtures";
+import type { Page } from "@playwright/test";
 import type { BootedProfile } from "../support/profile";
 import { sleep } from "../support/process";
 import { readState } from "../support/state";
@@ -31,6 +35,12 @@ test.use({ viewport: DESKTOP });
  * fails fast without one (turn/end is appended either way - the durable
  * log is what fork anchors on), and session.fork's child carries
  * parentSessionId, which is the lineage the nav nests.
+ *
+ * Story #148 grows the seed: twelve more ALPHA_CWD sessions put the alpha
+ * bucket at 13 top-level rows - three pages against the budget, so the
+ * pager runs twice there and the middle page shows Show less and Show
+ * {n} more side by side - while BETA_CWD stays at 1 row as the no-control
+ * case.
  */
 
 /** The two workspaces the seed creates (arbitrary, stable, distinct). */
@@ -39,6 +49,21 @@ const BETA_CWD = "/tmp/dsh-e2e-ws-beta";
 const ALPHA_TITLE = "Alpha workspace session";
 const BETA_TITLE = "Beta workspace session";
 const CHILD_TITLE = "Alpha forked child";
+/** The extra alpha rows that take the bucket past two pages (#148, review #3). */
+const ALPHA_EXTRA_TITLES = [
+  "Alpha extra 1",
+  "Alpha extra 2",
+  "Alpha extra 3",
+  "Alpha extra 4",
+  "Alpha extra 5",
+  "Alpha extra 6",
+  "Alpha extra 7",
+  "Alpha extra 8",
+  "Alpha extra 9",
+  "Alpha extra 10",
+  "Alpha extra 11",
+  "Alpha extra 12",
+] as const;
 
 /** Gap between creates so createdAt (hence recency) orders deterministically. */
 const SEED_GAP_MS = 50;
@@ -96,10 +121,28 @@ function topLevelOf(items: WireSession[]): WireSession[] {
   );
 }
 
+/**
+ * The alpha bucket's top-level rows in UI order, chunked into pages of the
+ * imported SESSION_PAGE_SIZE. session.list is already updatedAt-descending
+ * with no seed-time ties, so that is exactly the nav's byRecency order;
+ * alpha itself leads (its seed prompt is the newest activity), so the fork
+ * child rides into page 1.
+ */
+function alphaPages(): string[][] {
+  const members = topLevelOf(wireSessions)
+    .filter((item) => item.cwd === ALPHA_CWD)
+    .map((item) => item.sessionId);
+  const pages: string[][] = [];
+  for (let i = 0; i < members.length; i += SESSION_PAGE_SIZE) {
+    pages.push(members.slice(i, i + SESSION_PAGE_SIZE));
+  }
+  return pages;
+}
+
 let profile: BootedProfile;
 let socket: string;
 let wireSessions: WireSession[];
-let seeded: { alpha: string; beta: string; blank: string; child: string };
+let seeded: { alpha: string; beta: string; blank: string; child: string; extras: string[] };
 
 test.beforeAll(async ({ sessionsProfile }) => {
   profile = sessionsProfile;
@@ -117,6 +160,20 @@ test.beforeAll(async ({ sessionsProfile }) => {
   };
   await envelopeCall(socket, "session.rename", { sessionId: beta.sessionId, title: BETA_TITLE });
   await sleep(SEED_GAP_MS);
+
+  // 1b. The #148 growth: twelve more alpha-bucket sessions, so that bucket
+  //     pages three times (13 top-level rows against the imported budget).
+  //     Created before the seed prompt renews the parent, so the window
+  //     leads with alpha itself and the oldest extras wait on the last page.
+  const extras: string[] = [];
+  for (const title of ALPHA_EXTRA_TITLES.values()) {
+    const extra = (await envelopeCall(socket, "session.create", { cwd: ALPHA_CWD })) as {
+      sessionId: string;
+    };
+    await envelopeCall(socket, "session.rename", { sessionId: extra.sessionId, title });
+    await sleep(SEED_GAP_MS);
+    extras.push(extra.sessionId);
+  }
 
   // 2. The blank session: never renamed, so no title projection exists and
   //    the nav must show its "New Session" fallback. Its cwd is the host's
@@ -162,10 +219,11 @@ test.beforeAll(async ({ sessionsProfile }) => {
     beta: beta.sessionId,
     blank: blank.sessionId,
     child: forked.sessionId,
+    extras,
   };
 
   // The seed is the fixture: a missing row means every later assertion lies.
-  expect(wireSessions).toHaveLength(4);
+  expect(wireSessions).toHaveLength(2 + ALPHA_EXTRA_TITLES.length + 2);
   const child = wireSessions.find((item) => item.sessionId === seeded.child);
   expect(child?.parentSessionId, "the fork child must carry its parent's id").toBe(seeded.alpha);
 });
@@ -174,6 +232,39 @@ const prefsCookie = (prefs: Record<string, string>): string =>
   "dsh-next-app.prefs=" + encodeURIComponent(JSON.stringify(prefs));
 const authHeader =
   "Basic " + Buffer.from(state.auth.user + ":" + state.auth.password).toString("base64");
+
+/** Install the workspace-grouping pref so a fresh navigation server-renders grouped. */
+async function withWorkspaceGrouping(page: Page): Promise<void> {
+  await page.context().addCookies([
+    {
+      name: "dsh-next-app.prefs",
+      value: encodeURIComponent(JSON.stringify({ sessionGroup: "workspace" })),
+      url: profile.baseURL,
+    },
+  ]);
+}
+
+/**
+ * The PLATFORM accessible name of the button whose name starts with
+ * `namePrefix`, read from Chromium's own accessibility tree over CDP - the
+ * computation assistive technology consumes. Playwright's toHaveAccessibleName
+ * / ariaSnapshot run a SEPARATE accname implementation that inserts a
+ * separator between text nodes, so they pass the glued multi-child markup
+ * this guards (review round 4); the CDP tree is the faithful source.
+ */
+async function platformButtonName(page: Page, namePrefix: string): Promise<string | undefined> {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const { nodes } = (await cdp.send("Accessibility.getFullAXTree")) as {
+      nodes: { role?: { value?: string }; name?: { value?: string } }[];
+    };
+    return nodes.find(
+      (n) => n.role?.value === "button" && (n.name?.value ?? "").startsWith(namePrefix),
+    )?.name?.value;
+  } finally {
+    await cdp.detach();
+  }
+}
 
 test("seeded sessions render with their titles; the blank one shows New Session", async ({
   page,
@@ -248,13 +339,30 @@ test("By workspace buckets by cwd with the full path as the header detail", asyn
     const group = page.getByTestId("session-group-" + cwd);
     await expect(group).toBeVisible();
     await expect(group.getByTitle(cwd)).toBeVisible();
-    for (const memberId of memberIds) {
-      await expect(group.locator(rowSelector(memberId))).toBeVisible();
-    }
-    // The nested child renders inside its parent's workspace bucket.
+    // The nested child renders inside its parent's workspace bucket, on the
+    // parent's page - asserted before the page walk moves the window (the
+    // child rides with alpha, whose renewed activity leads page 1).
     if (memberIds.includes(seeded.alpha)) {
       await expect(group.locator(rowSelector(seeded.child))).toBeVisible();
     }
+    // #148 makes a busy group page (#149 grew alpha to 13 top-level rows):
+    // walk the pages and assert every member is REACHED by the pager -
+    // expand first, then assert membership; untouched here, the old
+    // all-visible-at-once assertion would now be the weakened one.
+    const seen = new Set<string>();
+    for (;;) {
+      for (const memberId of memberIds) {
+        const row = group.locator(rowSelector(memberId));
+        if ((await row.count()) > 0) {
+          await expect(row).toBeVisible();
+          seen.add(memberId);
+        }
+      }
+      const more = group.getByRole("button", { name: /^Show \d+ more$/ });
+      if ((await more.count()) === 0) break;
+      await more.click();
+    }
+    expect([...seen].sort()).toEqual([...memberIds].sort());
   }
 });
 
@@ -316,6 +424,192 @@ test("the fork child nests under its parent row", async ({ page }) => {
   const child = parent.locator(rowSelector(seeded.child));
   await expect(child).toBeVisible();
   await expect(child).toContainText(CHILD_TITLE);
+});
+
+// ---------- story #148 task #149: fold + 5-row pager ----------
+
+test("pager: windows the budget, pages forward through the pair state, steps back one page", async ({
+  page,
+}) => {
+  await withWorkspaceGrouping(page);
+  await page.goto(profile.baseURL + "/");
+  const pages = alphaPages();
+  // The seed puts alpha at three pages: a full first page, a middle page
+  // where BOTH controls sit side by side (review #3's unasserted state),
+  // and a short last page.
+  expect(pages.map((p) => p.length)).toEqual([SESSION_PAGE_SIZE, SESSION_PAGE_SIZE, 3]);
+  const alpha = page.getByTestId("session-group-" + ALPHA_CWD);
+
+  // AC 1 unfolded page 1: the budget's newest rows, the rest not in the DOM.
+  for (const id of pages[0]!) await expect(alpha.locator(rowSelector(id))).toBeVisible();
+  for (const id of pages[1]!) await expect(alpha.locator(rowSelector(id))).toHaveCount(0);
+  // AC 2 at page 1: Show less absent; Show more carries the hidden budget.
+  await expect(alpha.getByRole("button", { name: "Show less" })).toHaveCount(0);
+  await alpha.getByRole("button", { name: "Show " + SESSION_PAGE_SIZE + " more" }).click();
+
+  // Page 2, the pair state: Show less AND Show {min(5, hidden)=3} more.
+  for (const id of pages[1]!) await expect(alpha.locator(rowSelector(id))).toBeVisible();
+  for (const id of pages[0]!) await expect(alpha.locator(rowSelector(id))).toHaveCount(0);
+  await expect(alpha.getByRole("button", { name: "Show less" })).toBeVisible();
+  await alpha.getByRole("button", { name: "Show 3 more" }).click();
+
+  // Last page: Show more gone (everything shows), Show less steps back to
+  // the pair state - exactly one page, not all the way out (AC 2).
+  for (const id of pages[2]!) await expect(alpha.locator(rowSelector(id))).toBeVisible();
+  await expect(alpha.getByRole("button", { name: /^Show \d+ more$/ })).toHaveCount(0);
+  await alpha.getByRole("button", { name: "Show less" }).click();
+  await expect(alpha.getByRole("button", { name: "Show less" })).toBeVisible();
+  await expect(alpha.getByRole("button", { name: "Show 3 more" })).toBeVisible();
+  for (const id of pages[1]!) await expect(alpha.locator(rowSelector(id))).toBeVisible();
+  // ...and once more to the floor, where Show less vanishes.
+  await alpha.getByRole("button", { name: "Show less" }).click();
+  for (const id of pages[0]!) await expect(alpha.locator(rowSelector(id))).toBeVisible();
+  await expect(alpha.getByRole("button", { name: "Show less" })).toHaveCount(0);
+
+  // AC 2 no-control case: the one-row beta group renders no pager row at all.
+  await expect(page.getByTestId("session-pager-" + BETA_CWD)).toHaveCount(0);
+});
+
+test("whole-group fold: the header folds, and reopening lands on page 1", async ({ page }) => {
+  await withWorkspaceGrouping(page);
+  await page.goto(profile.baseURL + "/");
+  const pages = alphaPages();
+  const alpha = page.getByTestId("session-group-" + ALPHA_CWD);
+  const fold = page.getByTestId("session-fold-" + ALPHA_CWD);
+
+  // AC 3: aria-expanded state, top-level count beside the name (read off
+  // the same seed, review #4), full path tooltip.
+  await expect(fold).toHaveAttribute("aria-expanded", "true");
+  await expect(fold).toHaveAttribute("title", ALPHA_CWD);
+  await expect(fold).toContainText(String(pages.flat().length));
+  // The packet's Copy rule pinned on the PLATFORM accname (review round 4):
+  // toHaveAccessibleName was no guard - Playwright's own accname inserts a
+  // space between the two text nodes and passes the glued markup, while
+  // Chromium's computation (what AT hears) glues it. The CDP tree is the
+  // faithful read, and the single-text-node shape is pinned structurally.
+  const basename = ALPHA_CWD.split("/").at(-1) ?? "";
+  await expect(platformButtonName(page, basename)).resolves.toBe(
+    basename + " " + pages.flat().length + " sessions",
+  );
+  await expect(fold.locator("span.sr-only").evaluate((el) => el.childNodes.length)).resolves.toBe(
+    1,
+  );
+
+  // Park on the LAST page, so a reopen-to-page-1 that actually reset is
+  // provable across more than one step.
+  await alpha.getByRole("button", { name: "Show " + SESSION_PAGE_SIZE + " more" }).click();
+  await alpha.getByRole("button", { name: "Show 3 more" }).click();
+
+  await fold.click();
+  await expect(fold).toHaveAttribute("aria-expanded", "false");
+  // Folded renders ONLY the header: no rows (top-level or nested), no pager.
+  await expect(alpha.locator("[data-session-id]")).toHaveCount(0);
+  await expect(page.getByTestId("session-pager-" + ALPHA_CWD)).toHaveCount(0);
+
+  await fold.click();
+  await expect(fold).toHaveAttribute("aria-expanded", "true");
+  for (const id of pages[0]!) await expect(alpha.locator(rowSelector(id))).toBeVisible();
+  for (const id of pages[1]!.concat(pages[2]!))
+    await expect(alpha.locator(rowSelector(id))).toHaveCount(0);
+});
+
+test("active-session arrival: a deep link to a last-page row server-paints that page", async ({
+  page,
+  request,
+}) => {
+  const pages = alphaPages();
+  // The seed pins alpha at 13 top-level rows, so the last page carries the
+  // three oldest extras - the target and its same-page siblings.
+  expect(pages[2]).toHaveLength(3);
+  const [target, sibling] = pages[2] as [string, string];
+
+  // AC 6 + AC 4 together: the FIRST paint (no JS, raw fetch) already windows
+  // to the holding page - target and its sibling render, every page-1 row is
+  // absent. A post-hydration patch-up would leave all sixteen rows in the
+  // initial HTML and the jump would be a visible fix-up.
+  const res = await request.get(profile.baseURL + "/sessions/" + target, {
+    headers: { authorization: authHeader, cookie: prefsCookie({ sessionGroup: "workspace" }) },
+  });
+  expect(res.status()).toBe(200);
+  const html = await res.text();
+  expect(html).toContain('data-session-id="' + target + '"');
+  expect(html).toContain('data-session-id="' + sibling + '"');
+  for (const id of pages[0]!) expect(html).not.toContain('data-session-id="' + id + '"');
+
+  // The hydrated page agrees: unfolded, on the holding page, row visible.
+  await withWorkspaceGrouping(page);
+  await page.goto(profile.baseURL + "/sessions/" + target);
+  const alpha = page.getByTestId("session-group-" + ALPHA_CWD);
+  await expect(page.getByTestId("session-fold-" + ALPHA_CWD)).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(alpha.locator(rowSelector(target))).toBeVisible();
+  await expect(alpha.getByRole("button", { name: "Show less" })).toBeVisible();
+});
+
+test("active-session reveal scrolls a below-fold row into view", async ({ page }) => {
+  // AC 4's scroll clause, mutation-guarded (review #3): a short viewport
+  // makes the blank host-cwd row genuinely start below the fold - the
+  // alpha group's page 1 plus pager fill the visible band - so deleting
+  // the scrollIntoView call leaves this leg red, not silently green.
+  await page.setViewportSize({ width: 1280, height: 320 });
+  await withWorkspaceGrouping(page);
+  await page.goto(profile.baseURL + "/sessions/" + seeded.blank);
+  await expect(page.locator(rowSelector(seeded.blank))).toBeInViewport();
+});
+
+test("active-session reveal: navigation back into a folded group unfolds it", async ({ page }) => {
+  await withWorkspaceGrouping(page);
+  await page.goto(profile.baseURL + "/sessions/" + seeded.alpha);
+  const fold = page.getByTestId("session-fold-" + ALPHA_CWD);
+  await expect(page.locator(rowSelector(seeded.alpha))).toBeVisible();
+
+  // Folding the group holding the ACTIVE session is allowed (blast radius:
+  // the user's own control) and the reveal does not fight it in place...
+  await fold.click();
+  await expect(fold).toHaveAttribute("aria-expanded", "false");
+
+  // ...nor does leaving disturb it: clicking the beta row is a client-side
+  // navigation, and the beta reveal acts on the beta group only.
+  const beta = page.getByTestId("session-group-" + BETA_CWD);
+  await beta.locator(rowSelector(seeded.beta)).click();
+  await expect(page).toHaveURL(new RegExp("/sessions/" + seeded.beta));
+  await expect(fold).toHaveAttribute("aria-expanded", "false");
+
+  // Back (client-side) changes the active session: the folded group holding
+  // it now unfolds and its row is reachable (AC 4, once per change).
+  await page.goBack();
+  await expect(fold).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator(rowSelector(seeded.alpha))).toBeVisible();
+});
+
+test("at 375px the fold header and pager answer taps", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await withWorkspaceGrouping(page);
+  await page.goto(profile.baseURL + "/");
+  // Below the desktop breakpoint the side nav is an overlay drawer.
+  await page.getByRole("button", { name: "Toggle navigation" }).click();
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await expect(nav).toBeVisible();
+
+  const pages = alphaPages();
+  const alpha = nav.getByTestId("session-group-" + ALPHA_CWD);
+  const fold = nav.getByTestId("session-fold-" + ALPHA_CWD);
+
+  // The window cap holds on the phone surface too.
+  await expect(alpha.locator(rowSelector(pages[0]![0] as string))).toBeVisible();
+  await expect(alpha.locator(rowSelector(pages[1]![0] as string))).toHaveCount(0);
+
+  // The whole header row is the tap target (nothing hover-gated): fold, reopen.
+  await fold.click();
+  await expect(fold).toHaveAttribute("aria-expanded", "false");
+  await fold.click();
+  await expect(fold).toHaveAttribute("aria-expanded", "true");
+
+  // Pager buttons are reachable and carry the same contract.
+  await alpha.getByRole("button", { name: "Show " + SESSION_PAGE_SIZE + " more" }).click();
+  await expect(alpha.locator(rowSelector(pages[1]![0] as string))).toBeVisible();
 });
 
 test("the bridge-down state renders distinctly and recovers via Retry", async ({ page }) => {

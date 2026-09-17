@@ -25,6 +25,12 @@
  *   - exact updatedAt ties break by id, so server and client render the
  *     same sequence deterministically (a differing order would reintroduce
  *     the flash AC 5 forbids).
+ *
+ * Paging (story #148 task #149): a paged group window shows at most
+ * SESSION_PAGE_SIZE *top-level* rows - nested children ride inside their
+ * parent's row, so a cut never splits a lineage. The window is cut here,
+ * not in the client component, so the server's first paint and hydration
+ * compute the same page (AC 6).
  */
 import type { Session } from "./sessions";
 
@@ -182,6 +188,60 @@ export function arrangeSessions(sessions: Session[], group: SessionGroupMode): S
       rows: toRows(workspaces.get(key)!, childrenOf),
     };
   });
+}
+
+/**
+ * Top-level rows rendered per paged group before the pager offers more
+ * (story #148 AC 1); the built-in nav's COLLAPSED_SESSION_LIMIT value.
+ */
+export const SESSION_PAGE_SIZE = 5;
+
+/** One group's visible window: everything the fold/pager render needs. */
+export interface SessionPage {
+  /** The window's rows; nested children ride inside their parent's row. */
+  rows: SessionRow[];
+  /** The 1-based page actually shown (the requested one clamped). */
+  page: number;
+  /** At least 1 - an empty group is still page 1 of nothing. */
+  pageCount: number;
+  /** `Show {n} more` budget: min(SESSION_PAGE_SIZE, rows hidden past the window); 0 hides the button. */
+  moreCount: number;
+}
+
+/**
+ * Window a group's TOP-LEVEL rows to a 1-based page (AC 1-2). Children are
+ * not cut: they render inside their parent's row, so a page boundary never
+ * orphans a lineage - and the budget only ever counts top-level rows.
+ * Out-of-range pages clamp (groups shrink as sessions are removed), keeping
+ * server and client renders identical for the same stored page number.
+ */
+export function sessionPage(rows: SessionRow[], page: number): SessionPage {
+  const pageCount = Math.max(1, Math.ceil(rows.length / SESSION_PAGE_SIZE));
+  const target = Math.trunc(page);
+  const clamped = !Number.isFinite(target) || target < 1 ? 1 : Math.min(target, pageCount);
+  const start = (clamped - 1) * SESSION_PAGE_SIZE;
+  const visible = rows.slice(start, start + SESSION_PAGE_SIZE);
+  return {
+    rows: visible,
+    page: clamped,
+    pageCount,
+    moreCount: Math.min(SESSION_PAGE_SIZE, rows.length - start - visible.length),
+  };
+}
+
+/** Whether row's subtree (the session or any nested descendant) is sessionId. */
+function subtreeHas(row: SessionRow, sessionId: string): boolean {
+  return row.session.id === sessionId || row.children.some((child) => subtreeHas(child, sessionId));
+}
+
+/**
+ * The 1-based page whose window contains sessionId - as a top-level row or
+ * anywhere inside a nested subtree (the page holding it holds its whole
+ * lineage, AC 4's jump target); undefined when the group holds no such row.
+ */
+export function sessionPageOf(rows: SessionRow[], sessionId: string): number | undefined {
+  const index = rows.findIndex((row) => subtreeHas(row, sessionId));
+  return index < 0 ? undefined : Math.floor(index / SESSION_PAGE_SIZE) + 1;
 }
 
 /**
