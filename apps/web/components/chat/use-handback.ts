@@ -51,7 +51,8 @@ export interface UseHandbackArgs {
 export interface HandbackApi {
   /** Wire to the composer's `onDraftChange`: tells a dismissed return from a sent one. */
   onDraftChange: (text: string) => void;
-  /** The submit path calls this when a send is accepted: the tracked return ran. */
+  /** The submit path calls this when a send is accepted: the tracked return
+   * ran, and the notice retires with it (cleared on dismissed or sent). */
   markSent: () => void;
   /** The one stated line - how many messages returned; null while nothing has. */
   notice: string | null;
@@ -223,6 +224,10 @@ export function useHandback({
     // The draft left through the send door, not the operator's delete: the
     // returned work is running, so its ids must not be recorded as dismissed.
     returnedRef.current = null;
+    // The send was accepted, so the notice's job is done - #146's packet
+    // clears it "when the returned draft is dismissed or sent", and leaving
+    // it up would claim a return that is no longer in the composer.
+    setNotice(null);
   }, []);
 
   return { onDraftChange, markSent, notice };
