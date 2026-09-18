@@ -72,10 +72,27 @@ skill(
   "unparsable-flag",
   "name: unparsable-flag\ndescription: not a boolean\nuser-invocable: maybe",
 );
+// The OTHER invocation flag is validated too: the host coerces both keys and
+// ignores the whole file when either is uncoercible (review finding #1 on the
+// roster PR - the row home invented here was exactly the shape AC 7 forbids).
+skill(
+  "unparsable-model-flag",
+  "name: unparsable-model-flag\ndescription: not a boolean\ndisable-model-invocation: maybe",
+);
+skill(
+  "list-model-flag",
+  "name: list-model-flag\ndescription: a YAML list is not a boolean\ndisable-model-invocation:\n  - a\n  - b",
+);
 /** The shapes that ARE skills whatever their other flags say. */
 skill(
   "command-only",
   "name: command-only\ndescription: Invoked by command only.\ndisable-model-invocation: true",
+);
+// `off` coerces to false, so this skill IS listed - the flag is disabled, the
+// skill is not (the host's own spelling set: false/no/off).
+skill(
+  "model-flag-off",
+  "name: model-flag-off\ndescription: off means the flag is off\ndisable-model-invocation: off",
 );
 skill("user-yes", "name: user-yes\ndescription: still a user command\nuser-invocable: yes");
 
@@ -182,6 +199,10 @@ describe("fetchProjectSkills - what the host would not list", () => {
     expect(found.has("user-only-no")).toBe(false);
     // A flag the host cannot coerce makes it ignore the whole file...
     expect(found.has("unparsable-flag")).toBe(false);
+    // ...on EITHER invocation key - `disable-model-invocation` is not a
+    // filter, but it is still validated (review finding #1).
+    expect(found.has("unparsable-model-flag")).toBe(false);
+    expect(found.has("list-model-flag")).toBe(false);
     // ...as does the camelCase spelling it rejects on sight.
     expect(found.has("legacy-key")).toBe(false);
   });
@@ -189,6 +210,7 @@ describe("fetchProjectSkills - what the host would not list", () => {
   it("keeps the command-only skills - those are the ones a user types", async () => {
     const found = await roster();
     expect(found.get("command-only")).toBe("Invoked by command only.");
+    expect(found.get("model-flag-off")).toBe("off means the flag is off");
     expect(found.get("user-yes")).toBe("still a user command");
   });
 
@@ -201,6 +223,7 @@ describe("fetchProjectSkills - what the host would not list", () => {
       "command-only",
       "folded",
       "literal",
+      "model-flag-off",
       "nested-colon",
       "plain-continuation",
       "quoted",
