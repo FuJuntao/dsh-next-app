@@ -12,11 +12,6 @@
 /*---break---
  */
 @custom-variant dark (&:is(.dark *));
-/* The device axis for input density (phone input density story): primary
-   pointer is touch - phones and tablets, exactly the devices where iOS
-   zooms onto a focused editable under 16px. Components opt in with the
-   existing scale, stock-shadcn style: text-xs coarse:text-base. */
-@custom-variant coarse (@media (pointer: coarse));
 
 @layer base {
   html,
@@ -240,23 +235,4 @@
   font-style: var(--shiki-dark-font-style) !important;
   font-weight: var(--shiki-dark-font-weight) !important;
   text-decoration: var(--shiki-dark-text-decoration) !important;
-}
-
-/* The platform bound itself, stated once: on coarse pointers - the
-   devices where iOS zooms the viewport onto a focused editable smaller
-   than 16px, lifting the page - no editable may compute under 1rem.
-   Components carry their tier with the coarse: variant (text-xs
-   coarse:text-base, stock-shadcn shape with the device axis); this
-   unlayered rule clamps anything that dodges the variant (a hardcoded
-   text-xs on a future editable cannot reintroduce the zoom). Fine
-   pointers never match. The bare [contenteditable] selector covers the
-   Lexical composer in both its locked (contenteditable="false" on the
-   home page) and unlocked states. */
-@media (pointer: coarse) {
-  input,
-  select,
-  textarea,
-  [contenteditable] {
-    font-size: 1rem;
-  }
 }
