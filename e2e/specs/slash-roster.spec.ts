@@ -11,9 +11,9 @@
  * The five cases, and the criterion each one carries:
  *
  *  1. A block-scalar description reaches the menu as its own sentence, through
- *     the shared clamp (AC 4, and AC 3's clamp on the home door). This is the
- *     deployment's measured bug: a third of `~/homecenter/.agents/skills`
- *     rendered a literal `>`.
+ *     the shared clamp (AC 4, and AC 3's clamp on the home door). This is a
+ *     deployment's measured bug: a third of one real skill family rendered a
+ *     literal `>`.
  *  2. A project with an empty family lists the vendored six and says NOTHING
  *     extra (AC 6's "genuinely empty" half).
  *  3. A family that cannot be read lists the vendored six and SAYS so in the
