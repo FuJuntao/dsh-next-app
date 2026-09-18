@@ -109,6 +109,20 @@ describe("clampSkillDescription", () => {
     const once = clampSkillDescription("y".repeat(500));
     expect(clampSkillDescription(once)).toBe(once);
   });
+
+  it("cuts on code points, so an astral character never leaves a surrogate", () => {
+    // 158 x + one emoji + " tail": 164 code points, 165 UTF-16 units. A
+    // unit-based cut would slice the emoji in half and render a replacement
+    // glyph one character ahead of the ellipsis (review finding #5).
+    const text = "x".repeat(158) + "🎬" + " tail";
+    const clamped = clampSkillDescription(text);
+    expect(clamped.endsWith("…")).toBe(true);
+    expect([...clamped]).toHaveLength(160);
+    // No unpaired high surrogate anywhere in the output.
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(clamped)).toBe(false);
+    // The emoji itself survives the cut intact.
+    expect(clamped.startsWith("x".repeat(158) + "🎬")).toBe(true);
+  });
 });
 
 describe("slashMenuFrom", () => {
