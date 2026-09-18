@@ -18,14 +18,15 @@
  * host's `skill.list` rows line for line: both surfaces render this function's
  * output, so one assertion covers both.
  *
- * Pure by contract, with NO import of its own - not even a type-only one from
- * the composer it feeds. That is what lets a client component and an e2e spec
- * read the same rule instead of restating it: the guard imports this module
- * over a relative path, and anything `@/`-aliased would resolve only inside
- * the app. The row and menu shapes below are therefore declared here as the
- * narrower facts they are - the composer's `ComposerEntry` and `ComposerMenu`
- * stay the caller's contract, and assignability is checked where the rows are
- * handed over, not asserted twice.
+ * One import, and only one - the vendored command list it appends, from
+ * slash-commands.ts. It imports NOTHING from the composer it feeds, not even
+ * a type. That is what lets a client component and an e2e spec read the same
+ * rule instead of restating it: the guard imports this module over a relative
+ * path, and anything `@/`-aliased would resolve only inside the app. The row
+ * and menu shapes below are therefore declared here as the narrower facts
+ * they are - the composer's `ComposerEntry` and `ComposerMenu` stay the
+ * caller's contract, and assignability is checked where the rows are handed
+ * over, not asserted twice.
  */
 import { SLASH_MENU_ENTRIES } from "./slash-commands";
 
