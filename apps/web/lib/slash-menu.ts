@@ -59,13 +59,17 @@ export type SlashMenuSource =
 
 /**
  * Clamp a description to the menu's single line: `DESCRIPTION_MAX` characters
- * total, the last one an ellipsis. Idempotent, so running an already-clamped
- * string through it changes nothing.
+ * total, the last one an ellipsis. Characters are CODE POINTS, not UTF-16
+ * units: a cut inside an astral character would emit a lone high surrogate
+ * ahead of the ellipsis and render a replacement glyph in the row (skill
+ * descriptions carry emoji). Idempotent, so running an already-clamped string
+ * through it changes nothing.
  */
 export function clampSkillDescription(description: string): string {
-  return description.length <= DESCRIPTION_MAX
+  const characters = [...description];
+  return characters.length <= DESCRIPTION_MAX
     ? description
-    : description.slice(0, DESCRIPTION_MAX - 1) + "…";
+    : characters.slice(0, DESCRIPTION_MAX - 1).join("") + "…";
 }
 
 /**
