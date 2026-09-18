@@ -19,6 +19,8 @@ dist/
 packages/dsh-next-app/lib/
 # dsh-next-app bundle: staged app build (the pack pipeline copies apps/web's build here)
 packages/dsh-next-app/web/
+# dsh-next-app bundle: the packed tarball itself (deploy artifact, never commit)
+scope-dsh-next-app-*.tgz
 
 # logs & misc
 *.log
