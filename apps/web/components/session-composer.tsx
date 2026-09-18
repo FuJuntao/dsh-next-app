@@ -751,7 +751,7 @@ function ComposerInner({
             contentEditable={
               <ContentEditable
                 aria-label={placeholder}
-                className="block max-h-48 min-h-11 overflow-y-auto px-3 py-2.5 text-sm leading-normal outline-none"
+                className="block max-h-48 min-h-11 overflow-y-auto px-3 py-2.5 text-base md:text-sm leading-normal outline-none"
               />
             }
             placeholder={
