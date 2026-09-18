@@ -154,11 +154,18 @@ function readSkill(path: string): ProjectSkill | null {
   if (description === undefined) return null;
   if (LEGACY_INVOCATION_KEYS.some((key) => Object.hasOwn(data, key))) return null;
   const userInvocable = booleanField(data, "user-invocable");
-  if (userInvocable === null || userInvocable === false) return null;
-  // `disable-model-invocation` is deliberately NOT a filter: skill.list
-  // carries those rows (modelInvocable: false) precisely because the
-  // command-only skills - /story, /design, /review - are the ones a user
-  // types (story #152, non-goals).
+  const disableModelInvocation = booleanField(data, "disable-model-invocation");
+  // The host VALIDATES both invocation flags before applying either: a value
+  // it cannot coerce makes its `parseInvocationPolicy` throw, `parseSkillFile`
+  // catches, and the whole file is ignored - so an unparsable flag is a
+  // missing skill, not a row with a default. Only the RESULT differs per key:
+  // `user-invocable: false` drops the row from skill.list, while
+  // `disable-model-invocation` is not a filter at all - skill.list carries
+  // those rows (modelInvocable: false) precisely because the command-only
+  // skills - /story, /design, /review - are the ones a user types (story
+  // #152, non-goals).
+  if (userInvocable === null || disableModelInvocation === null) return null;
+  if (userInvocable === false) return null;
   return { name, description };
 }
 
@@ -211,6 +218,7 @@ function booleanField(data: Record<string, unknown>, key: string): boolean | nul
         return true;
       case "false":
       case "no":
+      case "off":
         return false;
       default:
         return null;
