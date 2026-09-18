@@ -225,10 +225,29 @@ test("Stop returns a stranded steer to the composer; resending lands it once (AC
   }
 
   // Resend the returned work: it becomes ONE durable row and runs a turn.
+  // The send is accepted, so the notice retires with it - the packet clears
+  // it "when the returned draft is dismissed or sent", and this is the sent
+  // half (the AC 6 leg covers the dismissed one).
   await box.press("Enter");
-  await expect(scroller.getByText("a steer to bring back", { exact: false })).toHaveCount(1, {
-    timeout: 30_000,
-  });
+  await expect(page.getByTestId("handback-notice")).toHaveCount(0, { timeout: 15_000 });
+  // The strip re-parks the resent text until the loop claims it, and it
+  // renders AFTER the rows - so a bare getByText count is satisfied by the
+  // strip's one line while no durable row exists at all. Read the row from
+  // the DURABLE user bubble (a pre-wrap div; the strip renders an <li>), so
+  // no strip state can satisfy this.
+  await expect(
+    scroller.locator("div.whitespace-pre-wrap", { hasText: "a steer to bring back" }),
+  ).toHaveCount(1, { timeout: 30_000 });
+  // Sent, not dismissed: the ack store must still be empty. The send door
+  // retires the tracked return BEFORE the composer's clear event can read as
+  // a deletion; the read sits after the row landed, well past that event, so
+  // a wrong ordering would have written the id by now.
+  expect(
+    await page.evaluate(
+      (key) => window.localStorage.getItem(key),
+      "dsh-next-app.handback-dismissed:" + sessionId,
+    ),
+  ).toBeNull();
 });
 
 test("a Stop from another client is handed back on the first load (AC 1)", async ({ page }) => {
@@ -352,9 +371,20 @@ test("a multi-line steer returns and resends unchanged (AC 3)", async ({ page })
   // break in, one out - a re-paragraphised draft reads back with a blank line
   // between the two, which is the defect this pins.
   await box.press("Enter");
-  const row = scroller.getByText("alpha line", { exact: false }).last();
+  // The resend re-parks the text first: the queue announces it the moment it
+  // is spliced, so the strip - which renders AFTER the rows, and only the
+  // item's FIRST line (`q.text.split("\n")[0]`) - is for a window the only
+  // "alpha line" in the scroller. `.last()` then resolved to the STRIP row:
+  // toBeVisible was satisfied by it, the innerText compare read one line, and
+  // the leg failed with nothing wrong (twice; the failure snapshot is exactly
+  // that state - strip up, no durable row yet). Scope the row to the DURABLE
+  // user bubble - a pre-wrap div, which the strip's <li> never is - so no
+  // strip state can satisfy it, and assert the drained strip after the row
+  // lands (the claim is what landed it).
+  const row = scroller.locator("div.whitespace-pre-wrap", { hasText: "alpha line" }).last();
   await expect(row).toBeVisible({ timeout: 45_000 });
   expect((await row.innerText()).trim()).toBe("alpha line\nbravo line");
+  await expect(strip).toHaveCount(0, { timeout: 15_000 });
 });
 
 test("an image-bearing steer is residue, never returned (AC 4)", async ({ page }) => {
