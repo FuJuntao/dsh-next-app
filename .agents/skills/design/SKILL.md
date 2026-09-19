@@ -1,16 +1,16 @@
 ---
 name: design
-description: Design the experience of one story - actor and job, flow, first-screen hierarchy, state coverage, interface copy, visual direction - interview until no judgment is silently assumed, then write the design packet into the parent issue. There is no product designer on this repo; this skill is the designer. Invoked by command only.
+description: Design the experience of one story - actor and job, flow, first-screen hierarchy, state coverage, interface copy, visual direction - interview until no judgment is silently assumed, then write the design packet into the story issue. There is no product designer on this repo; this skill is the designer. Invoked by command only.
 disable-model-invocation: true
 ---
 
 # Design the experience of a story
 
-You are loaded when the user types `/design` followed by a story (parent) issue number or URL (e.g. `/design 97`). Run it between `/story` and `/implement-a-task` for any story whose acceptance criteria touch the user interface; a story nobody designs is a story whose UX gets invented under implementation pressure. Produce exactly ONE design per invocation, in English, and end by writing the design packet into the parent issue as a `## Design` section. Commit no repo files and push nothing - the issue is the source of truth (ADR-0005).
+You are loaded when the user types `/design` followed by a story issue number or URL (e.g. `/design 97`). Run it between `/story` and `/implement` for any story whose acceptance criteria touch the user interface; a story nobody designs is a story whose UX gets invented under implementation pressure. Produce exactly ONE design per invocation, in English, and end by writing the design packet into the story issue as a `## Design` section. Commit no repo files and push nothing - the issue is the source of truth (ADR-0005).
 
 ## 1. Gather context
 Before asking anything, read:
-- The parent issue - story sentence, acceptance criteria, Non-Goals, Tasks checklist - and its task sub-issues.
+- The story issue - story sentence, acceptance criteria, Non-Goals, technical notes, priority, open questions.
 - ADRs relevant to the change.
 - The app's current surfaces: `apps/web` routes and components, `app/globals.css` tokens - so the design derives from the system that exists, not one imagined.
 - The locked `frontend-design` skill (`.agents/skills/frontend-design/`) as reference for the visual layer, and this repo's `shadcn` skill rules as the binding floor for components and tokens.
@@ -38,11 +38,11 @@ Grill every unsettled judgment in batched rounds until nothing vague remains; ne
 
 ## 7. Preview (repeat until Write, Edit, or Cancel)
 Show the complete packet and ask:
-- **Write** - replace the parent issue's `## Design` section with the packet. On re-runs, replace the previous section in full; never append a second one.
+- **Write** - replace the story issue's `## Design` section with the packet. On re-runs, replace the previous section in full; never append a second one.
 - **Edit** - free-text changes; apply and preview again. Edits touching intent, states, or copy re-run the relevant probe in one targeted round first.
 - **Cancel** - change nothing on the issue; confirm the cancellation.
 
-Packet shape (a `## Design` section in the parent issue body, placed before `## Tasks`):
+Packet shape (a `## Design` section at the end of the story issue body):
 
 ```markdown
 ## Design
@@ -55,4 +55,4 @@ Packet shape (a `## Design` section in the parent issue body, placed before `## 
 ```
 
 ## 8. Report
-Summarize the packet as written, link the parent issue, and point to the next stage: `implement-a-task` builds to it and the `review` skill's UI axis checks against it.
+Summarize the packet as written, link the story issue, and point to the next stage: `/implement` builds to it and the `review` skill's UI axis checks against it.

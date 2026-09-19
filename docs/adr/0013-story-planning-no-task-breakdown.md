@@ -49,12 +49,15 @@ checklists.
 - Planning costs one interview instead of two, and the story's issue is
   complete the moment it is created; nothing downstream depends on a
   task list staying in sync with it.
-- The task-referencing skills follow in implementing changes: `design`
+- The task-referencing skills follow in the implementing change: `design`
   places its packet in the story issue without reference to a Tasks
-  section; `implement-a-task` picks up stories (their story issues)
-  instead of task issues, keeping its plan-agreement step as the place
-  where a large story gets sliced; `review` reads the story's acceptance
-  criteria; `bookkeeping` closes story issues from merged PRs instead of
-  completed checklists.
+  section; `implement` (renamed from `implement-a-task`) picks up
+  stories - their story issues - instead of task issues, keeping its
+  plan-agreement step as the place where a large story gets sliced into
+  an agreed set of acceptance criteria; `review` reads the story's
+  acceptance criteria; `bookkeeping` closes story issues from merged PRs
+  instead of completed checklists.
+- ADR-0004's frozen "task lists stay truthful" clause has nothing left
+  to govern; record truthfulness now rests wholly on the issue records.
 - Stories planned under ADR-0005 keep their existing task issues and
   checklists; the old mechanics stay truthful for them until they close.

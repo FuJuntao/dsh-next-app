@@ -15,7 +15,7 @@ Planning and delivery run through the skill family, one stage per skill:
 
 1. `story` (`/story`) - create and plan one story in one step: interview the story, then create its GitHub issue. Stories and plans live in GitHub issues only (ADR-0013).
 2. `design` (`/design`) - design the experience of one UI-touching story: settle intent, flow, state coverage, copy, and visual direction, then write the `## Design` packet into the story's issue. There is no product designer here; this stage is the designer.
-3. `implement-a-task` (`/implement-a-task`) - carry one story to a reviewable pull request, building to the story issue's `## Design` packet when present; a story too large for one PR is sliced during implementation planning.
+3. `implement` (`/implement`) - carry one story to a reviewable pull request, building to the story issue's `## Design` packet when present; a story too large for one PR is sliced into an agreed set of acceptance criteria during implementation planning.
 4. `review` (`/review`) - axis-based PR review (spec, system design, repo standards, UI, security, docs discipline, verification claims, commit hygiene) with a gated merge; the UI axis checks against the packet.
 5. `bookkeeping` (`/bookkeeping`) - the post-merge tail: close story issues whose PRs are merged, sweep drift.
 
@@ -25,7 +25,7 @@ The current skill set lives in `.agents/skills/`. GitHub issues are the source o
 
 ## Conventions
 
-- Docs discipline per ADR-0004: doc changes ship together with the change that implies them; task lists stay truthful as work happens.
+- Docs discipline per ADR-0004: doc changes ship together with the change that implies them; issue records stay truthful as work happens (ADR-0013 retires the task lists the clause used to govern).
 - The README is purely user-facing (install/ops only); dev-related content (build/test/CI instructions, contribution process, repo internals) must not be added to it - its home is CONTRIBUTING.md.
 - dsh compatibility is enforced mechanically - install-time peerDependency ranges and regression coverage (ADR-0006) - not by review opinion or a boot-time version check.
 - Commit and branch conventions come from the environment the work runs in (its AGENTS.md or equivalent); this repo references them and does not restate them.
