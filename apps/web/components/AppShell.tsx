@@ -161,25 +161,24 @@ export function AppSidebar({
 }
 
 /**
- * The content column on the stock SidebarInset: the always-visible header
- * with the fold toggle and the session identity (published from the page
- * through SessionHeaderSlot), then the page area under the separator. The
+ * The chrome around the page: the always-visible header with the fold toggle
+ * and the session identity (published from the page through
+ * SessionHeaderSlot), then the page area under the separator. The
  * SidebarProvider lives in app/layout.tsx (the docs' usage pattern), so this
- * column needs no sidebar state of its own.
+ * component needs no sidebar state of its own.
  *
- * A session page fills the column edge to edge - its transcript owns the
- * scroll and the 48rem cap, so the shell adds no padding or second scroll
- * box; every other page keeps the padded, centered reading column. The
- * session column also pins itself to the viewport: the shell row is only
- * `min-h-svh`, so without a definite height the transcript's flex-1 would
- * size to its content, the composer would ride the document scroll, and the
- * whole page would move instead of just the chat.
+ * The shell knows no layouts. The inset is pinned to the viewport (h-svh)
+ * and each page's root element is a direct flex child of it, so every page
+ * states its own container contract: the session page pins and hands
+ * scrolling to its transcript, the home hero and the settings page take the
+ * centered 48rem column and scroll themselves. Without the definite height
+ * a flex-1 page would size to its content, the composer would ride the
+ * document scroll, and the whole page would move instead of just the chat.
  */
 export function AppShell({ children }: { children: ReactNode }) {
-  const isSession = usePathname().startsWith("/sessions/");
   return (
     <SessionHeaderProvider>
-      <SidebarInset className={isSession ? "h-svh" : undefined}>
+      <SidebarInset className="h-svh">
         {/* The header sits inside the inset's <main> column, so its implicit
             banner role would be lost (header->banner only outside main);
             the explicit role keeps the page landmark. */}
@@ -188,20 +187,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SessionHeaderSlot />
         </header>
         <Separator />
-        {/* The scroll area is the flex column itself: a session page pins to
-            it (overflow-hidden - the transcript owns the scroll), every other
-            page scrolls it, and a page section can flex-1 to fill the height
-            (the home hero centers). The column carries no padding: every page
-            owns its own insets. */}
-        <div
-          className={
-            isSession
-              ? "flex min-h-0 flex-1 flex-col overflow-hidden"
-              : "mx-auto flex min-h-0 flex-1 max-w-3xl flex-col overflow-y-auto"
-          }
-        >
-          {children}
-        </div>
+        {children}
       </SidebarInset>
     </SessionHeaderProvider>
   );
