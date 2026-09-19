@@ -38,7 +38,7 @@
     "@lexical/react": "catalog:",
     "@remixicon/react": "catalog:",
     "class-variance-authority": "catalog:",
-    "clsx": "catalog:",
+    "cn": "catalog:",
     "commander": "^15.0.0",
     "lexical": "catalog:",
     "next": "catalog:",
@@ -47,8 +47,7 @@
     "react-markdown": "catalog:",
     "rehype-sanitize": "catalog:",
     "remark-gfm": "catalog:",
-    "shiki": "catalog:",
-    "tailwind-merge": "catalog:"
+    "shiki": "catalog:"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
