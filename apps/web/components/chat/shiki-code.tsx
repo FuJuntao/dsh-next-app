@@ -9,15 +9,17 @@
  * shared dynamic-import singleton, and an un-highlighted block renders as
  * plain monospace the whole time - first paint is never blocked by it.
  *
- * Static dual-theme CSS is the Next.js-recommended posture: `codeToHtml`
- * with `defaultColor: false` emits spans whose colors read
- * `--shiki-light`/`--shiki-dark` variables, and the globals.css dark rule
- * (driven by the existing `.dark` variant) swaps them with no JS theme
- * awareness and no re-highlight on toggle. An unknown language degrades to
- * plain text instead of failing the block.
+ * Dual theming is two single-theme renders instead of shiki's static
+ * dual-theme variables: each `codeToHtml` call bakes final inline colors for
+ * its theme (no `--shiki-*` variables, so no span-mapping rules in
+ * globals.css), and the pair toggles through Tailwind's own `dark:` variant
+ * - the same `.dark` trigger the CSS rule used, with zero custom CSS. A
+ * transformer strips each pre's inline frame style so the wrapper's muted
+ * surface (the `bg-muted` token inline code uses) is the block's background.
+ * An unknown language degrades to plain text instead of failing the block.
  */
 import { useEffect, useState } from "react";
-import type { BundledLanguage, BundledTheme, HighlighterGeneric } from "shiki";
+import type { BundledLanguage, BundledTheme, HighlighterGeneric, ShikiTransformer } from "shiki";
 
 type Highlighter = HighlighterGeneric<BundledLanguage, BundledTheme>;
 
@@ -36,19 +38,32 @@ function getHighlighter(): Promise<Highlighter> {
   return highlighterPromise;
 }
 
+/** Drop the theme's own pre frame (inline background/color) - the wrapper
+ * owns the surface, per the token rule. */
+const stripPreFrame: ShikiTransformer = {
+  name: "strip-pre-frame",
+  pre(node) {
+    node.properties.style = undefined;
+  },
+};
+
 const SAFE = /^language-[\w+-]*$/;
+
+/** The block frame both the highlighted and fallback renders share. */
+const FRAME =
+  "my-2 overflow-x-auto rounded-md bg-muted/60 text-xs [&>pre]:m-0 [&>pre]:bg-transparent [&>pre]:p-3";
 
 /** Escape a class-less HTML-free fallback render. */
 function Plain({ code }: { code: string }) {
   return (
-    <pre className="my-2 overflow-x-auto rounded-none bg-muted/60 p-3 font-mono text-xs whitespace-pre">
+    <pre className="my-2 overflow-x-auto rounded-md bg-muted/60 p-3 font-mono text-xs whitespace-pre">
       {code}
     </pre>
   );
 }
 
 export function CodeBlock({ code, lang }: { code: string; lang: string }) {
-  const [html, setHtml] = useState<string | null>(null);
+  const [html, setHtml] = useState<{ light: string; dark: string } | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -64,13 +79,14 @@ export function CodeBlock({ code, lang }: { code: string; lang: string }) {
           language = "plaintext"; // an ungrammared fence still shows its text
         }
         if (!alive) return;
-        const next = highlighter.codeToHtml(code, {
-          lang: language,
-          themes: { light: "github-light", dark: "github-dark" },
-          defaultColor: false,
-          structure: "classic",
-        });
-        setHtml(next);
+        const render = (theme: "github-light" | "github-dark") =>
+          highlighter.codeToHtml(code, {
+            lang: language,
+            theme,
+            structure: "classic",
+            transformers: [stripPreFrame],
+          });
+        setHtml({ light: render("github-light"), dark: render("github-dark") });
       } catch (error) {
         if (alive) {
           console.error("[shiki] highlight failed:", error);
@@ -85,12 +101,15 @@ export function CodeBlock({ code, lang }: { code: string; lang: string }) {
 
   if (failed || html === null) return <Plain code={code} />;
   return (
-    <div
-      className="my-2 overflow-x-auto rounded-none text-xs [&>pre]:m-0 [&>pre]:bg-transparent [&>pre]:p-3"
-      // Shiki's own generated markup (spans with color variables) - no
-      // model content survives into this string: it is produced from the
-      // code text through the tokenizer.
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <>
+      {/* Shiki's own generated markup (spans with inline theme colors) - no
+          model content survives into these strings: they are produced from
+          the code text through the tokenizer. */}
+      <div className={FRAME + " dark:hidden"} dangerouslySetInnerHTML={{ __html: html.light }} />
+      <div
+        className={FRAME + " hidden dark:block"}
+        dangerouslySetInnerHTML={{ __html: html.dark }}
+      />
+    </>
   );
 }

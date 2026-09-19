@@ -23,6 +23,15 @@ import rehypeSanitize from "rehype-sanitize";
 import type { Components } from "react-markdown";
 
 import { CodeBlock } from "@/components/chat/shiki-code";
+import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 /** Split content at an odd (open) trailing fence: [markdown, plain-tail]. */
 export function splitOpenFence(text: string): { markdown: string; openTail: string } {
@@ -36,6 +45,9 @@ export function splitOpenFence(text: string): { markdown: string; openTail: stri
  * the block signal, carried through context. */
 const InPre = createContext(false);
 
+// The document rhythm the .md-body rules used to carry in globals.css, now
+// inline on the elements themselves: every element styles itself, and the
+// wrapper trims the first/last margins the CSS selected for.
 const components: Components = {
   // The block renderer is `code` (it knows the language); `pre` passes its
   // single child through so CodeBlock owns the frame (no nested <pre>).
@@ -59,15 +71,33 @@ const components: Components = {
     if (inPre) return <CodeBlock code={raw} lang={match?.[1] ?? "text"} />;
     return <code className="bg-muted px-1 py-0.5 font-mono text-[0.85em]">{raw}</code>;
   },
-  table: ({ children }) => (
-    <div className="my-2 overflow-x-auto">
-      <table className="min-w-full border-collapse text-sm">{children}</table>
-    </div>
+  h1: ({ children }) => (
+    <h1 className="mt-3 mb-1 text-[1.15em] font-semibold leading-snug">{children}</h1>
   ),
-  th: ({ children }) => (
-    <th className="border border-border px-2 py-1 text-left font-medium">{children}</th>
+  h2: ({ children }) => (
+    <h2 className="mt-3 mb-1 text-[1.1em] font-semibold leading-snug">{children}</h2>
   ),
-  td: ({ children }) => <td className="border border-border px-2 py-1 align-top">{children}</td>,
+  h3: ({ children }) => <h3 className="mt-3 mb-1 font-semibold leading-snug">{children}</h3>,
+  h4: ({ children }) => <h4 className="mt-3 mb-1 font-semibold leading-snug">{children}</h4>,
+  p: ({ children }) => <p className="my-2">{children}</p>,
+  ul: ({ children }) => <ul className="my-2 list-disc ps-5">{children}</ul>,
+  ol: ({ children }) => <ol className="my-2 list-decimal ps-5">{children}</ol>,
+  li: ({ children }) => <li className="my-0.5">{children}</li>,
+  blockquote: ({ children }) => (
+    <blockquote className="my-2 border-l-2 border-border pl-3 text-muted-foreground">
+      {children}
+    </blockquote>
+  ),
+  // A rule between markdown blocks is a Separator (no <hr> hand-styling).
+  hr: () => <Separator className="my-3" />,
+  // Tables are the standard Table primitives - their container brings the
+  // overflow scroll the old inline wrapper carried.
+  table: ({ children }) => <Table className="my-2">{children}</Table>,
+  thead: ({ children }) => <TableHeader>{children}</TableHeader>,
+  tbody: ({ children }) => <TableBody>{children}</TableBody>,
+  tr: ({ children }) => <TableRow>{children}</TableRow>,
+  th: ({ children }) => <TableHead>{children}</TableHead>,
+  td: ({ children }) => <TableCell>{children}</TableCell>,
 };
 
 export function Markdown({ text, streaming = false }: { text: string; streaming?: boolean }) {
@@ -76,7 +106,7 @@ export function Markdown({ text, streaming = false }: { text: string; streaming?
     [text, streaming],
   );
   return (
-    <div className="md-body text-sm leading-relaxed">
+    <div className="text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeSanitize]}
@@ -85,7 +115,7 @@ export function Markdown({ text, streaming = false }: { text: string; streaming?
         {markdown}
       </ReactMarkdown>
       {openTail !== "" && (
-        <pre className="my-2 overflow-x-auto rounded-none bg-muted/60 p-3 font-mono text-xs whitespace-pre">
+        <pre className="my-2 overflow-x-auto rounded-md bg-muted/60 p-3 font-mono text-xs whitespace-pre">
           {openTail}
         </pre>
       )}
