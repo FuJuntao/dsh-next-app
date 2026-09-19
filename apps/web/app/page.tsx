@@ -24,7 +24,7 @@ export default async function HomePage() {
     fetchHostModelDefault(),
   ]);
   return (
-    <section className="flex flex-1 flex-col items-center justify-center gap-6 p-6">
+    <section className="flex flex-1 flex-col items-center justify-center gap-6 p-4">
       {/* The slogan never breaks mid-phrase: it steps down a size on small
           screens, and the Preview badge drops to its own centered line when
           the row runs out of room (whitespace-nowrap without the wrap would
