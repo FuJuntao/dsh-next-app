@@ -7,7 +7,8 @@ export const metadata: Metadata = {
 
 export default function SettingsPage() {
   return (
-    <section>
+    // The reading insets live on the page - the shell's column carries none.
+    <section className="px-6 py-4">
       <h1>Settings</h1>
       <p>Placeholder: settings content lands with the settings story.</p>
     </section>

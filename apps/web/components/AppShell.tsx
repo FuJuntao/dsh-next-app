@@ -176,12 +176,7 @@ export function AppSidebar({
  * whole page would move instead of just the chat.
  */
 export function AppShell({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-  const isSession = pathname.startsWith("/sessions/");
-  // The home hero owns its insets the way the session does - its section
-  // carries the session dock's tokens, so the reading-column padding below
-  // is settings-only.
-  const isHome = pathname === "/";
+  const isSession = usePathname().startsWith("/sessions/");
   return (
     <SessionHeaderProvider>
       <SidebarInset className={isSession ? "h-svh" : undefined}>
@@ -200,15 +195,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           {/* A flex column with min-h-full so a page section can flex-1 to fill
               the scroll area (the home hero centers); plain block children keep
-              their natural top-aligned height. Home joins the session with no
-              shell padding: its section carries the session dock's tokens. */}
+              their natural top-aligned height. The column carries no padding:
+              every page owns its own insets (the session page is full-bleed). */}
           <div
             className={
               isSession
                 ? "flex h-full min-h-0 flex-col"
-                : isHome
-                  ? "mx-auto flex min-h-full max-w-3xl flex-col"
-                  : "mx-auto flex min-h-full max-w-3xl flex-col px-6 py-4"
+                : "mx-auto flex min-h-full max-w-3xl flex-col"
             }
           >
             {children}
