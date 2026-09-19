@@ -188,24 +188,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SessionHeaderSlot />
         </header>
         <Separator />
+        {/* The scroll area is the flex column itself: a session page pins to
+            it (overflow-hidden - the transcript owns the scroll), every other
+            page scrolls it, and a page section can flex-1 to fill the height
+            (the home hero centers). The column carries no padding: every page
+            owns its own insets. */}
         <div
           className={
-            isSession ? "min-h-0 flex-1 overflow-hidden" : "min-h-0 flex-1 overflow-y-auto"
+            isSession
+              ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+              : "mx-auto flex min-h-0 flex-1 max-w-3xl flex-col overflow-y-auto"
           }
         >
-          {/* A flex column with min-h-full so a page section can flex-1 to fill
-              the scroll area (the home hero centers); plain block children keep
-              their natural top-aligned height. The column carries no padding:
-              every page owns its own insets (the session page is full-bleed). */}
-          <div
-            className={
-              isSession
-                ? "flex h-full min-h-0 flex-col"
-                : "mx-auto flex min-h-full max-w-3xl flex-col"
-            }
-          >
-            {children}
-          </div>
+          {children}
         </div>
       </SidebarInset>
     </SessionHeaderProvider>
