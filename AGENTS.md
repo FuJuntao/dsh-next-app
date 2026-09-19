@@ -13,13 +13,13 @@ Guidance for contributors - human and AI agents - working in this repo.
 
 Planning and delivery run through the skill family, one stage per skill:
 
-1. `story` (`/story`) - create and plan one story in one step: interview the story and its task breakdown, then create the GitHub parent issue with `task`-labeled sub-issues. Stories and plans live in GitHub issues only (ADR-0005).
+1. `story` (`/story`) - create and plan one story in one step: interview the story, then create its GitHub parent issue. Stories and plans live in GitHub issues only (ADR-0013).
 2. `design` (`/design`) - design the experience of one UI-touching story: settle intent, flow, state coverage, copy, and visual direction, then write the `## Design` packet into the parent issue. There is no product designer here; this stage is the designer.
-3. `implement-a-task` (`/implement-a-task`) - carry one task issue to a reviewable pull request, building to the parent's packet when present.
+3. `implement-a-task` (`/implement-a-task`) - carry one story (parent issue) to a reviewable pull request, building to the parent's packet when present; a story too large for one PR is sliced during implementation planning.
 4. `review` (`/review`) - axis-based PR review (spec, system design, repo standards, UI, security, docs discipline, verification claims, commit hygiene) with a gated merge; the UI axis checks against the packet.
-5. `bookkeeping` (`/bookkeeping`) - the post-merge tail: close completed parents, keep checklists truthful, sweep drift.
+5. `bookkeeping` (`/bookkeeping`) - the post-merge tail: close parents whose PRs are merged, sweep drift.
 
-The story lifecycle is tracked by the issues: **planned** - the parent issue exists with its Tasks checklist; **in flight** - task issues are being implemented; **done** - the parent's checklist is complete and `bookkeeping` closes the parent.
+The story lifecycle is tracked by the issues: **planned** - the parent issue exists; **in flight** - a pull request against the story is open; **done** - its PRs are merged and `bookkeeping` closes the parent.
 
 The current skill set lives in `.agents/skills/`. GitHub issues are the source of truth for stories and plans (ADR-0005); decisions live in `docs/adr/`.
 
