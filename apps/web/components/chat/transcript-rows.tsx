@@ -359,15 +359,26 @@ export function ApprovalRow({ item }: { item: ApprovalRowItem }) {
  * becomes visible before its `user/message` lands. An item leaves when the
  * agent claims it, so nothing here is editable.
  */
-export function QueueStrip({ queue }: { queue: readonly QueuedItem[] }) {
-  if (queue.length === 0) return null;
+export function QueueStrip({
+  queue,
+  stranded,
+}: {
+  queue: readonly QueuedItem[];
+  /** True when the session is parked-aborted: no turn is open AND the last
+   * one ended by a Stop (the driver parked its inbox with no wake latched).
+   * With none open, a still-held item is residue the surface will not run -
+   * so the strip states the stopped fact instead of promising a next step or
+   * next turn. A `completed` end auto-resumes, so it is NOT stranded. */
+  stranded: boolean;
+}) {
+  if (queue.length === 0) return null; // AC 5: nothing while the queue is empty
   // Steering is claimed sooner, so it leads; one row of chrome per group.
   const groups = [
     { placement: "steering", label: "Steering", waits: "the next step" },
     { placement: "queued", label: "Queued", waits: "the next turn" },
   ] as const;
   return (
-    <div className="mt-2">
+    <div className="mt-2" data-testid={stranded ? "queue-residue" : "queue-strip"}>
       {groups.map((group) => {
         const items = queue.filter((q) => q.placement === group.placement);
         if (items.length === 0) return null;
@@ -375,11 +386,16 @@ export function QueueStrip({ queue }: { queue: readonly QueuedItem[] }) {
           <div key={group.placement}>
             <EventRow
               icon={<RiInboxLine />}
-              label={group.label}
+              label={stranded ? "Stopped" : group.label}
               detail={
-                items.length === 1
-                  ? `one message waiting for ${group.waits}`
-                  : `${String(items.length)} messages waiting for ${group.waits}`
+                stranded
+                  ? // AC 4: no turn is coming, so this held item will not run
+                    // as a next step or turn - say the session is stopped
+                    // rather than promise a resumption it won't get.
+                    "the session is stopped"
+                  : items.length === 1
+                    ? `one message waiting for ${group.waits}`
+                    : `${String(items.length)} messages waiting for ${group.waits}`
               }
               state="idle"
               className="opacity-90"

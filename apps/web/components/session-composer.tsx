@@ -1,8 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+  type RefObject,
+} from "react";
 import ReactDOM from "react-dom";
 import {
+  $createLineBreakNode,
+  $createParagraphNode,
   $createTextNode,
   $getRoot,
   $getSelection,
@@ -67,6 +79,24 @@ export type ComposerEntry = {
 
 /** Which inbox placement a submit gesture asked for (AC 13). */
 export type SendMode = "steer" | "queue";
+
+/**
+ * The imperative receiving end (story #146 AC 3). The surface holds no
+ * imperative handle today, so the handback of released queue work needs one:
+ * `insertDraft` adds text the operator did not type without disturbing the
+ * draft they were already writing.
+ */
+export interface SessionComposerHandle {
+  /**
+   * Append a block BELOW any existing draft, separated from it by a blank
+   * line; an empty draft just takes the text (never clobbering, AC 3), then
+   * returns focus so the ordinary send gesture is the very next keypress.
+   *
+   * @param text - the already-assembled block to add (the controller joins
+   * released items oldest-first, blank-line separated, before calling).
+   */
+  insertDraft: (text: string) => void;
+}
 
 export type SessionComposerProps = {
   /** Injected `/` source. */
@@ -141,6 +171,13 @@ export type SessionComposerProps = {
    * files AND sessions; home keeps "@ sessions").
    */
   referenceHint?: string;
+  /**
+   * Called with the trimmed draft text on every edit, including the empty
+   * string when the draft is cleared. The session page's handback controller
+   * uses it to tell a dismissed return from a sent one (#146 AC 6); the
+   * surface that does not pass it is unaffected.
+   */
+  onDraftChange?: (text: string) => void;
 };
 
 class ComposerOption extends MenuOption {
@@ -659,6 +696,7 @@ function TypeaheadMenus({
 // SessionComposer itself stays the context provider.
 function ComposerInner({
   commands,
+  handleRef,
   hasText,
   isPending,
   menuOpenRef,
@@ -679,6 +717,9 @@ function ComposerInner({
   referenceHint,
 }: {
   commands: ComposerEntry[];
+  /** The forwarded imperative handle (AC 3's insertDraft), registered here
+   * because this is where the editor context lives. */
+  handleRef: Ref<SessionComposerHandle>;
   hasText: boolean;
   isPending: boolean;
   menuOpenRef: RefObject<boolean>;
@@ -698,6 +739,61 @@ function ComposerInner({
   hasAttachments?: (() => boolean) | undefined;
   referenceHint?: string | undefined;
 }) {
+  const [editor] = useLexicalComposerContext();
+  // AC 3's receiving end. The handback arrives as one assembled block (the
+  // controller has already ordered released items oldest-first and joined
+  // them with a blank line); insertDraft puts that block BELOW whatever the
+  // operator was typing without ever re-writing their own text.
+  //
+  // The Lexical model this has to respect (verified at 0.49): a non-inline
+  // block child is joined by `DOUBLE_LINE_BREAK` = "\n\n"
+  // (LexicalElementNode.getTextContent), while a `LineBreakNode` reads back as
+  // a single "\n" (LexicalLineBreakNode.getTextContent). So "\n\n" is a
+  // PARAGRAPH and "\n" is a SOFT BREAK - and because adjacent paragraphs
+  // already read back as one blank line, a separator paragraph must NOT be
+  // inserted (it would yield three newlines). Rebuilding the draft from a
+  // `getTextContent()` string instead of appending would re-quote every soft
+  // break as a hard one and silently alter the operator's message.
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      insertDraft: (text: string): void => {
+        if (text === "") return;
+        editor.update(() => {
+          const root = $getRoot();
+          // A genuinely empty draft is replaced outright: a leading empty
+          // paragraph would read back as a blank line before the block. A
+          // live draft is only appended to - never cleared, never re-flowed.
+          if (root.getTextContent() === "") root.clear();
+          let lastTextNode: TextNode | null = null;
+          let lastParagraph: ReturnType<typeof $createParagraphNode> | null = null;
+          for (const segment of text.split("\n\n")) {
+            const paragraph = $createParagraphNode();
+            const lines = segment.split("\n");
+            for (let i = 0; i < lines.length; i++) {
+              if (i > 0) paragraph.append($createLineBreakNode());
+              const line = lines[i] as string;
+              if (line !== "") {
+                lastTextNode = $createTextNode(line);
+                paragraph.append(lastTextNode);
+              }
+            }
+            root.append(paragraph);
+            lastParagraph = paragraph;
+          }
+          // Caret at the very end, so the next keystroke continues or Enter sends.
+          if (lastTextNode !== null) {
+            const end = lastTextNode.getTextContent().length;
+            lastTextNode.select(end, end);
+          } else {
+            lastParagraph?.select();
+          }
+        });
+        editor.focus();
+      },
+    }),
+    [editor],
+  );
   // Sync twin of the enabled prop for the submit paths (same reason
   // pendingRef exists: a click/Enter can arrive before the re-render).
   const enabledRef = useRef(enabled);
@@ -838,71 +934,86 @@ function ComposerInner({
   );
 }
 
-export function SessionComposer({
-  onSubmit,
-  commands,
-  references,
-  placeholder = DEFAULT_PLACEHOLDER,
-  referenceSearch,
-  enabled = true,
-  onLockedActivate,
-  submitLabel,
-  lockedHint,
-  sendModes = false,
-  running = false,
-  onStop,
-  hasAttachments,
-  referenceHint,
-}: SessionComposerProps) {
-  const [hasText, setHasText] = useState(false);
-  const [isPending, setIsPending] = useState(false);
-  // Whether a typeahead menu is open; the Enter handler defers to the menu's
-  // option selection while this is set. onOpen/onClose fire on open/close
-  // transitions of the plugin's resolution.
-  const menuOpenRef = useRef(false);
-  const pendingRef = useRef(false);
+export const SessionComposer = forwardRef<SessionComposerHandle, SessionComposerProps>(
+  function SessionComposer(
+    {
+      onSubmit,
+      commands,
+      references,
+      placeholder = DEFAULT_PLACEHOLDER,
+      referenceSearch,
+      enabled = true,
+      onLockedActivate,
+      submitLabel,
+      lockedHint,
+      sendModes = false,
+      running = false,
+      onStop,
+      hasAttachments,
+      referenceHint,
+      onDraftChange,
+    }: SessionComposerProps,
+    handleRef,
+  ) {
+    const [hasText, setHasText] = useState(false);
+    const [isPending, setIsPending] = useState(false);
+    // Latest-ref so the change plugin never rebuilds its closure per render,
+    // and the draft-text report to the surface stays in step with hasText.
+    const onDraftChangeRef = useRef(onDraftChange);
+    useEffect(() => {
+      onDraftChangeRef.current = onDraftChange;
+    }, [onDraftChange]);
+    // Whether a typeahead menu is open; the Enter handler defers to the menu's
+    // option selection while this is set. onOpen/onClose fire on open/close
+    // transitions of the plugin's resolution.
+    const menuOpenRef = useRef(false);
+    const pendingRef = useRef(false);
 
-  const initialConfig = {
-    namespace: "dsh-session-composer",
-    // Flipped to true by EditableGatePlugin once hydrated.
-    editable: false,
-    onError: (error: unknown) => {
-      console.error("[session-composer]", error);
-    },
-  };
+    const initialConfig = {
+      namespace: "dsh-session-composer",
+      // Flipped to true by EditableGatePlugin once hydrated.
+      editable: false,
+      onError: (error: unknown) => {
+        console.error("[session-composer]", error);
+      },
+    };
 
-  return (
-    <LexicalComposer initialConfig={initialConfig}>
-      <ComposerInner
-        commands={commands}
-        hasText={hasText}
-        isPending={isPending}
-        menuOpenRef={menuOpenRef}
-        onSubmit={onSubmit}
-        pendingRef={pendingRef}
-        placeholder={placeholder}
-        references={references}
-        referenceSearch={referenceSearch}
-        enabled={enabled}
-        onLockedActivate={onLockedActivate}
-        submitLabel={submitLabel}
-        lockedHint={lockedHint}
-        setIsPending={setIsPending}
-        sendModes={sendModes}
-        running={running}
-        {...(onStop !== undefined ? { onStop } : {})}
-        {...(hasAttachments !== undefined ? { hasAttachments } : {})}
-        {...(referenceHint !== undefined ? { referenceHint } : {})}
-      />
-      <OnChangePlugin
-        onChange={(editorState) => {
-          editorState.read(() => {
-            setHasText($getRoot().getTextContent().trim().length > 0);
-          });
-        }}
-      />
-      <HistoryPlugin />
-      <EditableGatePlugin enabled={enabled} />
-    </LexicalComposer>
-  );
-}
+    return (
+      <LexicalComposer initialConfig={initialConfig}>
+        <ComposerInner
+          handleRef={handleRef}
+          commands={commands}
+          hasText={hasText}
+          isPending={isPending}
+          menuOpenRef={menuOpenRef}
+          onSubmit={onSubmit}
+          pendingRef={pendingRef}
+          placeholder={placeholder}
+          references={references}
+          referenceSearch={referenceSearch}
+          enabled={enabled}
+          onLockedActivate={onLockedActivate}
+          submitLabel={submitLabel}
+          lockedHint={lockedHint}
+          setIsPending={setIsPending}
+          sendModes={sendModes}
+          running={running}
+          {...(onStop !== undefined ? { onStop } : {})}
+          {...(hasAttachments !== undefined ? { hasAttachments } : {})}
+          {...(referenceHint !== undefined ? { referenceHint } : {})}
+        />
+        <OnChangePlugin
+          onChange={(editorState) => {
+            editorState.read(() => {
+              const text = $getRoot().getTextContent().trim();
+              setHasText(text.length > 0);
+              onDraftChangeRef.current?.(text);
+            });
+          }}
+        />
+        <HistoryPlugin />
+        <EditableGatePlugin enabled={enabled} />
+      </LexicalComposer>
+    );
+  },
+);

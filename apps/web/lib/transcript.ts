@@ -40,6 +40,11 @@
  *     appends when the loop claims the message, never one the page minted
  *     (see AC 13 on #134). The in-between window is covered by the host's
  *     own inbox projection: `session/queue` carries the pending work.
+ *     Since story #146 the same projection, read through `strandedWork`,
+ *     also says which pending work a stopped session has left with nothing
+ *     coming back for it - and the item's identity (`id`, `rpcId`, image
+ *     references) is what makes the release decision authoritative without
+ *     any client-side content store.
  *   - Live control frames: `session/queue` replaces the tail strip wholesale
  *     (`queued` and `steering` placements - the synthetic `context` items
  *     stay invisible until claimed), `session/projection` cells win by seq,
@@ -272,15 +277,27 @@ export type TranscriptItem =
 
 /**
  * One message waiting in the host's inbox, as the `session/queue` projection
- * reports it (AC 13/14 as amended on #134; read-only in this story). This is
- * the send's visible receipt before the durable `user/message` lands: a
- * steer sits here until the loop claims it at the next step boundary, a
- * queued follow-up until the next turn.
+ * reports it (AC 13/14 as amended on #134; the strip was read-only until
+ * story #146 opened the release door). This is the send's visible receipt
+ * before the durable `user/message` lands: a steer sits here until the loop
+ * claims it at the next step boundary, a queued follow-up until the next turn.
+ *
+ * The identity fields make AC 2 decidable with no client-side content store:
+ * `id` is the host's pending-message key the `session.updateQueue` remove
+ * door takes, `rpcId` is the sending prompt's own id - the same key the
+ * durable `user/message` row carries when the loop claims the item - and
+ * `images` is AC 4's exception, read straight off the pending content the
+ * host already admitted.
  */
 export interface QueuedItem {
+  /** The host's pending-message identity (the release door's `itemId`). */
   id: string;
   text: string;
   placement: "queued" | "steering";
+  /** The sending prompt's rpcId, when the host recorded one on the source. */
+  rpcId?: string;
+  /** Durable image references the pending content carries (empty: plain text). */
+  images: TranscriptImage[];
 }
 
 /** A pending answerable card (approval ask or question batch). */
@@ -321,6 +338,17 @@ export interface TranscriptState {
   /** The `turn/start` time of that turn: the tail's live line reads it so
    * "Working" also says how long the wait has been (null while idle). */
   runningSince: number | null;
+  /** True when the most recent settled turn PARKED the inbox: it ended in a
+   * state that latches no wake and opened no newer turn, so the driver is idle
+   * while pending work is still held - what #146 hands back. `aborted` (the
+   * Stop) and `error` both qualify: each exits `turn()` by THROWING, so
+   * `kick()`'s loop breaks and its `finally` re-wakes only if a wake was
+   * already latched - which a mid-turn steer never latches. A `completed` end
+   * is NOT parking: `turn()` returns true while the inbox has pending work and
+   * resumes it, so draining there would steal a follow-up in the frames before
+   * the resuming `turn/start` - and the `not-found` arbiter cannot catch it,
+   * because the item is genuinely still pending. Cleared by any `turn/start`. */
+  parkedStranded: boolean;
   /** Latest `session/subscribed.lastSeq` control value, once seen. */
   subscribedLastSeq: number | null;
   pending: PendingCard[];
@@ -339,6 +367,7 @@ export function createTranscript(): TranscriptState {
     hasMore: false,
     runningTurn: null,
     runningSince: null,
+    parkedStranded: false,
     subscribedLastSeq: null,
     pending: [],
     queue: [],
@@ -780,8 +809,10 @@ export function foldEvent(
       // Liveness only - the boundary row lands with turn/end, where a
       // failure reads at the end of the turn it broke (AC 3's visible
       // mark, and the composer's stop control keys off runningTurn).
+      // A fresh turn also ends any earlier parked-aborted stranding.
       state.runningTurn = data["turn"] as number;
       state.runningSince = event.time;
+      state.parkedStranded = false;
       break;
     }
     case "turn/end": {
@@ -822,6 +853,16 @@ export function foldEvent(
         state.runningTurn = null;
         state.runningSince = null;
       }
+      // The settles that PARK, i.e. exit `turn()` by throwing so `kick()`'s
+      // finally only re-wakes a latched wake (a mid-turn steer latches none):
+      // the Stop's `aborted`, and `error` (its catch calls `throwError`, which
+      // emits `agent/error` and throws). `completed`/`max-tokens`/`interrupted`
+      // instead fall through to the loop's own `hasPending` check and resume,
+      // so they must never read as stranded.
+      // `blocked` also returns without resuming, but no scenario produces a
+      // `turn/end{blocked}` with work still parked here, so it is deliberately
+      // not claimed - see the open question recorded on #146.
+      state.parkedStranded = mark.state === "aborted" || mark.state === "error";
       break;
     }
     case "approval/asked": {
@@ -968,11 +1009,25 @@ export function foldFrame(state: TranscriptState, frame: MuxFrame): void {
       const human = frame.items.filter(
         (item) => item.placement === "queued" || item.placement === "steering",
       );
-      state.queue = human.map((item) => ({
-        id: String(item.id),
-        text: parseContentBlocks(item.message.content).text,
-        placement: item.placement === "steering" ? ("steering" as const) : ("queued" as const),
-      }));
+      state.queue = human.map((item) => {
+        const parsed = parseContentBlocks(item.message.content);
+        // The release identity rides the message the host parked: its id is
+        // what the updateQueue door removes, its source rpcId is what ties
+        // it to the durable row a claim will append (#146 AC 2), and any
+        // admitted image is AC 4's never-hand-back exception. The wire
+        // source is `{kind: string}` loose-typed; the prompt leg stamps the
+        // rpcId next to `kind: 'user'`, so this reads it structurally.
+        const source = (item.message.source ?? {}) as { kind?: unknown; rpcId?: unknown };
+        const rpcId =
+          source.kind === "user" && typeof source.rpcId === "string" ? source.rpcId : undefined;
+        return {
+          id: String(item.id),
+          text: parsed.text,
+          placement: item.placement === "steering" ? ("steering" as const) : ("queued" as const),
+          ...(rpcId !== undefined ? { rpcId } : {}),
+          images: parsed.images,
+        };
+      });
       break;
     }
     case "session/projection": {
@@ -1052,4 +1107,52 @@ export function foldDownlinkEvent(
     return;
   }
   foldFrame(state, frame);
+}
+
+// ---------------------------------------------------------------------------
+// Stranded work (story #146: the handback's predicate)
+// ---------------------------------------------------------------------------
+
+/**
+ * AC 1's predicate, as one pure read of the fold: the human work the host
+ * still holds while NO turn is open. "Open" means an unanswered `turn/start`
+ * - a turn blocked on an approval is open, and its steer is claimed the
+ * moment the block resolves, so that work is not stranded yet. A snapshot
+ * never seen yields nothing: a detached session's pending work becomes
+ * visible only when it attaches (the mux replays `session/queue` for
+ * attached agents), and the surface must not invent it before then.
+ *
+ * The order is the host's own claim order - `steering` items land at the
+ * next step boundary, then `queued` items open the next turn, each group
+ * FIFO as the snapshot delivered it (task #147 settled AC 3's "oldest
+ * first" as this order: the sequence the stopped loop would have run).
+ *
+ * `parkedStranded` is the load-bearing half. "No turn open" alone is NOT
+ * enough: after a `completed` end the driver immediately resumes a pending
+ * follow-up, and in the frames before that resuming `turn/start` lands a naive
+ * read would drain a message that is on its way to running - the not-found
+ * arbiter cannot catch it, because the item is still genuinely pending. The
+ * settles that park are `aborted` and `error`, the two that leave `turn()` by
+ * throwing with no wake latched; a mid-turn steer latches none for either.
+ */
+export function strandedWork(state: TranscriptState): QueuedItem[] {
+  if (state.runningTurn !== null || !state.parkedStranded) return [];
+  const steering: QueuedItem[] = [];
+  const queued: QueuedItem[] = [];
+  for (const item of state.queue) {
+    (item.placement === "steering" ? steering : queued).push(item);
+  }
+  return [...steering, ...queued];
+}
+
+/**
+ * AC 4's exception as a predicate: an image-bearing item is never handed
+ * back. The reference reads cheap here because the host admits the bytes
+ * before it parks the item - re-judging them is the intake pre-check's own
+ * story, not this one's. What falls out of `strandedWork` but not this list
+ * stays pending, and the strip says it as the stopped fact rather than a
+ * promise of a next step or next turn.
+ */
+export function releasableWork(state: TranscriptState): QueuedItem[] {
+  return strandedWork(state).filter((item) => item.images.length === 0);
 }

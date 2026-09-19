@@ -21,6 +21,9 @@ import {
   foldHistoryPage,
   prependHistoryPage,
   seedProjections,
+  releasableWork,
+  strandedWork,
+  type TranscriptState,
   type WireEvent,
 } from "./transcript";
 
@@ -402,8 +405,8 @@ describe("live frames", () => {
     // The steer is the case that used to be invisible: the host claims it at
     // the NEXT STEP, so a steer into a blocked turn had no row anywhere.
     expect(state.queue).toEqual([
-      { id: "i1", text: "queued one", placement: "queued" },
-      { id: "i2", text: "steering", placement: "steering" },
+      { id: "i1", text: "queued one", placement: "queued", images: [] },
+      { id: "i2", text: "steering", placement: "steering", images: [] },
     ]);
     foldFrame(state, {
       type: "session/queue",
@@ -598,6 +601,210 @@ describe("a steer converges from strip to row exactly once (AC 13/14)", () => {
     } as unknown as MuxFrame);
     expect(state.items).toHaveLength(0); // it was never in the session
     expect(state.queue).toHaveLength(0);
+  });
+});
+
+describe("stranded work (story #146 AC 1, AC 4)", () => {
+  // One pending inbox occurrence, built the way the carrier delivers it:
+  // `session/queue` items carry the full Message (id + source + content),
+  // not the transcript's durable-event shape.
+  const queued = (
+    id: string,
+    text: string,
+    opts: {
+      placement?: "queued" | "steering";
+      source?: Record<string, unknown>;
+      images?: { attachmentId: string }[];
+    } = {},
+  ): unknown => ({
+    id,
+    placement: opts.placement ?? "steering",
+    message: {
+      id: `msg-${id}`,
+      role: "user",
+      content: [
+        { type: "text", text },
+        ...(opts.images ?? []).map((img) => ({
+          type: "image",
+          attachment: {
+            attachmentId: img.attachmentId,
+            mediaType: "image/png",
+            bytes: 128,
+            width: 8,
+            height: 8,
+          },
+        })),
+      ],
+      source: opts.source ?? { kind: "user", rpcId: `rpc-${id}` },
+    },
+  });
+  const queueFrame = (...items: unknown[]): MuxFrame =>
+    ({ type: "session/queue", sessionId: "sess-a", items }) as unknown as MuxFrame;
+  // A turn opened and then settled in a PARKING way: `aborted` (the Stop) and
+  // `error` both leave `turn()` by throwing with no wake latched, so pending
+  // work survives with nothing coming back for it. Every stranding test below
+  // sits on one of these.
+  const stoppedTurn = (state: TranscriptState, seq = 1, kind = "aborted"): void => {
+    foldEvent(state, ev("turn/start", seq, { turn: 1 }));
+    foldEvent(
+      state,
+      ev(
+        "turn/end",
+        seq + 1,
+        kind === "error"
+          ? { turn: 1, reason: { kind: "error", error: { message: "boom", code: "X" } } }
+          : { turn: 1, reason: { kind, reason: { kind: "user" } } },
+      ),
+    );
+  };
+
+  it("lifts the release identity - id, rpcId, image references - onto the strip item", () => {
+    const state = createTranscript();
+    foldFrame(
+      state,
+      queueFrame(
+        queued("a", "plain steer"),
+        queued("b", "with image", { images: [{ attachmentId: "att-1" }] }),
+      ),
+    );
+    expect(state.queue).toEqual([
+      {
+        id: "a",
+        text: "plain steer",
+        placement: "steering",
+        rpcId: "rpc-a",
+        images: [],
+      },
+      {
+        id: "b",
+        text: "with image",
+        placement: "steering",
+        rpcId: "rpc-b",
+        images: [
+          { attachmentId: "att-1", mediaType: "image/png", bytes: 128, width: 8, height: 8 },
+        ],
+      },
+    ]);
+  });
+
+  it("carries no rpcId when the source is not a user prompt (context is invisible anyway)", () => {
+    const state = createTranscript();
+    foldFrame(state, queueFrame(queued("x", "no id", { source: { kind: "plugin" } })));
+    expect(state.queue[0]).toEqual({ id: "x", text: "no id", placement: "steering", images: [] });
+    expect(state.queue[0]?.rpcId).toBeUndefined();
+  });
+
+  it("returns nothing while a turn is open - a blocked turn's steer is not stranded (AC 1)", () => {
+    const state = createTranscript();
+    foldEvent(state, ev("turn/start", 1, { turn: 1 }));
+    foldFrame(state, queueFrame(queued("s1", "about to be claimed")));
+    // The turn is open (no turn/end), even though nothing is streaming: a
+    // steer riding it will be claimed at the next step boundary.
+    expect(state.runningTurn).toBe(1);
+    expect(strandedWork(state)).toEqual([]);
+  });
+
+  it("derives the host-held work once the turn has STOPPED (AC 1: the handback)", () => {
+    const state = createTranscript();
+    stoppedTurn(state);
+    foldFrame(state, queueFrame(queued("s1", "survivor one"), queued("s2", "survivor two")));
+    expect(state.runningTurn).toBeNull();
+    expect(strandedWork(state).map((i) => i.id)).toEqual(["s1", "s2"]);
+  });
+
+  it("does NOT strand a completed turn's queue - the host auto-resumes it", () => {
+    // The subtle hazard: `turn()` returns true on a `completed` end while the
+    // inbox is pending, so a follow-up is mid-resume for the frames before its
+    // next `turn/start`. `runningTurn` is null in that window, but nothing is
+    // stranded - draining there would STEAL a message that is about to run
+    // (and break #134's queued-strip behaviour). Only the aborted settle parks.
+    const state = createTranscript();
+    foldEvent(state, ev("turn/start", 1, { turn: 1 }));
+    foldEvent(state, ev("turn/end", 2, { turn: 1, reason: { kind: "completed" } }));
+    foldFrame(state, queueFrame(queued("q1", "about to auto-run", { placement: "queued" })));
+    expect(state.runningTurn).toBeNull();
+    expect(state.parkedStranded).toBe(false);
+    expect(strandedWork(state)).toEqual([]);
+  });
+
+  it("an ERROR settle strands identically - the false promise is not Stop-only", () => {
+    // Review finding #5: `turn()`'s catch sets reason `error` and calls
+    // `throwError`, which emits `agent/error` and THROWS, so `kick()`'s loop
+    // breaks and its `finally` re-wakes only a latched wake. A mid-turn steer
+    // latches none - so a failed turn parks pending work exactly like a Stop,
+    // and leaving it to read "waiting for the next turn" is the same lie AC 1
+    // exists to remove.
+    const state = createTranscript();
+    stoppedTurn(state, 1, "error");
+    foldFrame(state, queueFrame(queued("s1", "stranded by an error")));
+    expect(state.runningTurn).toBeNull();
+    expect(state.parkedStranded).toBe(true);
+    expect(strandedWork(state).map((i) => i.id)).toEqual(["s1"]);
+  });
+
+  it("a fresh turn clears a prior stranding - work the resume claims is not returned", () => {
+    const state = createTranscript();
+    stoppedTurn(state);
+    foldFrame(state, queueFrame(queued("s1", "was parked")));
+    expect(strandedWork(state)).toHaveLength(1);
+    // A new turn opens (e.g. a follow-up wake resumed it): no longer parked.
+    foldEvent(state, ev("turn/start", 9, { turn: 2 }));
+    expect(state.parkedStranded).toBe(false);
+    expect(strandedWork(state)).toEqual([]);
+  });
+
+  it("hands back in the host's claim order: steering before queued, each FIFO (AC 3)", () => {
+    const state = createTranscript();
+    stoppedTurn(state);
+    // The snapshot lists next-turn (queued) before next-step (steering); the
+    // loop would claim the steering first, so that is the handback order.
+    foldFrame(
+      state,
+      queueFrame(
+        queued("q-old", "queued first in", { placement: "queued" }),
+        queued("q-new", "queued second in", { placement: "queued" }),
+        queued("s-old", "steered first in"),
+        queued("s-new", "steered second in"),
+      ),
+    );
+    expect(strandedWork(state).map((i) => i.id)).toEqual(["s-old", "s-new", "q-old", "q-new"]);
+  });
+
+  it("an image-bearing item strands but is never releasable (AC 4)", () => {
+    const state = createTranscript();
+    stoppedTurn(state);
+    foldFrame(
+      state,
+      queueFrame(
+        queued("txt", "text returns"),
+        queued("img", "image stays", { images: [{ attachmentId: "att-9" }] }),
+      ),
+    );
+    expect(strandedWork(state).map((i) => i.id)).toEqual(["txt", "img"]);
+    expect(releasableWork(state).map((i) => i.id)).toEqual(["txt"]);
+  });
+
+  it("an unseen queue snapshot invents nothing - a detached session is silent (AC 1)", () => {
+    const state = createTranscript();
+    // History folded (and even a stopped turn), but NO session/queue replay:
+    // the durable spliced rows are silent, so the surface has no work to hand
+    // back until the host actually shows it the snapshot.
+    stoppedTurn(state);
+    foldHistoryPage(state, [{ event: userMsg(50, "an old prompt") } as never], {
+      hasMore: false,
+    });
+    expect(strandedWork(state)).toEqual([]);
+    expect(releasableWork(state)).toEqual([]);
+  });
+
+  it("empties when the snapshot empties - a claim or a release converges the same way", () => {
+    const state = createTranscript();
+    stoppedTurn(state);
+    foldFrame(state, queueFrame(queued("s1", "was pending")));
+    expect(strandedWork(state)).toHaveLength(1);
+    foldFrame(state, queueFrame()); // the host's post-remove / post-claim snapshot
+    expect(strandedWork(state)).toEqual([]);
+    expect(releasableWork(state)).toEqual([]);
   });
 });
 
