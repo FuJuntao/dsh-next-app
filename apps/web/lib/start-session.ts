@@ -10,6 +10,15 @@
  * shared containment fence (host-path.ts) before `session.create`: what
  * the picker may name, this door accepts - nothing more.
  *
+ * A client-named `cwd` passes the shared containment fence (host-path.ts)
+ * and is then resolved to its workspace (`workspace.create` is idempotent
+ * per canonical path) before `session.create`: the wire contract accepts
+ * `workspaceId` or `cwd`, never both, and only the workspace leg accounts
+ * the session under the host's workspace registry - the grouping the dsh
+ * webapp's sidebar renders. Without the resolution every composer-created
+ * session lands in that sidebar's Ungrouped bucket, because the registry
+ * auto-adopts sessions from session headers once, at its first bootstrap.
+ *
  * The result is a deliberate discriminated union rather than a throw: the
  * composer keeps the draft and renders the inline destructive Alert on
  * `ok: false` (story AC 4), and navigates on `ok: true` (story AC 2). Both
@@ -18,8 +27,8 @@
  * every payload and value, so anything malformed still surfaces here as a
  * failure instead of a partial success.
  */
-import type { RpcError } from "@deepseek-ai/dsh-host-apiproxy/api";
-import { getActionBridgeClient } from "./bridge";
+import type { RpcError, WorkspaceId } from "@deepseek-ai/dsh-host-apiproxy/api";
+import { getActionBridgeClient, type BridgeApiClient } from "./bridge";
 import { fenceInsideHostRoot } from "./host-path";
 
 /** A complete model selection to apply before the first prompt (task #125). */
@@ -56,6 +65,32 @@ function rpcFailure(method: string, error: RpcError): StartSessionResult {
   return { ok: false, error: `${method} failed: ${error.code}: ${error.message}` };
 }
 
+/**
+ * Resolve a fenced cwd to the workspace id `session.create`'s workspace
+ * leg needs. `workspace.create` is idempotent per canonical path (the
+ * registry record the dsh webapp's sidebar groups by), and the wire
+ * contract takes workspaceId or cwd - never both - with the host deriving
+ * the session cwd from the workspace path, so the workspace leg carries
+ * both pieces of state. Best-effort like selectModel: a resolution
+ * failure (a directory that no longer exists, a transient bridge error)
+ * is logged and resolves to undefined, which the caller turns into the
+ * cwd leg - the session still starts, it just groups the way it did
+ * before the registry existed.
+ */
+async function resolveWorkspaceId(
+  client: BridgeApiClient,
+  cwd: string,
+): Promise<WorkspaceId | undefined> {
+  const resolved = await client.workspace.create({ path: cwd });
+  if (resolved.result.ok) {
+    return resolved.result.value.workspace.workspaceId;
+  }
+  console.error(
+    `[start-session] workspace.create failed, continuing without a workspace: ${resolved.result.error.code}: ${resolved.result.error.message}`,
+  );
+  return undefined;
+}
+
 export async function startSession(input: StartSessionInput): Promise<StartSessionResult> {
   // The composer gates the empty send client-side; as the server-side door
   // of this action, re-check before any bridge call.
@@ -76,8 +111,13 @@ export async function startSession(input: StartSessionInput): Promise<StartSessi
   }
   const client = getActionBridgeClient();
   try {
+    // The workspace leg replaces the cwd leg - the wire takes one or the
+    // other, and only the workspace leg accounts the session in the
+    // registry the dsh webapp groups by.
+    const workspaceId = cwd !== undefined ? await resolveWorkspaceId(client, cwd) : undefined;
     const created = await client.sessions.create({
-      ...(cwd !== undefined && { cwd }),
+      ...(workspaceId !== undefined && { workspaceId }),
+      ...(workspaceId === undefined && cwd !== undefined && { cwd }),
       ...(input.agentPreset !== undefined && { agentPreset: input.agentPreset }),
     });
     if (!created.result.ok) {

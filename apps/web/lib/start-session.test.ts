@@ -3,9 +3,10 @@
  *
  * The e2e suite will cover the happy home flow against a real profile
  * (task #126), but the failure branches this action exists for - bridge
- * down, business errors, the best-effort selectModel - are exactly what a
- * real profile refuses to produce on demand, so they are pinned here with
- * a mocked bridge (precedent: session-view.test.ts).
+ * down, business errors, the best-effort selectModel and the best-effort
+ * workspace resolution - are exactly what a real profile refuses to
+ * produce on demand, so they are pinned here with a mocked bridge
+ * (precedent: session-view.test.ts).
  */
 import { mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -21,6 +22,7 @@ import type { RpcResponse } from "@deepseek-ai/dsh-host-apiproxy/api";
 // test root is a real temp dir and the chosen folder lives under it.
 const fake = vi.hoisted(() => ({
   host: { describe: vi.fn() },
+  workspace: { create: vi.fn() },
   sessions: {
     create: vi.fn(),
     selectModel: vi.fn(),
@@ -69,6 +71,7 @@ beforeEach(() => {
       },
     },
   });
+  fake.workspace.create.mockReset();
   fake.sessions.create.mockReset();
   fake.sessions.selectModel.mockReset();
   fake.sessions.prompt.mockReset();
@@ -79,10 +82,16 @@ afterEach(() => {
 });
 
 describe("startSession - happy path", () => {
-  it("runs create -> selectModel -> prompt in order with the payloads contract asks for", async () => {
+  it("resolves the cwd to its workspace and runs workspace -> create -> selectModel -> prompt in order", async () => {
     // Record the sequence: each leg logs itself, so the assertion pins the
-    // create -> selectModel -> prompt order the issue prescribes.
+    // workspace -> create -> selectModel -> prompt order the contract
+    // prescribes (the workspace leg replaces the cwd leg - the wire takes
+    // one or the other, never both).
     const order: string[] = [];
+    fake.workspace.create.mockImplementationOnce(async () => {
+      order.push("workspace");
+      return ok({ workspace: { workspaceId: "ws-thing" }, created: false });
+    });
     fake.sessions.create.mockImplementationOnce(async () => {
       order.push("create");
       return ok({ sessionId: "session-1" });
@@ -105,8 +114,11 @@ describe("startSession - happy path", () => {
     });
 
     expect(result).toEqual({ ok: true, sessionId: "session-1" });
-    expect(order).toEqual(["create", "selectModel", "prompt"]);
-    expect(calls(fake.sessions.create)).toEqual([{ cwd: thing, agentPreset: "builder" }]);
+    expect(order).toEqual(["workspace", "create", "selectModel", "prompt"]);
+    expect(calls(fake.workspace.create)).toEqual([{ path: thing }]);
+    expect(calls(fake.sessions.create)).toEqual([
+      { workspaceId: "ws-thing", agentPreset: "builder" },
+    ]);
     expect(calls(fake.sessions.selectModel)).toEqual([
       { sessionId: "session-1", provider: "acme", model: "acme-xl", reasoningEffort: "high" },
     ]);
@@ -128,12 +140,35 @@ describe("startSession - happy path", () => {
     const result = await startSession({ text: "hello" });
 
     expect(result).toEqual({ ok: true, sessionId: "session-2" });
+    // No folder named: no workspace resolution either - the host default
+    // cwd applies and the session stays Ungrouped, as the host decides.
+    expect(fake.workspace.create).not.toHaveBeenCalled();
     // exactOptionalPropertyTypes on the wire: omitted keys, not undefined.
     expect(calls(fake.sessions.create)).toEqual([{}]);
     expect(fake.sessions.selectModel).not.toHaveBeenCalled();
     expect(calls(fake.sessions.prompt)).toEqual([
       { sessionId: "session-2", mode: "queue", content: [{ type: "text", text: "hello" }] },
     ]);
+  });
+});
+
+describe("startSession - workspace resolution is best-effort", () => {
+  it("a workspace business error degrades to the cwd leg and the session still starts", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    fake.workspace.create.mockResolvedValueOnce(fail("workspace-invalid-path", "folder gone"));
+    fake.sessions.create.mockResolvedValueOnce(ok({ sessionId: "session-5" }));
+    fake.sessions.prompt.mockResolvedValueOnce(ok({ accepted: true }));
+
+    const result = await startSession({ text: "go", cwd: thing });
+
+    expect(result).toEqual({ ok: true, sessionId: "session-5" });
+    expect(calls(fake.workspace.create)).toEqual([{ path: thing }]);
+    // The fallback rides the cwd leg (the pre-workspace behavior) - the
+    // prompt the user typed must not be lost to a registry glitch.
+    expect(calls(fake.sessions.create)).toEqual([{ cwd: thing }]);
+    expect(fake.sessions.prompt).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining("workspace.create failed"));
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining("workspace-invalid-path"));
   });
 });
 
