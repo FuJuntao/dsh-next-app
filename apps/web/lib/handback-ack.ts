@@ -15,6 +15,17 @@
  * stated job and permanence is the simplest way to hold it; widening the
  * store or expiring entries is a later, evidence-led change, not this door.
  *
+ * What an entry actually guards, stated plainly (review round 3): under
+ * release-at-handback, nothing - an entry exists only for a PLACED return,
+ * and placement is licensed by the host's own `removed`, so the item is no
+ * longer pending anywhere and no later drain can re-offer it. The store is
+ * the letter of AC 6 held honestly rather than a working suppressor: its
+ * role only becomes live under a release-at-send design, one of #146's open
+ * alternatives. The round-2 "delete then reload" leg pins this store's
+ * WRITE (a cleared draft lands its id), but the no-re-offer half it wraps
+ * cannot fail on this store's absence - the release already guarantees it -
+ * which is why this note exists.
+ *
  * localStorage is best-effort: a missing/unavailable store (SSR, private
  * mode throwing) degrades to "no acks," which only means a handback could be
  * offered again - never that work is dropped. Reads are defensive because
