@@ -235,7 +235,10 @@ function renderMenu(
   const left = Math.max(8, Math.min(anchorRect.left, window.innerWidth - width - 8));
   return ReactDOM.createPortal(
     <div
-      className="z-50 overflow-hidden rounded-none bg-popover/70 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150"
+      // Painted as the vega Popover (solid bg-popover, rounded-md, its ring
+      // and shadow) - the glass/rounded-none look this menu wore before rode
+      // the lyra-era preset pass and drifted when the preset switched.
+      className="z-50 overflow-hidden rounded-md bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-hidden"
       style={{
         position: "fixed",
         left,
@@ -257,7 +260,7 @@ function renderMenu(
               selectOptionAndCleanUp(option);
             }}
             className={cn(
-              "flex cursor-pointer items-start gap-2 rounded-none px-2 py-1.5 text-xs outline-none",
+              "flex cursor-pointer items-start gap-2 rounded-sm px-2 py-1.5 text-xs outline-hidden",
               selectedIndex === index && "bg-accent text-accent-foreground",
             )}
           >
@@ -277,7 +280,7 @@ function renderMenu(
       </ul>
       {hint !== undefined && (
         // A signal, not a choice: outside the option list, unselectable.
-        <p className="border-t border-input px-2 py-1 text-2xs text-muted-foreground">{hint}</p>
+        <p className="border-t border-border px-2 py-1 text-2xs text-muted-foreground">{hint}</p>
       )}
     </div>,
     anchorElementRef.current,
