@@ -230,6 +230,13 @@ test("Stop returns a stranded steer to the composer; resending lands it once (AC
   // half (the AC 6 leg covers the dismissed one).
   await box.press("Enter");
   await expect(page.getByTestId("handback-notice")).toHaveCount(0, { timeout: 15_000 });
+  // The resend must be CLAIMED, never re-released: the drain stands down for
+  // a message this page just sent (round 3), because its re-park broadcast
+  // lands before any turn/start and an un-latched drain could splice the
+  // just-sent item back out of the host. If the handback fires again, the
+  // notice returns within a round trip - fail on that here, in seconds and
+  // naming the cause, instead of a 30s row timeout that names nothing.
+  await expect(page.getByTestId("handback-notice")).toHaveCount(0, { timeout: 3_000 });
   // The strip re-parks the resent text until the loop claims it, and it
   // renders AFTER the rows - so a bare getByText count is satisfied by the
   // strip's one line while no durable row exists at all. Read the row from
@@ -371,6 +378,13 @@ test("a multi-line steer returns and resends unchanged (AC 3)", async ({ page })
   // break in, one out - a re-paragraphised draft reads back with a blank line
   // between the two, which is the defect this pins.
   await box.press("Enter");
+  // The resend must be CLAIMED, never re-released: the drain stands down for
+  // a message this page just sent (round 3), because its re-park broadcast
+  // lands before any turn/start and an un-latched drain could splice the
+  // just-sent item back out of the host. If the handback fires again, the
+  // notice returns within a round trip - fail on that here, in seconds and
+  // naming the cause, instead of a 45s row timeout that names nothing.
+  await expect(page.getByTestId("handback-notice")).toHaveCount(0, { timeout: 3_000 });
   // The resend re-parks the text first: the queue announces it the moment it
   // is spliced, so the strip - which renders AFTER the rows, and only the
   // item's FIRST line (`q.text.split("\n")[0]`) - is for a window the only
