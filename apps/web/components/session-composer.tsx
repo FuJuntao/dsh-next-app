@@ -742,7 +742,11 @@ function ComposerInner({
           bits (resize, field-sizing). The min/max heights are the editor's
           own scroll policy (#155), not the component's. */}
       <InputGroup>
-        <div className="relative min-w-0 flex-1">
+        {/* w-full: the group turns flex-col for a block-end addon, so the
+            base items-center centers cross-axis (horizontally) - without an
+            explicit width the wrapper shrink-wraps to the editor's content
+            and the typing area collapses to a sliver. */}
+        <div className="relative w-full min-w-0 flex-1">
           {!enabled && (
             // The locked affordance: the editor area becomes the trigger
             // for the surface's unlock action (home: the folder dialog).
@@ -765,7 +769,7 @@ function ComposerInner({
               <ContentEditable
                 data-slot="input-group-control"
                 aria-label={placeholder}
-                className="block max-h-48 min-h-12 flex-1 overflow-y-auto rounded-none border-0 bg-transparent px-2.5 py-2 text-base shadow-none outline-none ring-0 focus-visible:ring-0 md:text-sm dark:bg-transparent"
+                className="block max-h-48 min-h-12 w-full overflow-y-auto rounded-none border-0 bg-transparent px-2.5 py-2 text-base shadow-none outline-none ring-0 focus-visible:ring-0 md:text-sm dark:bg-transparent"
               />
             }
             placeholder={
