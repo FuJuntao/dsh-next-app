@@ -411,7 +411,7 @@ export function SessionTranscript(props: SessionTranscriptProps) {
 
   return (
     <>
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* AT ground for the island (AC 9/10/12): `role=log` is the transcript
             as a living record. `aria-relevant=additions` keeps it honest -
             a streamed chunk rewrites an existing bubble, and announcing that

@@ -462,7 +462,7 @@ function SendControls({
       <Button
         type="button"
         variant="default"
-        size={submitLabel === undefined && !sendModes ? "icon-sm" : "xs"}
+        size={submitLabel === undefined && !sendModes ? "icon-sm" : "default"}
         aria-label={submitLabel ?? "Send message"}
         title={sendModes ? "Send this message" : undefined}
         disabled={disabled}
@@ -478,7 +478,7 @@ function SendControls({
       <Button
         type="button"
         variant="default"
-        size="xs"
+        size="default"
         aria-label="Steer the session now"
         title="Steer - interrupt the running turn with this message"
         disabled={disabled}
@@ -490,7 +490,7 @@ function SendControls({
       <Button
         type="button"
         variant="outline"
-        size="xs"
+        size="default"
         aria-label="Queue this message"
         title="Queue - let the current turn finish first (⌘/Ctrl+Enter)"
         disabled={disabled}
@@ -751,18 +751,18 @@ function ComposerInner({
             contentEditable={
               <ContentEditable
                 aria-label={placeholder}
-                className="block max-h-48 min-h-11 overflow-y-auto px-3 py-2.5 text-base md:text-sm leading-normal outline-none"
+                className="block max-h-48 min-h-12 overflow-y-auto px-3 py-2.5 text-base leading-normal outline-none"
               />
             }
             placeholder={
-              <div className="pointer-events-none absolute inset-x-0 top-0 px-3 py-2.5 text-sm text-muted-foreground/70">
+              <div className="pointer-events-none absolute inset-x-0 top-0 px-3 py-2.5 text-base leading-normal text-muted-foreground/70">
                 {placeholder}
               </div>
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
         </div>
-        <div className="flex items-center justify-between gap-2 border-t border-border/50 px-2.5 py-1.5">
+        <div className="flex items-center justify-between gap-2 border-t border-border/50 px-2.5 py-2">
           {/* While locked the footer states the remedy, not the shortcuts of
               an editor that does not accept typing yet (#134's Design
               packet, Copy). */}
