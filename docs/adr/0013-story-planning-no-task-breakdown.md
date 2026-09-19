@@ -25,19 +25,20 @@ checklists.
 
 - **Story planning stops at the story.** The `story` skill gathers
   context, proposes the story, interviews it in rounds, previews it, and
-  creates the parent issue - story sentence, acceptance criteria,
+  creates the story's issue - story sentence, acceptance criteria,
   Non-Goals, technical notes, priority, open questions. No task
-  breakdown: no second interview, no `## Tasks` checklist in the parent
-  issue, no `task`-labeled sub-issues.
+  breakdown and no parent/child hierarchy: no second interview, no
+  `## Tasks` checklist, no `task`-labeled sub-issues - a story has
+  exactly one issue, and the issue is the story.
 - **Acceptance criteria are the implementation contract.** Work runs
-  directly against the parent issue: a pull request closes the story -
+  directly against the story issue: a pull request closes the story -
   or a coherent slice of it, agreed during implementation planning when
   the story is too large for one PR - and review checks the PR against
   the story's acceptance criteria, not a per-task checkpoint.
 - The story lifecycle stays documented in AGENTS.md, where the workflow
-  lives, and loses its checklist states: **planned** (the parent issue
+  lives, and loses its checklist states: **planned** (the story's issue
   exists) -> **in flight** (a PR against the story is open) -> **done**
-  (its PRs are merged and `bookkeeping` closes the parent).
+  (its PRs are merged and `bookkeeping` closes the story issue).
 - ADR-0005's remaining decisions stand: the story skill is still one
   step, GitHub issues are still the single source of truth for stories
   and plans, and no per-story repo file is written. This record
@@ -45,15 +46,15 @@ checklists.
 
 ## Consequences
 
-- Planning costs one interview instead of two, and the parent issue is
+- Planning costs one interview instead of two, and the story's issue is
   complete the moment it is created; nothing downstream depends on a
   task list staying in sync with it.
 - The task-referencing skills follow in implementing changes: `design`
-  places its packet without reference to a Tasks section;
-  `implement-a-task` picks up stories (parent issues) instead of task
-  issues, keeping its plan-agreement step as the place where a large
-  story gets sliced; `review` reads the story's acceptance criteria;
-  `bookkeeping` closes parents from merged PRs instead of completed
-  checklists.
+  places its packet in the story issue without reference to a Tasks
+  section; `implement-a-task` picks up stories (their story issues)
+  instead of task issues, keeping its plan-agreement step as the place
+  where a large story gets sliced; `review` reads the story's acceptance
+  criteria; `bookkeeping` closes story issues from merged PRs instead of
+  completed checklists.
 - Stories planned under ADR-0005 keep their existing task issues and
   checklists; the old mechanics stay truthful for them until they close.
