@@ -35,6 +35,7 @@ import {
 } from "@remixicon/react";
 
 import { Button } from "@/components/ui/button";
+import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
@@ -234,7 +235,10 @@ function renderMenu(
   const left = Math.max(8, Math.min(anchorRect.left, window.innerWidth - width - 8));
   return ReactDOM.createPortal(
     <div
-      className="z-50 overflow-hidden rounded-none bg-popover/70 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150"
+      // Painted as the vega Popover (solid bg-popover, rounded-md, its ring
+      // and shadow) - the glass/rounded-none look this menu wore before rode
+      // the lyra-era preset pass and drifted when the preset switched.
+      className="z-50 overflow-hidden rounded-md bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-hidden"
       style={{
         position: "fixed",
         left,
@@ -256,7 +260,7 @@ function renderMenu(
               selectOptionAndCleanUp(option);
             }}
             className={cn(
-              "flex cursor-pointer items-start gap-2 rounded-none px-2 py-1.5 text-xs outline-none",
+              "flex cursor-pointer items-start gap-2 rounded-sm px-2 py-1.5 text-xs outline-hidden",
               selectedIndex === index && "bg-accent text-accent-foreground",
             )}
           >
@@ -276,7 +280,7 @@ function renderMenu(
       </ul>
       {hint !== undefined && (
         // A signal, not a choice: outside the option list, unselectable.
-        <p className="border-t border-input px-2 py-1 text-2xs text-muted-foreground">{hint}</p>
+        <p className="border-t border-border px-2 py-1 text-2xs text-muted-foreground">{hint}</p>
       )}
     </div>,
     anchorElementRef.current,
@@ -728,8 +732,17 @@ function ComposerInner({
 
   return (
     <>
-      <div className="rounded-none border border-input bg-card transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50 dark:bg-input/25">
-        <div className="relative">
+      {/* The editor box IS the shadcn InputGroup: the group carries the input
+          treatment (border, ring, shadow, focus) and styles itself from its
+          control - the Lexical ContentEditable plays that role via
+          data-slot="input-group-control", so focus styling comes from the
+          component's own has-[] selector instead of a duplicated copy of it.
+          The block-end addon is the footer row; its classes mirror what
+          InputGroupTextarea puts on a real textarea, minus the textarea-only
+          bits (resize, field-sizing). The min/max heights are the editor's
+          own scroll policy (#155), not the component's. */}
+      <InputGroup>
+        <div className="relative min-w-0 flex-1">
           {!enabled && (
             // The locked affordance: the editor area becomes the trigger
             // for the surface's unlock action (home: the folder dialog).
@@ -750,19 +763,20 @@ function ComposerInner({
           <PlainTextPlugin
             contentEditable={
               <ContentEditable
+                data-slot="input-group-control"
                 aria-label={placeholder}
-                className="block max-h-48 min-h-12 overflow-y-auto px-3 py-2.5 text-base leading-normal outline-none"
+                className="block max-h-48 min-h-12 flex-1 overflow-y-auto rounded-none border-0 bg-transparent px-2.5 py-2 text-base shadow-none outline-none ring-0 focus-visible:ring-0 md:text-sm dark:bg-transparent"
               />
             }
             placeholder={
-              <div className="pointer-events-none absolute inset-x-0 top-0 px-3 py-2.5 text-base leading-normal text-muted-foreground/70">
+              <div className="pointer-events-none absolute inset-x-0 top-0 px-2.5 py-2 text-base text-muted-foreground md:text-sm">
                 {placeholder}
               </div>
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
         </div>
-        <div className="flex items-center justify-between gap-2 border-t border-border/50 px-2.5 py-2">
+        <InputGroupAddon align="block-end" className="justify-between border-t border-border/50">
           {/* While locked the footer states the remedy, not the shortcuts of
               an editor that does not accept typing yet (#134's Design
               packet, Copy). */}
@@ -802,8 +816,8 @@ function ComposerInner({
               running={running === true}
             />
           </div>
-        </div>
-      </div>
+        </InputGroupAddon>
+      </InputGroup>
       <EnterToSendPlugin
         menuOpenRef={menuOpenRef}
         pendingRef={pendingRef}

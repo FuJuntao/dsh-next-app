@@ -27,7 +27,7 @@ import {
 
 /**
  * The app shell (story #97): side nav and content column, composed
- * entirely from the shadcn Sidebar (Base UI) over the preset's lyra
+ * entirely from the shadcn Sidebar (Base UI) over the preset's vega
  * theme. The component supplies what it ships out of the box: the desktop
  * fold (offcanvas), the mobile overlay drawer (Sheet - its built-in close
  * stays hidden, the app renders its own in the drawer header), the toggle

@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "cn"
 import { RiLoaderLine } from "@remixicon/react"
 
 // Props of the wrapped icon, not ComponentProps<"svg">: the remixicon props

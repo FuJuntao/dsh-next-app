@@ -6,6 +6,7 @@ import { ShellSidebarProvider } from "../components/shell-sidebar-provider";
 import { readPreferences } from "../lib/preferences-server";
 import { fetchSessions } from "../lib/sessions";
 import "./globals.css";
+import { cn } from "@/lib/utils";
 
 const notoSans = Noto_Sans({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -27,7 +28,7 @@ export default async function RootLayout({
   // shared pure model, server-side for this very paint (no flash).
   const sessions = await fetchSessions();
   return (
-    <html lang="en" className={notoSans.variable}>
+    <html lang="en" className={cn("font-sans", notoSans.variable)}>
       <body>
         <TooltipProvider delay={0}>
           <ShellSidebarProvider
