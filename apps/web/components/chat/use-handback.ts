@@ -78,6 +78,16 @@ export function useHandback({
   // next replay or the stream's resync shows.
   const handledRef = useRef<Set<string>>(new Set());
   const inFlightRef = useRef(false);
+  // A send this page accepted while the fold still read parked is a RESUME
+  // attempt: its message rides the next `session/queue` re-park broadcast
+  // BEFORE any `turn/start` folds, and in that window the drain predicate
+  // below is still true for the just-sent item. Draining there would race the
+  // host's claim at the step boundary - when the remove wins, the message is
+  // spliced back out of the host and written into the composer, and no row
+  // ever lands. `markSent` latches the drain off for that window (review
+  // round 3, PR #151); the latch clears when the host shows the turn that
+  // took the send, or on a session change.
+  const sentAwaitingTurnRef = useRef(false);
   // The live return: one entry per released item - its id and the TRIMMED text
   // the draft should still contain. When an entry's text leaves the draft
   // without a send, that item alone was dismissed and its id alone is acked.
@@ -96,13 +106,25 @@ export function useHandback({
     dismissedRef.current = null;
     returnedRef.current = null;
     inFlightRef.current = false;
+    sentAwaitingTurnRef.current = false;
     setNotice(null); // state adjusted during render (React's derived-state pattern)
   }
 
   useEffect(() => {
-    if (running) return; // a turn is open: its work will be claimed, nothing strands
+    if (running) {
+      // A turn is open: its work will be claimed, nothing strands - and a
+      // latched resume attempt was just taken by this turn, so the latch's
+      // window is over. Stranded work after THIS turn's settle must drain.
+      sentAwaitingTurnRef.current = false;
+      return;
+    }
     const state = foldRef.current;
     if (state === null) return;
+    // A send this page accepted is awaiting the turn that will take it: its
+    // re-park is in the mirror but nothing is stranded yet. Never drain in
+    // this window - the remove would race the host's claim for the very
+    // message the operator just sent (the round-3 full-suite failure).
+    if (sentAwaitingTurnRef.current) return;
     const dismissed = (dismissedRef.current ??= readDismissed(storage(), sessionId));
     const items = releasableWork(state).filter(
       (item) => !dismissed.has(item.id) && !handledRef.current.has(item.id),
@@ -125,6 +147,14 @@ export function useHandback({
         | { kind: "unmounted" }
         | null = null;
       for (const item of items) {
+        // The fold under foldRef is the LIVE state, re-read per remove: if it
+        // woke while this batch ran - a resuming turn opened here or on
+        // another client - the remaining items are on their way to being
+        // claimed, and a remove now would race that claim for work that is
+        // no longer stranded. Stand down; what was already released still
+        // belongs in the composer, so the batch places it and no alert fires.
+        const live = foldRef.current;
+        if (live === null || live.runningTurn !== null || !live.parkedStranded) break;
         if (composerRef.current === null) {
           // The page changed under the batch: the ids already released are
           // named in the alert, and the rest stay pending and un-handled.
@@ -228,7 +258,14 @@ export function useHandback({
     // clears it "when the returned draft is dismissed or sent", and leaving
     // it up would claim a return that is no longer in the composer.
     setNotice(null);
-  }, []);
+    // A send accepted while the fold still reads parked is a resume attempt:
+    // latch the drain until the host shows the turn that took it (cleared in
+    // the effect's running branch). A send into an OPEN turn needs no latch -
+    // its fate is that turn's own settle, which the gate already reads right.
+    // The live fold, not the `running` prop: turn/start may have folded while
+    // the send's round-trip ran, and then the window is already closed.
+    if (foldRef.current?.runningTurn === null) sentAwaitingTurnRef.current = true;
+  }, [foldRef]);
 
   return { onDraftChange, markSent, notice };
 }
